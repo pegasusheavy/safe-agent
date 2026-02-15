@@ -1489,9 +1489,9 @@ checksum = "6373607a59f0be73a39b6fe456b8192fcc3585f602af20751600e974dd455e77"
 
 [[package]]
 name = "llama-gguf"
-version = "0.7.1"
+version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e35f873c99c9c07c3eb0e1cd6e90efec005f4bbb63ad4fb97e265e2818524b0e"
+checksum = "6344bea53eed21a521f71f4a4a37887a123b91444c1ae059fe1f26c094bcf032"
 dependencies = [
  "bytemuck",
  "cudarc",
