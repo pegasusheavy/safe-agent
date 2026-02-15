@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebSearch",
+      "WebFetch(domain:people.freedesktop.org)",
+      "WebFetch(domain:crates.io)",
+      "WebFetch(domain:docs.rs)",
+      "Bash(cargo init:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo run:*)",
+      "Bash(cargo build:*)",
+      "Bash(sudo systemctl stop:*)",
+      "Bash(sudo cp:*)",
+      "Bash(sudo systemctl start:*)",
+      "Bash(systemctl status:*)",
+      "Bash(sudo kill:*)"
+    ]
+  }
+}

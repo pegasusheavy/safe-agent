@@ -1,0 +1,40 @@
+services:
+  safe-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      network: host
+    image: safe-agent:latest
+    container_name: safe-agent
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - safe-agent-data:/data/safe-agent
+      - ./config.toml:/config/safe-agent/config.toml:ro
+    env_file:
+      - .env
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  # One-shot service to download the LLM model.
+  # Run with: docker-compose run --rm download-model
+  download-model:
+    image: safe-agent:latest
+    container_name: safe-agent-download
+    network_mode: host
+    volumes:
+      - safe-agent-data:/data/safe-agent
+      - ./config.toml:/config/safe-agent/config.toml:ro
+    env_file:
+      - .env
+    entrypoint: ["safe-agent", "--download-model"]
+    profiles:
+      - setup
+
+volumes:
+  safe-agent-data:

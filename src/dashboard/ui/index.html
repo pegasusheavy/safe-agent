@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>safe-agent dashboard</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <h1>safe-agent</h1>
+            <span id="status-badge" class="badge">loading...</span>
+            <span id="tools-count" class="badge" style="background:rgba(108,140,255,0.15);color:var(--accent)"></span>
+        </div>
+        <div class="header-right">
+            <button id="btn-google" onclick="connectGoogle()" style="display:none">Connect Google</button>
+            <button id="btn-pause" onclick="pauseAgent()">Pause</button>
+            <button id="btn-resume" onclick="resumeAgent()" style="display:none">Resume</button>
+            <button onclick="forceTick()">Force Tick</button>
+        </div>
+    </header>
+
+    <main>
+        <!-- Tab navigation -->
+        <div class="main-tabs">
+            <button class="main-tab active" onclick="switchMainTab('overview')">Overview</button>
+            <button class="main-tab" onclick="switchMainTab('knowledge')">Knowledge</button>
+            <button class="main-tab" onclick="switchMainTab('tools')">Tools</button>
+        </div>
+
+        <!-- Overview tab -->
+        <div id="tab-overview" class="tab-content active">
+            <div class="panel-grid">
+                <!-- Pending Actions -->
+                <section class="panel" id="panel-pending">
+                    <div class="panel-header">
+                        <h2>Pending Actions</h2>
+                        <div class="panel-actions">
+                            <button class="small" onclick="approveAll()">Approve All</button>
+                            <button class="small danger" onclick="rejectAll()">Reject All</button>
+                        </div>
+                    </div>
+                    <div class="panel-body" id="pending-list">
+                        <p class="empty">No pending actions</p>
+                    </div>
+                </section>
+
+                <!-- Activity Log -->
+                <section class="panel" id="panel-activity">
+                    <h2>Activity Log</h2>
+                    <div class="panel-body" id="activity-list">
+                        <p class="empty">No activity yet</p>
+                    </div>
+                </section>
+
+                <!-- Memory -->
+                <section class="panel" id="panel-memory">
+                    <h2>Memory</h2>
+                    <div class="tab-bar">
+                        <button class="tab active" onclick="switchMemoryTab('core')">Core</button>
+                        <button class="tab" onclick="switchMemoryTab('conversation')">Conversation</button>
+                        <button class="tab" onclick="switchMemoryTab('archival')">Archival</button>
+                    </div>
+                    <div id="memory-search" style="display:none">
+                        <input type="text" id="archival-search" placeholder="Search archival memory..." onkeyup="searchArchival(event)">
+                    </div>
+                    <div class="panel-body" id="memory-content">
+                        <p class="empty">Loading...</p>
+                    </div>
+                </section>
+
+                <!-- Stats -->
+                <section class="panel" id="panel-stats">
+                    <h2>Stats</h2>
+                    <div class="panel-body" id="stats-content">
+                        <p class="empty">Loading...</p>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Knowledge tab -->
+        <div id="tab-knowledge" class="tab-content">
+            <div class="panel-grid">
+                <section class="panel" style="grid-column: 1 / -1">
+                    <div class="panel-header">
+                        <h2>Knowledge Graph</h2>
+                        <div class="panel-actions">
+                            <span id="kg-stats" style="font-size:12px;color:var(--text-dim);margin-right:12px"></span>
+                        </div>
+                    </div>
+                    <div style="padding:8px 16px;border-bottom:1px solid var(--border)">
+                        <input type="text" id="kg-search" placeholder="Search knowledge graph..." style="width:100%;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg);color:var(--text);font-size:13px;outline:none" onkeyup="if(event.key==='Enter')searchKnowledge()">
+                    </div>
+                    <div class="panel-body" id="kg-nodes" style="max-height:600px">
+                        <p class="empty">Loading...</p>
+                    </div>
+                </section>
+            </div>
+        </div>
+
+        <!-- Tools tab -->
+        <div id="tab-tools" class="tab-content">
+            <div class="panel-grid">
+                <section class="panel" style="grid-column: 1 / -1">
+                    <h2>Registered Tools</h2>
+                    <div class="panel-body" id="tools-list" style="max-height:600px">
+                        <p class="empty">Loading...</p>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </main>
+
+    <script src="/app.js"></script>
+</body>
+</html>

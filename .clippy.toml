@@ -1,0 +1,3 @@
+disallowed-methods = [
+    { path = "std::process::exit", reason = "use controlled shutdown instead" },
+]
