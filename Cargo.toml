@@ -6,7 +6,7 @@ description = "Sandboxed autonomous AI agent with tool execution, knowledge grap
 
 [dependencies]
 # LLM inference
-llama-gguf = { version = "0.7.2", default-features = false, features = ["cpu", "cuda", "huggingface"] }
+llama-gguf = { version = "0.7.3", default-features = false, features = ["cpu", "cuda", "huggingface"] }
 
 # Async runtime
 tokio = { version = "1", features = ["full"] }
