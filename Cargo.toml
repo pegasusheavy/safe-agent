@@ -57,3 +57,4 @@ chromiumoxide = { version = "0.7", default-features = false, features = ["tokio-
 
 # Cron scheduling
 tokio-cron-scheduler = "0.13"
+dotenvy = "0.15.7"

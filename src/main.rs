@@ -24,6 +24,9 @@ use crate::tools::ToolRegistry;
 
 #[tokio::main]
 async fn main() {
+    // Load .env file (if present) before anything reads env vars
+    dotenvy::dotenv().ok();
+
     // Parse CLI arguments
     let args: Vec<String> = std::env::args().collect();
 
