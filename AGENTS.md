@@ -4,13 +4,14 @@ Sandboxed autonomous AI agent with tool execution, knowledge graph, skill system
 
 ## Architecture
 
-safe-agent is an autonomous agent system with a pluggable LLM backend. It can use either Claude Code CLI (cloud) or a local GGUF model (via llama-gguf) for reasoning. The operator controls the agent via a Svelte web dashboard (with JWT authentication) or Telegram bot.
+safe-agent is an autonomous agent system with a pluggable LLM backend. It can use Claude Code CLI, OpenAI Codex CLI, or a local GGUF model (via llama-gguf) for reasoning. The operator controls the agent via a Svelte web dashboard (with JWT authentication) or Telegram bot.
 
 ```
 Telegram Bot ──┐
                ├──▶ Agent ──▶ LLM Engine ──▶ Tool execution
-Web Dashboard ─┘       │       ├─ Claude CLI (cloud)
-(Svelte + JWT)         │       └─ llama-gguf (local GGUF, optional)
+Web Dashboard ─┘       │       ├─ Claude CLI (Anthropic)
+(Svelte + JWT)         │       ├─ Codex CLI  (OpenAI)
+                       │       └─ llama-gguf (local GGUF, optional)
                        │                                │
                        ▼                         Approval Queue
                   Memory Manager                       │
@@ -127,7 +128,7 @@ required = true
 ## Tech Stack
 
 - **Language**: Rust (2024 edition)
-- **LLM**: Pluggable backend — Claude Code CLI (cloud) or llama-gguf (local GGUF, optional `local` feature)
+- **LLM**: Pluggable backend — Claude Code CLI, OpenAI Codex CLI, or llama-gguf (local GGUF, optional `local` feature)
 - **Database**: SQLite via `rusqlite` (WAL mode, FTS5, recursive CTEs)
 - **Web**: `axum` + Svelte 5 dashboard (compiled by Vite, embedded in binary)
 - **Auth**: `jsonwebtoken` (HS256 JWT cookies)
@@ -154,8 +155,9 @@ src/
 │   ├── actions.rs       # ToolCall parsing and execution
 │   └── reasoning.rs     # LLM context assembly
 ├── llm/
-│   ├── mod.rs           # LlmEngine enum (dispatches to Claude or local backend)
+│   ├── mod.rs           # LlmEngine enum (dispatches to Claude, Codex, or local)
 │   ├── claude.rs        # Claude Code CLI backend
+│   ├── codex.rs         # OpenAI Codex CLI backend
 │   ├── local.rs         # Local GGUF backend via llama-gguf (feature = "local")
 │   └── prompts.rs       # System prompt, JSON schema, user message builder
 ├── memory/
@@ -258,6 +260,11 @@ cargo build --release --features local-cuda
 # Run with Claude backend (requires DASHBOARD_PASSWORD and JWT_SECRET)
 DASHBOARD_PASSWORD=mypass JWT_SECRET=mysecret ./target/release/safe-agent
 
+# Run with OpenAI Codex backend
+LLM_BACKEND=codex \
+  DASHBOARD_PASSWORD=mypass JWT_SECRET=mysecret \
+  ./target/release/safe-agent
+
 # Run with a local GGUF model
 LLM_BACKEND=local MODEL_PATH=/path/to/model.gguf \
   DASHBOARD_PASSWORD=mypass JWT_SECRET=mysecret \
@@ -295,10 +302,14 @@ See `config.example.toml` for all options with defaults.
 |------------------------|----------|-------------------------------------------------------|
 | `DASHBOARD_PASSWORD`   | **Yes**  | Password for the web dashboard (server won't start without it) |
 | `JWT_SECRET`           | **Yes**  | Secret key for signing JWT cookies (server won't start without it) |
-| `LLM_BACKEND`         | No       | `claude` (default) or `local`                         |
+| `LLM_BACKEND`         | No       | `claude` (default), `codex`, or `local`               |
 | `CLAUDE_BIN`           | No       | Path to the `claude` binary (default: `claude`)       |
 | `CLAUDE_CONFIG_DIR`    | No       | Claude Code config directory for profile selection    |
 | `CLAUDE_MODEL`         | No       | Model override: `sonnet`, `opus`, `haiku`             |
+| `CODEX_BIN`            | No       | Path to the `codex` binary (default: `codex`)         |
+| `CODEX_MODEL`          | No       | Model override: `gpt-5-codex`, `o3`, etc.             |
+| `CODEX_PROFILE`        | No       | Codex config profile from `~/.codex/config.toml`      |
+| `CODEX_API_KEY`        | No       | OpenAI API key (codex backend; uses saved auth if unset) |
 | `MODEL_PATH`           | If `local` backend | Path to a `.gguf` model file              |
 | `TELEGRAM_BOT_TOKEN`   | If telegram enabled | Telegram Bot API token from @BotFather     |
 | `GOOGLE_CLIENT_ID`     | If google enabled   | Google OAuth2 client ID                    |

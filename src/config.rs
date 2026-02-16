@@ -47,7 +47,7 @@ pub struct Config {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct LlmConfig {
-    /// Backend to use: "claude" (default) or "local".
+    /// Backend to use: "claude" (default), "codex", or "local".
     /// Can be overridden with the `LLM_BACKEND` env var.
     #[serde(default = "default_backend")]
     pub backend: String,
@@ -76,6 +76,23 @@ pub struct LlmConfig {
     /// Process timeout in seconds (0 = no timeout).
     #[serde(default = "default_timeout_secs")]
     pub timeout_secs: u64,
+
+    // -- Codex CLI settings (backend = "codex") --
+
+    /// Path to the `codex` binary (default: "codex").
+    /// Can be overridden with the `CODEX_BIN` env var.
+    #[serde(default = "default_codex_bin")]
+    pub codex_bin: String,
+
+    /// Codex model override (e.g. "gpt-5-codex", "o3").
+    /// Can be overridden with the `CODEX_MODEL` env var.
+    #[serde(default)]
+    pub codex_model: String,
+
+    /// Codex config profile name (from `~/.codex/config.toml`).
+    /// Can be overridden with the `CODEX_PROFILE` env var.
+    #[serde(default)]
+    pub codex_profile: String,
 
     // -- Local model settings (backend = "local") --
 
@@ -247,6 +264,9 @@ fn default_backend() -> String {
 fn default_claude_bin() -> String {
     "claude".to_string()
 }
+fn default_codex_bin() -> String {
+    "codex".to_string()
+}
 fn default_model() -> String {
     "sonnet".to_string()
 }
@@ -304,6 +324,9 @@ impl Default for LlmConfig {
             model: default_model(),
             max_turns: default_max_turns(),
             timeout_secs: default_timeout_secs(),
+            codex_bin: default_codex_bin(),
+            codex_model: String::new(),
+            codex_profile: String::new(),
             model_path: String::new(),
             temperature: default_temperature(),
             top_k: default_top_k(),

@@ -2,7 +2,7 @@
 
 Sandboxed autonomous AI agent with tool execution, knowledge graph, skill system, and multi-interface control.
 
-safe-agent pairs a pluggable LLM backend (Claude Code CLI or a local GGUF model via llama-gguf) with a human-in-the-loop approval queue so an AI agent can observe, reason, and act -- but only with your permission. Control it from a Svelte web dashboard or a Telegram bot. The agent can teach itself new skills on the fly and grow its own knowledge graph over time.
+safe-agent pairs a pluggable LLM backend (Claude Code CLI, OpenAI Codex CLI, or a local GGUF model via llama-gguf) with a human-in-the-loop approval queue so an AI agent can observe, reason, and act -- but only with your permission. Control it from a Svelte web dashboard or a Telegram bot. The agent can teach itself new skills on the fly and grow its own knowledge graph over time.
 
 ## Features
 
@@ -47,10 +47,13 @@ cargo build --release
 # Backend (with local GGUF model support)
 cargo build --release --features local
 
-# Run with Claude
+# Run with Claude (default)
 cp .env.example .env
 # Edit .env with your values
 source .env && ./target/release/safe-agent
+
+# Run with OpenAI Codex
+LLM_BACKEND=codex source .env && ./target/release/safe-agent
 
 # Run with a local model
 LLM_BACKEND=local MODEL_PATH=/path/to/model.gguf \
@@ -74,10 +77,14 @@ Secrets are loaded from environment variables, never config files. See [`.env.ex
 
 | Variable | Description |
 |---|---|
-| `LLM_BACKEND` | `claude` (default) or `local` (requires `--features local` at compile time) |
+| `LLM_BACKEND` | `claude` (default), `codex`, or `local` (local requires `--features local`) |
 | `CLAUDE_BIN` | Path to the `claude` binary (default: `claude`) |
 | `CLAUDE_CONFIG_DIR` | Claude Code config directory for profile selection |
 | `CLAUDE_MODEL` | Model override: `sonnet`, `opus`, `haiku` |
+| `CODEX_BIN` | Path to the `codex` binary (default: `codex`) |
+| `CODEX_MODEL` | Model override: `gpt-5-codex`, `o3`, etc. |
+| `CODEX_PROFILE` | Codex config profile from `~/.codex/config.toml` |
+| `CODEX_API_KEY` | OpenAI API key (uses saved auth if unset) |
 | `MODEL_PATH` | Path to a `.gguf` model file (required when `LLM_BACKEND=local`) |
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot API token (from @BotFather) |
 | `GOOGLE_CLIENT_ID` | Google OAuth2 client ID |
@@ -89,8 +96,9 @@ Secrets are loaded from environment variables, never config files. See [`.env.ex
 ```
 Telegram Bot ──┐
                ├──▶ Agent ──▶ LLM Engine ──▶ Tool execution
-Web Dashboard ─┘       │       ├─ Claude CLI (cloud)
-(Svelte + JWT)         │       └─ llama-gguf (local, optional)
+Web Dashboard ─┘       │       ├─ Claude CLI (Anthropic)
+(Svelte + JWT)         │       ├─ Codex CLI  (OpenAI)
+                       │       └─ llama-gguf (local, optional)
                        │                                │
                        ▼                         Approval Queue
                   Memory Manager                       │
@@ -115,7 +123,7 @@ For detailed architecture documentation, module layout, and development guidelin
 ## Tech Stack
 
 - **Rust** (2024 edition) -- backend, tool execution, agent loop
-- **LLM** -- Claude Code CLI (cloud) or llama-gguf (local GGUF models, optional)
+- **LLM** -- Claude Code CLI, OpenAI Codex CLI, or llama-gguf (local GGUF models, optional)
 - **SQLite** -- conversation, memory, knowledge graph, approvals (WAL mode, FTS5)
 - **Svelte 5 + Vite + Tailwind CSS 4** -- dashboard frontend (compiled and embedded in the binary)
 - **axum** -- HTTP server and API

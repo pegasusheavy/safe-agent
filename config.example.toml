@@ -20,8 +20,9 @@
 # approval_expiry_secs = 3600
 
 [llm]
-# Backend: "claude" (Claude Code CLI) or "local" (GGUF via llama-gguf)
-# Override with LLM_BACKEND env var.  Requires --features local at compile time.
+# Backend: "claude" (Claude Code CLI), "codex" (OpenAI Codex CLI),
+#          or "local" (GGUF via llama-gguf, requires --features local)
+# Override with LLM_BACKEND env var.
 # backend = "claude"
 
 # -- Claude CLI settings (backend = "claude") --
@@ -40,6 +41,19 @@
 
 # Max tool-use turns per invocation
 # max_turns = 10
+
+# -- Codex CLI settings (backend = "codex") --
+
+# Path to the `codex` binary (default: "codex")
+# Override with CODEX_BIN env var
+# codex_bin = "codex"
+
+# Codex model override.  Override with CODEX_MODEL env var.
+# codex_model = "gpt-5-codex"
+
+# Codex config profile (from ~/.codex/config.toml).
+# Override with CODEX_PROFILE env var.
+# codex_profile = ""
 
 # -- Local model settings (backend = "local") --
 

@@ -279,6 +279,32 @@ async fn run_checks(config: &Config, _sandbox: &SandboxedFs) {
                 }
             }
         }
+        "codex" => {
+            let codex_bin = std::env::var("CODEX_BIN")
+                .unwrap_or_else(|_| config.llm.codex_bin.clone());
+
+            match tokio::process::Command::new(&codex_bin)
+                .arg("--version")
+                .output()
+                .await
+            {
+                Ok(out) if out.status.success() => {
+                    let ver = String::from_utf8_lossy(&out.stdout);
+                    info!("codex CLI: OK ({})", ver.trim());
+                }
+                Ok(out) => {
+                    error!("codex CLI: exited with {}", out.status);
+                }
+                Err(e) => {
+                    error!("codex CLI: NOT FOUND ({}): {e}", codex_bin);
+                }
+            }
+
+            match std::env::var("CODEX_API_KEY") {
+                Ok(_) => info!("CODEX_API_KEY: set"),
+                Err(_) => info!("CODEX_API_KEY: not set (will use saved auth)"),
+            }
+        }
         "local" => {
             let model_path = std::env::var("MODEL_PATH")
                 .unwrap_or_else(|_| config.llm.model_path.clone());
@@ -334,10 +360,14 @@ OPTIONS:
     -h, --help          Print this help message
 
 LLM BACKEND:
-    LLM_BACKEND           \"claude\" (default) or \"local\" (requires --features local)
+    LLM_BACKEND           \"claude\" (default), \"codex\", or \"local\"
     CLAUDE_BIN            Path to claude CLI binary (claude backend)
     CLAUDE_CONFIG_DIR     Claude profile directory (claude backend)
     CLAUDE_MODEL          Model name: sonnet, opus, haiku (claude backend)
+    CODEX_BIN             Path to codex CLI binary (codex backend)
+    CODEX_MODEL           Model name: gpt-5-codex, o3, etc. (codex backend)
+    CODEX_PROFILE         Codex config profile name (codex backend)
+    CODEX_API_KEY         OpenAI API key for Codex (codex backend, optional)
     MODEL_PATH            Path to .gguf model file (local backend)
 
 ENVIRONMENT:
