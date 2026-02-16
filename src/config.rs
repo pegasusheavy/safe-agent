@@ -47,7 +47,7 @@ pub struct Config {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct LlmConfig {
-    /// Backend to use: "claude" (default), "codex", or "local".
+    /// Backend to use: "claude" (default), "codex", "gemini", "aider", or "local".
     /// Can be overridden with the `LLM_BACKEND` env var.
     #[serde(default = "default_backend")]
     pub backend: String,
@@ -93,6 +93,30 @@ pub struct LlmConfig {
     /// Can be overridden with the `CODEX_PROFILE` env var.
     #[serde(default)]
     pub codex_profile: String,
+
+    // -- Gemini CLI settings (backend = "gemini") --
+
+    /// Path to the `gemini` binary (default: "gemini").
+    /// Can be overridden with the `GEMINI_BIN` env var.
+    #[serde(default = "default_gemini_bin")]
+    pub gemini_bin: String,
+
+    /// Gemini model override (e.g. "gemini-2.5-pro").
+    /// Can be overridden with the `GEMINI_MODEL` env var.
+    #[serde(default)]
+    pub gemini_model: String,
+
+    // -- Aider settings (backend = "aider") --
+
+    /// Path to the `aider` binary (default: "aider").
+    /// Can be overridden with the `AIDER_BIN` env var.
+    #[serde(default = "default_aider_bin")]
+    pub aider_bin: String,
+
+    /// Aider model string (e.g. "gpt-4o", "claude-3.5-sonnet").
+    /// Can be overridden with the `AIDER_MODEL` env var.
+    #[serde(default)]
+    pub aider_model: String,
 
     // -- Local model settings (backend = "local") --
 
@@ -267,6 +291,12 @@ fn default_claude_bin() -> String {
 fn default_codex_bin() -> String {
     "codex".to_string()
 }
+fn default_gemini_bin() -> String {
+    "gemini".to_string()
+}
+fn default_aider_bin() -> String {
+    "aider".to_string()
+}
 fn default_model() -> String {
     "sonnet".to_string()
 }
@@ -327,6 +357,10 @@ impl Default for LlmConfig {
             codex_bin: default_codex_bin(),
             codex_model: String::new(),
             codex_profile: String::new(),
+            gemini_bin: default_gemini_bin(),
+            gemini_model: String::new(),
+            aider_bin: default_aider_bin(),
+            aider_model: String::new(),
             model_path: String::new(),
             temperature: default_temperature(),
             top_k: default_top_k(),

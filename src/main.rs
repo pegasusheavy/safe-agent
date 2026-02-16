@@ -305,6 +305,53 @@ async fn run_checks(config: &Config, _sandbox: &SandboxedFs) {
                 Err(_) => info!("CODEX_API_KEY: not set (will use saved auth)"),
             }
         }
+        "gemini" => {
+            let gemini_bin = std::env::var("GEMINI_BIN")
+                .unwrap_or_else(|_| config.llm.gemini_bin.clone());
+
+            match tokio::process::Command::new(&gemini_bin)
+                .arg("--version")
+                .output()
+                .await
+            {
+                Ok(out) if out.status.success() => {
+                    let ver = String::from_utf8_lossy(&out.stdout);
+                    info!("gemini CLI: OK ({})", ver.trim());
+                }
+                Ok(out) => {
+                    error!("gemini CLI: exited with {}", out.status);
+                }
+                Err(e) => {
+                    error!("gemini CLI: NOT FOUND ({}): {e}", gemini_bin);
+                }
+            }
+
+            match std::env::var("GEMINI_API_KEY").or(std::env::var("GOOGLE_API_KEY")) {
+                Ok(_) => info!("GEMINI_API_KEY / GOOGLE_API_KEY: set"),
+                Err(_) => info!("GEMINI_API_KEY: not set (will use saved auth)"),
+            }
+        }
+        "aider" => {
+            let aider_bin = std::env::var("AIDER_BIN")
+                .unwrap_or_else(|_| config.llm.aider_bin.clone());
+
+            match tokio::process::Command::new(&aider_bin)
+                .arg("--version")
+                .output()
+                .await
+            {
+                Ok(out) if out.status.success() => {
+                    let ver = String::from_utf8_lossy(&out.stdout);
+                    info!("aider: OK ({})", ver.trim());
+                }
+                Ok(out) => {
+                    error!("aider: exited with {}", out.status);
+                }
+                Err(e) => {
+                    error!("aider: NOT FOUND ({}): {e}", aider_bin);
+                }
+            }
+        }
         "local" => {
             let model_path = std::env::var("MODEL_PATH")
                 .unwrap_or_else(|_| config.llm.model_path.clone());
@@ -360,7 +407,7 @@ OPTIONS:
     -h, --help          Print this help message
 
 LLM BACKEND:
-    LLM_BACKEND           \"claude\" (default), \"codex\", or \"local\"
+    LLM_BACKEND           \"claude\" (default), \"codex\", \"gemini\", \"aider\", or \"local\"
     CLAUDE_BIN            Path to claude CLI binary (claude backend)
     CLAUDE_CONFIG_DIR     Claude profile directory (claude backend)
     CLAUDE_MODEL          Model name: sonnet, opus, haiku (claude backend)
@@ -368,6 +415,11 @@ LLM BACKEND:
     CODEX_MODEL           Model name: gpt-5-codex, o3, etc. (codex backend)
     CODEX_PROFILE         Codex config profile name (codex backend)
     CODEX_API_KEY         OpenAI API key for Codex (codex backend, optional)
+    GEMINI_BIN            Path to gemini CLI binary (gemini backend)
+    GEMINI_MODEL          Model name: gemini-2.5-pro, etc. (gemini backend)
+    GEMINI_API_KEY        Google AI Studio API key (gemini backend, optional)
+    AIDER_BIN             Path to aider binary (aider backend)
+    AIDER_MODEL           Model string: gpt-4o, claude-3.5-sonnet (aider backend)
     MODEL_PATH            Path to .gguf model file (local backend)
 
 ENVIRONMENT:

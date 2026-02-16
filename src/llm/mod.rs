@@ -1,7 +1,9 @@
 pub mod prompts;
 
+mod aider;
 mod claude;
 mod codex;
+mod gemini;
 #[cfg(feature = "local")]
 mod local;
 
@@ -10,14 +12,18 @@ use tracing::info;
 use crate::config::Config;
 use crate::error::{Result, SafeAgentError};
 
-/// Unified LLM engine that dispatches to one of three backends:
+/// Unified LLM engine that dispatches to one of five backends:
 ///
-/// - **Claude** -- Claude Code CLI (default)
-/// - **Codex**  -- OpenAI Codex CLI
-/// - **Local**  -- local GGUF model via llama-gguf (requires `local` feature)
+/// - **Claude**  -- Claude Code CLI (default)
+/// - **Codex**   -- OpenAI Codex CLI
+/// - **Gemini**  -- Google Gemini CLI
+/// - **Aider**   -- Aider multi-provider AI pair-programmer
+/// - **Local**   -- local GGUF model via llama-gguf (requires `local` feature)
 pub enum LlmEngine {
     Claude(claude::ClaudeEngine),
     Codex(codex::CodexEngine),
+    Gemini(gemini::GeminiEngine),
+    Aider(aider::AiderEngine),
     #[cfg(feature = "local")]
     Local(local::LocalEngine),
 }
@@ -27,7 +33,7 @@ impl LlmEngine {
     ///
     /// The backend is selected by `config.llm.backend` (overridable with the
     /// `LLM_BACKEND` environment variable).  Valid values: `"claude"`,
-    /// `"codex"`, `"local"`.
+    /// `"codex"`, `"gemini"`, `"aider"`, `"local"`.
     pub fn new(config: &Config) -> Result<Self> {
         let backend = std::env::var("LLM_BACKEND")
             .unwrap_or_else(|_| config.llm.backend.clone());
@@ -41,6 +47,14 @@ impl LlmEngine {
                 info!("LLM backend: Codex CLI");
                 Ok(Self::Codex(codex::CodexEngine::new(config)?))
             }
+            "gemini" => {
+                info!("LLM backend: Gemini CLI");
+                Ok(Self::Gemini(gemini::GeminiEngine::new(config)?))
+            }
+            "aider" => {
+                info!("LLM backend: Aider");
+                Ok(Self::Aider(aider::AiderEngine::new(config)?))
+            }
             #[cfg(feature = "local")]
             "local" => {
                 info!("LLM backend: local GGUF model");
@@ -53,7 +67,8 @@ impl LlmEngine {
                     .into(),
             )),
             other => Err(SafeAgentError::Config(format!(
-                "unknown LLM backend \"{other}\" (valid: \"claude\", \"codex\", \"local\")"
+                "unknown LLM backend \"{other}\" \
+                 (valid: \"claude\", \"codex\", \"gemini\", \"aider\", \"local\")"
             ))),
         }
     }
@@ -63,6 +78,8 @@ impl LlmEngine {
         match self {
             Self::Claude(engine) => engine.generate(message).await,
             Self::Codex(engine) => engine.generate(message).await,
+            Self::Gemini(engine) => engine.generate(message).await,
+            Self::Aider(engine) => engine.generate(message).await,
             #[cfg(feature = "local")]
             Self::Local(engine) => engine.generate(message).await,
         }
@@ -73,6 +90,8 @@ impl LlmEngine {
         match self {
             Self::Claude(_) => "Claude CLI",
             Self::Codex(_) => "Codex CLI",
+            Self::Gemini(_) => "Gemini CLI",
+            Self::Aider(_) => "Aider",
             #[cfg(feature = "local")]
             Self::Local(_) => "local GGUF",
         }
