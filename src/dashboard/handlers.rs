@@ -553,3 +553,21 @@ pub async fn send_chat_message(
 
     Ok(Json(ChatResponse { reply, timestamp }))
 }
+
+// -- Tunnel --------------------------------------------------------------
+
+#[derive(Serialize)]
+pub struct TunnelStatusResponse {
+    pub enabled: bool,
+    pub url: Option<String>,
+}
+
+pub async fn tunnel_status(
+    State(state): State<DashState>,
+) -> Json<TunnelStatusResponse> {
+    let url = std::env::var("TUNNEL_URL").ok();
+    Json(TunnelStatusResponse {
+        enabled: state.config.tunnel.enabled || url.is_some(),
+        url,
+    })
+}

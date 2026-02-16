@@ -100,6 +100,8 @@ pub fn build(agent: Arc<Agent>, config: Config, db: Arc<Mutex<Connection>>) -> R
         .route("/api/skills/{name}/credentials", put(handlers::set_skill_credential))
         .route("/api/skills/{name}/credentials/{key}", delete(handlers::delete_skill_credential))
         .route("/api/skills/{name}/restart", post(handlers::restart_skill))
+        // API — Tunnel
+        .route("/api/tunnel/status", get(handlers::tunnel_status))
         // SSE
         .route("/api/events", get(sse::events))
         // Auth middleware — applied to all routes above

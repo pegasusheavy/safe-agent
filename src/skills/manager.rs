@@ -6,6 +6,7 @@ use tokio::process::{Child, Command};
 use tracing::{error, info, warn};
 
 use crate::error::{Result, SafeAgentError};
+use crate::tunnel::TunnelUrl;
 
 /// Manifest describing a skill, read from `skill.toml` in the skill directory.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
@@ -73,6 +74,8 @@ pub struct SkillManager {
     /// Stored credentials: skill_name -> { env_var_name -> value }
     credentials: HashMap<String, HashMap<String, String>>,
     credentials_path: PathBuf,
+    /// Ngrok tunnel public URL receiver.
+    tunnel_url: Option<TunnelUrl>,
 }
 
 impl SkillManager {
@@ -101,7 +104,14 @@ impl SkillManager {
             telegram_chat_id,
             credentials,
             credentials_path,
+            tunnel_url: None,
         }
+    }
+
+    /// Set the ngrok tunnel URL receiver so running (and future) skills
+    /// receive `TUNNEL_URL` / `PUBLIC_URL` in their environment.
+    pub fn set_tunnel_url(&mut self, url: TunnelUrl) {
+        self.tunnel_url = Some(url);
     }
 
     fn load_credentials(path: &Path) -> HashMap<String, HashMap<String, String>> {
@@ -318,6 +328,14 @@ impl SkillManager {
         if let Some(creds) = self.credentials.get(&manifest.name) {
             for (k, v) in creds {
                 cmd.env(k, v);
+            }
+        }
+
+        // Inject ngrok tunnel URL so skills can use it for callbacks
+        if let Some(ref tunnel) = self.tunnel_url {
+            if let Some(ref url) = *tunnel.borrow() {
+                cmd.env("TUNNEL_URL", url);
+                cmd.env("PUBLIC_URL", url);
             }
         }
 

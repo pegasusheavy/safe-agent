@@ -16,6 +16,7 @@ use crate::llm::LlmEngine;
 use crate::memory::MemoryManager;
 use crate::skills::SkillManager;
 use crate::tools::{ToolContext, ToolRegistry};
+use crate::tunnel::TunnelUrl;
 use crate::security::SandboxedFs;
 
 pub struct Agent {
@@ -206,5 +207,12 @@ impl Agent {
     /// Notify SSE subscribers of an update.
     pub fn notify_update(&self) {
         let _ = self.sse_tx.send("update".to_string());
+    }
+
+    /// Provide the ngrok tunnel URL to the skill manager so it can inject
+    /// `TUNNEL_URL` / `PUBLIC_URL` into every skill's environment.
+    pub async fn set_tunnel_url(&self, url: TunnelUrl) {
+        let mut mgr = self.skill_manager.lock().await;
+        mgr.set_tunnel_url(url);
     }
 }

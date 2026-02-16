@@ -71,6 +71,7 @@ These flow through the approval queue — the dashboard and Telegram bot show th
 - **Dashboard JWT Auth**: `DASHBOARD_PASSWORD` and `JWT_SECRET` are **required** — the server will not start without them. Login issues HS256-signed HttpOnly cookies with 7-day expiry.
 - **Telegram auth**: Only configured chat IDs can control the bot.
 - **Google OAuth**: Handled by skills, not the core app.  Skills declare `[[credentials]]` in `skill.toml` for OAuth client ID/secret; values are injected as environment variables at runtime.
+- **Ngrok tunnel**: Optional public exposure via ngrok. Spawned as a managed subprocess; public URL broadcast to skills via `TUNNEL_URL` / `PUBLIC_URL` environment variables and available at `/api/tunnel/status`.
 
 ### Knowledge Graph
 
@@ -123,6 +124,7 @@ required = true
 **Environment variables passed to skills:**
 - `SKILL_NAME`, `SKILL_DIR`, `SKILL_DATA_DIR`, `SKILLS_DIR`
 - `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (if configured)
+- `TUNNEL_URL`, `PUBLIC_URL` (if ngrok tunnel is active)
 - Any extra `[env]` vars from the manifest
 - All stored credentials for that skill
 
@@ -140,6 +142,7 @@ required = true
 - **Scheduling**: `tokio-cron-scheduler` for cron jobs
 - **HTML to Markdown**: `htmd` for web_fetch
 - **Process management**: `libc` for Unix process group signals
+- **Tunnel**: ngrok for exposing the dashboard and OAuth callbacks publicly
 
 ## Module Layout
 
@@ -169,6 +172,7 @@ src/
 │   ├── conversation.rs  # ConversationMemory (rolling window)
 │   ├── archival.rs      # ArchivalMemory (FTS5)
 │   └── knowledge.rs     # KnowledgeGraph (nodes, edges, traversal)
+├── tunnel.rs            # Ngrok tunnel manager (spawn, poll API, broadcast URL)
 ├── skills/
 │   ├── mod.rs           # Re-exports
 │   └── manager.rs       # SkillManager: discovery, start, stop, credentials, reconciliation
@@ -326,6 +330,10 @@ See `config.example.toml` for all options with defaults.
 | `AIDER_MODEL`          | No       | Model string: `gpt-4o`, `claude-3.5-sonnet`, etc.     |
 | `MODEL_PATH`           | If `local` backend | Path to a `.gguf` model file              |
 | `TELEGRAM_BOT_TOKEN`   | If telegram enabled | Telegram Bot API token from @BotFather     |
+| `NGROK_AUTHTOKEN`      | No (auto-enables tunnel) | ngrok auth token; setting this enables the tunnel |
+| `NGROK_BIN`            | No       | Path to ngrok binary (default: `ngrok`)               |
+| `NGROK_PORT`           | No       | Local port to expose (default: dashboard port)        |
+| `NGROK_DOMAIN`         | No       | Static ngrok domain (e.g. `myapp.ngrok-free.app`)     |
 | `RUST_LOG`             | No       | Tracing filter (default: `info`)                      |
 
 ## Data Storage

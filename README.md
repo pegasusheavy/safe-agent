@@ -14,6 +14,7 @@ safe-agent pairs a pluggable LLM backend (Claude Code CLI, OpenAI Codex CLI, Goo
 - **Memory hierarchy** -- core personality, rolling conversation window, archival long-term storage with full-text search.
 - **Sandboxed file I/O** -- all file operations are confined to the data directory with path traversal prevention.
 - **10 built-in tools** -- shell exec, file read/write/edit, web search, URL fetch, browser automation (CDP), messaging, cron scheduling, memory search, knowledge graph, image analysis.
+- **Ngrok tunnel** -- optional public exposure via ngrok for OAuth callbacks and external integrations. Set `NGROK_AUTHTOKEN` and the tunnel starts automatically, broadcasting `TUNNEL_URL` / `PUBLIC_URL` to all skills.
 
 ## Quick Start
 
@@ -98,6 +99,8 @@ Secrets are loaded from environment variables, never config files. See [`.env.ex
 | `AIDER_MODEL` | Model string: `gpt-4o`, `claude-3.5-sonnet`, etc. |
 | `MODEL_PATH` | Path to a `.gguf` model file (required when `LLM_BACKEND=local`) |
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot API token (from @BotFather) |
+| `NGROK_AUTHTOKEN` | ngrok auth token — setting this auto-enables the tunnel |
+| `NGROK_DOMAIN` | Static ngrok domain (e.g. `myapp.ngrok-free.app`) |
 | `RUST_LOG` | Tracing filter (default: `info`) |
 
 ## Architecture

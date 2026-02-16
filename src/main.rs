@@ -10,6 +10,7 @@ mod security;
 mod skills;
 mod telegram;
 mod tools;
+mod tunnel;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -152,6 +153,55 @@ async fn main() {
     } else {
         None
     };
+
+    // Start ngrok tunnel (if enabled)
+    let tunnel_url = if config.tunnel.enabled
+        || std::env::var("NGROK_AUTHTOKEN").is_ok()
+    {
+        let dash_port = config
+            .dashboard_bind
+            .rsplit(':')
+            .next()
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(3030);
+
+        let mgr = tunnel::TunnelManager::start(&config.tunnel, dash_port).await;
+        let url = tunnel::shared_url(&mgr);
+
+        // Set TUNNEL_URL in the current process so skills inherit it.
+        // Also store the manager so it lives for the program's lifetime.
+        let url_clone = url.clone();
+        tokio::spawn(async move {
+            let mut rx = mgr.url_receiver();
+            loop {
+                if rx.changed().await.is_err() {
+                    break;
+                }
+                if let Some(ref u) = *rx.borrow() {
+                    // SAFETY: We set these env vars before any skill
+                    // processes are spawned and only from this single
+                    // task, so there are no concurrent readers.
+                    unsafe {
+                        std::env::set_var("TUNNEL_URL", u);
+                        std::env::set_var("PUBLIC_URL", u);
+                    }
+                    info!(public_url = %u, "TUNNEL_URL set");
+                }
+            }
+            // Keep mgr alive so ngrok doesn't exit.
+            drop(mgr);
+        });
+
+        Some(url_clone)
+    } else {
+        None
+    };
+
+    // Inject tunnel URL receiver into the agent so the skill manager can
+    // forward it to skill environments.
+    if let Some(ref turl) = tunnel_url {
+        agent.set_tunnel_url(turl.clone()).await;
+    }
 
     // Start the dashboard
     let dashboard_handle = {
@@ -374,6 +424,37 @@ async fn run_checks(config: &Config, _sandbox: &SandboxedFs) {
         }
     }
 
+    // Tunnel check
+    let tunnel_enabled = config.tunnel.enabled || std::env::var("NGROK_AUTHTOKEN").is_ok();
+    if tunnel_enabled {
+        let ngrok_bin = std::env::var("NGROK_BIN")
+            .unwrap_or_else(|_| config.tunnel.ngrok_bin.clone());
+
+        match tokio::process::Command::new(&ngrok_bin)
+            .arg("version")
+            .output()
+            .await
+        {
+            Ok(out) if out.status.success() => {
+                let ver = String::from_utf8_lossy(&out.stdout);
+                info!("ngrok: OK ({})", ver.trim());
+            }
+            Ok(out) => {
+                error!("ngrok: exited with {}", out.status);
+            }
+            Err(e) => {
+                error!("ngrok: NOT FOUND ({}): {e}", ngrok_bin);
+            }
+        }
+
+        match std::env::var("NGROK_AUTHTOKEN") {
+            Ok(_) => info!("NGROK_AUTHTOKEN: set"),
+            Err(_) => info!("NGROK_AUTHTOKEN: not set (ngrok will use saved auth)"),
+        }
+    } else {
+        info!("tunnel: disabled");
+    }
+
 }
 
 fn print_usage() {
@@ -404,6 +485,12 @@ LLM BACKEND:
     AIDER_BIN             Path to aider binary (aider backend)
     AIDER_MODEL           Model string: gpt-4o, claude-3.5-sonnet (aider backend)
     MODEL_PATH            Path to .gguf model file (local backend)
+
+TUNNEL (NGROK):
+    NGROK_AUTHTOKEN       Auth token from ngrok dashboard (auto-enables tunnel)
+    NGROK_BIN             Path to ngrok binary (default: ngrok)
+    NGROK_PORT            Override local port to tunnel (default: dashboard port)
+    NGROK_DOMAIN          Static domain (e.g. myapp.ngrok-free.app)
 
 ENVIRONMENT:
     DASHBOARD_PASSWORD    Required. Dashboard login password.

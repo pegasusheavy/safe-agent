@@ -33,6 +33,10 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 # Install Claude Code CLI globally
 RUN npm install -g @anthropic-ai/claude-code
 
+# Install ngrok for tunnel support
+RUN curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok-v3-stable-linux-amd64.tgz \
+    | tar -xz -C /usr/local/bin
+
 # Install common Python packages that skills are likely to need
 RUN pip3 install --no-cache-dir --break-system-packages \
     requests \

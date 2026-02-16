@@ -38,6 +38,9 @@ pub struct Config {
 
     #[serde(default)]
     pub sessions: SessionsConfig,
+
+    #[serde(default)]
+    pub tunnel: TunnelConfig,
 }
 
 // -- LLM -----------------------------------------------------------------
@@ -248,6 +251,39 @@ pub struct SessionsConfig {
     pub max_agents: usize,
 }
 
+// -- Tunnel (ngrok) ------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TunnelConfig {
+    /// Enable the ngrok tunnel on startup.
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Path to the `ngrok` binary.
+    /// Can be overridden with `NGROK_BIN`.
+    #[serde(default = "default_ngrok_bin")]
+    pub ngrok_bin: String,
+
+    /// Ngrok auth token.
+    /// Can be overridden with `NGROK_AUTHTOKEN` (preferred).
+    #[serde(default)]
+    pub authtoken: String,
+
+    /// Ngrok static/reserved domain (e.g. "myapp.ngrok-free.app").
+    /// Empty = use random subdomain.
+    /// Can be overridden with `NGROK_DOMAIN`.
+    #[serde(default)]
+    pub domain: String,
+
+    /// Local port for ngrok's inspection API (default 4040).
+    #[serde(default = "default_ngrok_inspect_port")]
+    pub inspect_port: u16,
+
+    /// How often to poll the ngrok API for the tunnel URL (seconds).
+    #[serde(default = "default_ngrok_poll_interval")]
+    pub poll_interval_secs: u64,
+}
+
 // -- Defaults ------------------------------------------------------------
 
 fn default_agent_name() -> String {
@@ -324,6 +360,15 @@ fn default_cron_max_jobs() -> usize {
 }
 fn default_sessions_max_agents() -> usize {
     10
+}
+fn default_ngrok_bin() -> String {
+    "ngrok".to_string()
+}
+fn default_ngrok_inspect_port() -> u16 {
+    4040
+}
+fn default_ngrok_poll_interval() -> u64 {
+    15
 }
 
 // -- Default impls -------------------------------------------------------
@@ -420,6 +465,19 @@ impl Default for SessionsConfig {
     }
 }
 
+impl Default for TunnelConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            ngrok_bin: default_ngrok_bin(),
+            authtoken: String::new(),
+            domain: String::new(),
+            inspect_port: default_ngrok_inspect_port(),
+            poll_interval_secs: default_ngrok_poll_interval(),
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
@@ -434,6 +492,7 @@ impl Default for Config {
             tools: ToolsConfig::default(),
             telegram: TelegramConfig::default(),
             sessions: SessionsConfig::default(),
+            tunnel: TunnelConfig::default(),
         }
     }
 }

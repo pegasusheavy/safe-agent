@@ -141,6 +141,27 @@
 # Maximum number of concurrent cron jobs
 # max_jobs = 50
 
+[tunnel]
+# Enable ngrok tunnel for exposing the dashboard (and OAuth callbacks) publicly.
+# Also auto-enables if NGROK_AUTHTOKEN is set in the environment.
+# enabled = false
+
+# Path to ngrok binary.  Override with NGROK_BIN env var.
+# ngrok_bin = "ngrok"
+
+# Auth token.  Prefer NGROK_AUTHTOKEN env var instead of storing in config.
+# authtoken = ""
+
+# Static domain from your ngrok dashboard (free tier gets one).
+# Override with NGROK_DOMAIN env var.
+# domain = ""
+
+# Local port for ngrok's inspection API (leave at 4040 unless you changed it)
+# inspect_port = 4040
+
+# How often (seconds) to poll the ngrok API for the tunnel URL
+# poll_interval_secs = 15
+
 [telegram]
 # Enable Telegram bot interface
 # Token must be set via environment variable: TELEGRAM_BOT_TOKEN
