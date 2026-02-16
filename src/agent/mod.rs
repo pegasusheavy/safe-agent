@@ -46,7 +46,7 @@ impl Agent {
         // Initialize approval queue
         let approval_queue = ApprovalQueue::new(db.clone(), config.approval_expiry_secs);
 
-        // Initialize Claude CLI engine
+        // Initialize LLM engine (Claude CLI or local GGUF)
         let llm = LlmEngine::new(&config)?;
 
         // Build tool context
@@ -145,7 +145,7 @@ impl Agent {
         self.tick().await
     }
 
-    /// Handle an incoming user message: call Claude CLI and return the reply.
+    /// Handle an incoming user message: call the LLM and return the reply.
     ///
     /// This is the event-driven path — called directly from the Telegram
     /// handler so the user gets a response in seconds, not on the next tick.

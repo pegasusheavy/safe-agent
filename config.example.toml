@@ -20,6 +20,12 @@
 # approval_expiry_secs = 3600
 
 [llm]
+# Backend: "claude" (Claude Code CLI) or "local" (GGUF via llama-gguf)
+# Override with LLM_BACKEND env var.  Requires --features local at compile time.
+# backend = "claude"
+
+# -- Claude CLI settings (backend = "claude") --
+
 # Path to the `claude` binary (default: "claude")
 # Override with CLAUDE_BIN env var
 # claude_bin = "claude"
@@ -33,7 +39,27 @@
 # model = "sonnet"
 
 # Max tool-use turns per invocation
-# max_turns = 1
+# max_turns = 10
+
+# -- Local model settings (backend = "local") --
+
+# Path to the GGUF model file.  Override with MODEL_PATH env var.
+# model_path = "/path/to/model.gguf"
+
+# Sampling parameters
+# temperature = 0.7
+# top_k = 40
+# top_p = 0.95
+# repeat_penalty = 1.1
+
+# Maximum tokens to generate per response
+# max_tokens = 2048
+
+# Maximum context length (0 = use model default).  Lower values reduce VRAM.
+# context_length = 4096
+
+# Use GPU acceleration (requires --features local-cuda at compile time)
+# use_gpu = false
 
 [tools.exec]
 # Enable shell command execution tool

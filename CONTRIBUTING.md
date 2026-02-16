@@ -204,7 +204,8 @@ Before opening a PR, verify:
 
 - [ ] `cargo fmt` produces no changes
 - [ ] `cargo clippy` produces no warnings
-- [ ] `cargo build` succeeds
+- [ ] `cargo build` succeeds (default features)
+- [ ] `cargo build --features local` succeeds (if LLM backend code was changed)
 - [ ] `pnpm run build:ui` succeeds (if frontend was changed)
 - [ ] Commit messages follow the format described above
 - [ ] PR targets `develop`, not `main`

@@ -249,29 +249,55 @@ fn build_tool_registry(config: &Config) -> ToolRegistry {
 async fn run_checks(config: &Config, _sandbox: &SandboxedFs) {
     info!("running pre-flight checks...");
 
+    let backend = std::env::var("LLM_BACKEND")
+        .unwrap_or_else(|_| config.llm.backend.clone());
+
     info!("config: OK");
     info!("  agent_name: {}", config.agent_name);
     info!("  dashboard_bind: {}", config.dashboard_bind);
-    info!("  model: {}", config.llm.model);
+    info!("  llm_backend: {}", backend);
 
-    // Check claude CLI is reachable
-    match tokio::process::Command::new(&config.llm.claude_bin)
-        .arg("--version")
-        .output()
-        .await
-    {
-        Ok(out) if out.status.success() => {
-            let ver = String::from_utf8_lossy(&out.stdout);
-            info!("claude CLI: OK ({})", ver.trim());
+    match backend.as_str() {
+        "claude" => {
+            info!("  model: {}", config.llm.model);
+
+            // Check claude CLI is reachable
+            match tokio::process::Command::new(&config.llm.claude_bin)
+                .arg("--version")
+                .output()
+                .await
+            {
+                Ok(out) if out.status.success() => {
+                    let ver = String::from_utf8_lossy(&out.stdout);
+                    info!("claude CLI: OK ({})", ver.trim());
+                }
+                Ok(out) => {
+                    error!("claude CLI: exited with {}", out.status);
+                }
+                Err(e) => {
+                    error!("claude CLI: NOT FOUND ({}): {e}", config.llm.claude_bin);
+                }
+            }
         }
-        Ok(out) => {
-            error!(
-                "claude CLI: exited with {}",
-                out.status
-            );
+        "local" => {
+            let model_path = std::env::var("MODEL_PATH")
+                .unwrap_or_else(|_| config.llm.model_path.clone());
+
+            if model_path.is_empty() {
+                error!("MODEL_PATH: NOT SET (required for local backend)");
+            } else if std::path::Path::new(&model_path).exists() {
+                info!("model file: OK ({})", model_path);
+            } else {
+                error!("model file: NOT FOUND ({})", model_path);
+            }
+
+            #[cfg(not(feature = "local"))]
+            error!("binary compiled WITHOUT `local` feature — local backend unavailable");
+            #[cfg(feature = "local")]
+            info!("local feature: enabled");
         }
-        Err(e) => {
-            error!("claude CLI: NOT FOUND ({}): {e}", config.llm.claude_bin);
+        other => {
+            error!("unknown LLM backend: {other}");
         }
     }
 
@@ -307,7 +333,16 @@ OPTIONS:
     --check             Validate config and connectivity, then exit
     -h, --help          Print this help message
 
+LLM BACKEND:
+    LLM_BACKEND           \"claude\" (default) or \"local\" (requires --features local)
+    CLAUDE_BIN            Path to claude CLI binary (claude backend)
+    CLAUDE_CONFIG_DIR     Claude profile directory (claude backend)
+    CLAUDE_MODEL          Model name: sonnet, opus, haiku (claude backend)
+    MODEL_PATH            Path to .gguf model file (local backend)
+
 ENVIRONMENT:
+    DASHBOARD_PASSWORD    Required. Dashboard login password.
+    JWT_SECRET            Required. Secret for signing dashboard JWT cookies.
     TELEGRAM_BOT_TOKEN    Required if Telegram is enabled.
     GOOGLE_CLIENT_ID      Required if Google SSO is enabled.
     GOOGLE_CLIENT_SECRET  Required if Google SSO is enabled.

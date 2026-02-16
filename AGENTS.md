@@ -4,26 +4,28 @@ Sandboxed autonomous AI agent with tool execution, knowledge graph, skill system
 
 ## Architecture
 
-safe-agent is an autonomous agent system. Claude Code CLI handles reasoning and tool use. The operator controls the agent via a Svelte web dashboard (with JWT authentication) or Telegram bot.
+safe-agent is an autonomous agent system with a pluggable LLM backend. It can use either Claude Code CLI (cloud) or a local GGUF model (via llama-gguf) for reasoning. The operator controls the agent via a Svelte web dashboard (with JWT authentication) or Telegram bot.
 
 ```
 Telegram Bot ──┐
-               ├──▶ Agent ──▶ Claude Code CLI ──▶ Tool execution
-Web Dashboard ─┘       │                                │
-(Svelte + JWT)         │                         Approval Queue
+               ├──▶ Agent ──▶ LLM Engine ──▶ Tool execution
+Web Dashboard ─┘       │       ├─ Claude CLI (cloud)
+(Svelte + JWT)         │       └─ llama-gguf (local GGUF, optional)
                        │                                │
-                       ▼                         Tool Executor
+                       ▼                         Approval Queue
                   Memory Manager                       │
-                  ├─ Core                        Tool Registry
-                  ├─ Conversation                ├─ exec
-                  ├─ Archival (FTS5)             ├─ read_file / write_file / edit_file
-                  └─ Knowledge Graph             ├─ web_search / web_fetch
-                                                 ├─ browser (CDP)
-                  Skill Manager                  ├─ message
-                  ├─ Discovery (skill.toml)      ├─ sessions_*
-                  ├─ Process groups              ├─ cron
-                  ├─ Credential injection        ├─ memory_search / memory_get
-                  └─ Auto-reconciliation         ├─ knowledge_graph
+                  ├─ Core                        Tool Executor
+                  ├─ Conversation                      │
+                  ├─ Archival (FTS5)             Tool Registry
+                  └─ Knowledge Graph             ├─ exec
+                                                 ├─ read_file / write_file / edit_file
+                  Skill Manager                  ├─ web_search / web_fetch
+                  ├─ Discovery (skill.toml)      ├─ browser (CDP)
+                  ├─ Process groups              ├─ message
+                  ├─ Credential injection        ├─ sessions_*
+                  └─ Auto-reconciliation         ├─ cron
+                                                 ├─ memory_search / memory_get
+                                                 ├─ knowledge_graph
                                                  ├─ google_calendar / google_drive / google_docs
                                                  └─ image
 ```
@@ -125,7 +127,7 @@ required = true
 ## Tech Stack
 
 - **Language**: Rust (2024 edition)
-- **LLM**: Claude Code CLI (configurable profile and model via env vars)
+- **LLM**: Pluggable backend — Claude Code CLI (cloud) or llama-gguf (local GGUF, optional `local` feature)
 - **Database**: SQLite via `rusqlite` (WAL mode, FTS5, recursive CTEs)
 - **Web**: `axum` + Svelte 5 dashboard (compiled by Vite, embedded in binary)
 - **Auth**: `jsonwebtoken` (HS256 JWT cookies)
@@ -152,7 +154,9 @@ src/
 │   ├── actions.rs       # ToolCall parsing and execution
 │   └── reasoning.rs     # LLM context assembly
 ├── llm/
-│   ├── mod.rs           # LlmEngine (Claude Code CLI wrapper)
+│   ├── mod.rs           # LlmEngine enum (dispatches to Claude or local backend)
+│   ├── claude.rs        # Claude Code CLI backend
+│   ├── local.rs         # Local GGUF backend via llama-gguf (feature = "local")
 │   └── prompts.rs       # System prompt, JSON schema, user message builder
 ├── memory/
 │   ├── mod.rs           # MemoryManager, stats, activity log
@@ -225,6 +229,14 @@ src/
                 └── ToolsTab.svelte        # Registered tools list
 ```
 
+## Feature Flags
+
+| Flag         | Effect                                                        |
+|--------------|---------------------------------------------------------------|
+| *(default)*  | Claude Code CLI backend only — no extra native deps           |
+| `local`      | Adds llama-gguf (CPU) for local GGUF model inference          |
+| `local-cuda` | Same as `local` plus NVIDIA CUDA GPU acceleration             |
+
 ## Building & Running
 
 ```bash
@@ -234,11 +246,22 @@ pnpm install
 # Build the Svelte dashboard (outputs to src/dashboard/ui/)
 pnpm run build:ui
 
-# Build the Rust binary (embeds the compiled UI)
+# Build the Rust binary (Claude-only, default)
 cargo build --release
 
-# Run (requires DASHBOARD_PASSWORD and JWT_SECRET)
+# Build with local GGUF inference support
+cargo build --release --features local
+
+# Build with local GGUF + CUDA GPU support
+cargo build --release --features local-cuda
+
+# Run with Claude backend (requires DASHBOARD_PASSWORD and JWT_SECRET)
 DASHBOARD_PASSWORD=mypass JWT_SECRET=mysecret ./target/release/safe-agent
+
+# Run with a local GGUF model
+LLM_BACKEND=local MODEL_PATH=/path/to/model.gguf \
+  DASHBOARD_PASSWORD=mypass JWT_SECRET=mysecret \
+  ./target/release/safe-agent
 
 # Run with custom config
 ./target/release/safe-agent --config /path/to/config.toml
@@ -272,12 +295,14 @@ See `config.example.toml` for all options with defaults.
 |------------------------|----------|-------------------------------------------------------|
 | `DASHBOARD_PASSWORD`   | **Yes**  | Password for the web dashboard (server won't start without it) |
 | `JWT_SECRET`           | **Yes**  | Secret key for signing JWT cookies (server won't start without it) |
-| `TELEGRAM_BOT_TOKEN`   | If telegram enabled | Telegram Bot API token from @BotFather     |
-| `GOOGLE_CLIENT_ID`     | If google enabled   | Google OAuth2 client ID                    |
-| `GOOGLE_CLIENT_SECRET` | If google enabled   | Google OAuth2 client secret                |
+| `LLM_BACKEND`         | No       | `claude` (default) or `local`                         |
 | `CLAUDE_BIN`           | No       | Path to the `claude` binary (default: `claude`)       |
 | `CLAUDE_CONFIG_DIR`    | No       | Claude Code config directory for profile selection    |
 | `CLAUDE_MODEL`         | No       | Model override: `sonnet`, `opus`, `haiku`             |
+| `MODEL_PATH`           | If `local` backend | Path to a `.gguf` model file              |
+| `TELEGRAM_BOT_TOKEN`   | If telegram enabled | Telegram Bot API token from @BotFather     |
+| `GOOGLE_CLIENT_ID`     | If google enabled   | Google OAuth2 client ID                    |
+| `GOOGLE_CLIENT_SECRET` | If google enabled   | Google OAuth2 client secret                |
 | `RUST_LOG`             | No       | Tracing filter (default: `info`)                      |
 
 ## Data Storage

@@ -47,6 +47,13 @@ pub struct Config {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct LlmConfig {
+    /// Backend to use: "claude" (default) or "local".
+    /// Can be overridden with the `LLM_BACKEND` env var.
+    #[serde(default = "default_backend")]
+    pub backend: String,
+
+    // -- Claude CLI settings (backend = "claude") --
+
     /// Path to the `claude` binary (default: "claude").
     /// Can be overridden with the `CLAUDE_BIN` env var.
     #[serde(default = "default_claude_bin")]
@@ -69,6 +76,42 @@ pub struct LlmConfig {
     /// Process timeout in seconds (0 = no timeout).
     #[serde(default = "default_timeout_secs")]
     pub timeout_secs: u64,
+
+    // -- Local model settings (backend = "local") --
+
+    /// Path to a GGUF model file for local inference.
+    /// Can be overridden with the `MODEL_PATH` env var.
+    #[serde(default)]
+    pub model_path: String,
+
+    /// Temperature for local sampling (0.0 = greedy).
+    #[serde(default = "default_temperature")]
+    pub temperature: f32,
+
+    /// Top-K sampling for local model (0 = disabled).
+    #[serde(default = "default_top_k")]
+    pub top_k: usize,
+
+    /// Top-P (nucleus) sampling for local model.
+    #[serde(default = "default_top_p")]
+    pub top_p: f32,
+
+    /// Repetition penalty for local model (1.0 = none).
+    #[serde(default = "default_repeat_penalty")]
+    pub repeat_penalty: f32,
+
+    /// Maximum tokens to generate per response.
+    #[serde(default = "default_max_tokens")]
+    pub max_tokens: usize,
+
+    /// Maximum context length for the local model.
+    /// Caps KV cache size; 0 = use model default.
+    #[serde(default)]
+    pub context_length: usize,
+
+    /// Use GPU acceleration for local model (requires cuda feature).
+    #[serde(default)]
+    pub use_gpu: bool,
 }
 
 // -- Tools ---------------------------------------------------------------
@@ -198,6 +241,9 @@ fn default_approval_expiry_secs() -> u64 {
 fn default_auto_approve_tools() -> Vec<String> {
     vec!["message".to_string(), "memory_search".to_string(), "memory_get".to_string()]
 }
+fn default_backend() -> String {
+    "claude".to_string()
+}
 fn default_claude_bin() -> String {
     "claude".to_string()
 }
@@ -209,6 +255,21 @@ fn default_max_turns() -> u32 {
 }
 fn default_timeout_secs() -> u64 {
     120
+}
+fn default_temperature() -> f32 {
+    0.7
+}
+fn default_top_k() -> usize {
+    40
+}
+fn default_top_p() -> f32 {
+    0.95
+}
+fn default_repeat_penalty() -> f32 {
+    1.1
+}
+fn default_max_tokens() -> usize {
+    2048
 }
 fn default_true() -> bool {
     true
@@ -237,11 +298,20 @@ fn default_sessions_max_agents() -> usize {
 impl Default for LlmConfig {
     fn default() -> Self {
         Self {
+            backend: default_backend(),
             claude_bin: default_claude_bin(),
             claude_config_dir: String::new(),
             model: default_model(),
             max_turns: default_max_turns(),
             timeout_secs: default_timeout_secs(),
+            model_path: String::new(),
+            temperature: default_temperature(),
+            top_k: default_top_k(),
+            top_p: default_top_p(),
+            repeat_penalty: default_repeat_penalty(),
+            max_tokens: default_max_tokens(),
+            context_length: 0,
+            use_gpu: false,
         }
     }
 }

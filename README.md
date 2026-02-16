@@ -2,7 +2,7 @@
 
 Sandboxed autonomous AI agent with tool execution, knowledge graph, skill system, and multi-interface control.
 
-safe-agent pairs Claude Code CLI with a human-in-the-loop approval queue so an AI agent can observe, reason, and act -- but only with your permission. Control it from a Svelte web dashboard or a Telegram bot. The agent can teach itself new skills on the fly and grow its own knowledge graph over time.
+safe-agent pairs a pluggable LLM backend (Claude Code CLI or a local GGUF model via llama-gguf) with a human-in-the-loop approval queue so an AI agent can observe, reason, and act -- but only with your permission. Control it from a Svelte web dashboard or a Telegram bot. The agent can teach itself new skills on the fly and grow its own knowledge graph over time.
 
 ## Features
 
@@ -41,13 +41,20 @@ cd safe-agent
 pnpm install
 pnpm run build:ui
 
-# Backend
+# Backend (Claude-only, default)
 cargo build --release
 
-# Run
+# Backend (with local GGUF model support)
+cargo build --release --features local
+
+# Run with Claude
 cp .env.example .env
 # Edit .env with your values
 source .env && ./target/release/safe-agent
+
+# Run with a local model
+LLM_BACKEND=local MODEL_PATH=/path/to/model.gguf \
+  source .env && ./target/release/safe-agent
 ```
 
 ## Configuration
@@ -67,34 +74,38 @@ Secrets are loaded from environment variables, never config files. See [`.env.ex
 
 | Variable | Description |
 |---|---|
-| `TELEGRAM_BOT_TOKEN` | Telegram Bot API token (from @BotFather) |
-| `GOOGLE_CLIENT_ID` | Google OAuth2 client ID |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth2 client secret |
+| `LLM_BACKEND` | `claude` (default) or `local` (requires `--features local` at compile time) |
 | `CLAUDE_BIN` | Path to the `claude` binary (default: `claude`) |
 | `CLAUDE_CONFIG_DIR` | Claude Code config directory for profile selection |
 | `CLAUDE_MODEL` | Model override: `sonnet`, `opus`, `haiku` |
+| `MODEL_PATH` | Path to a `.gguf` model file (required when `LLM_BACKEND=local`) |
+| `TELEGRAM_BOT_TOKEN` | Telegram Bot API token (from @BotFather) |
+| `GOOGLE_CLIENT_ID` | Google OAuth2 client ID |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth2 client secret |
 | `RUST_LOG` | Tracing filter (default: `info`) |
 
 ## Architecture
 
 ```
 Telegram Bot ──┐
-               ├──▶ Agent ──▶ Claude Code CLI ──▶ Tool execution
-Web Dashboard ─┘       │                                │
-(Svelte + JWT)         │                         Approval Queue
+               ├──▶ Agent ──▶ LLM Engine ──▶ Tool execution
+Web Dashboard ─┘       │       ├─ Claude CLI (cloud)
+(Svelte + JWT)         │       └─ llama-gguf (local, optional)
                        │                                │
-                       ▼                         Tool Executor
+                       ▼                         Approval Queue
                   Memory Manager                       │
-                  ├─ Core                        Tool Registry
-                  ├─ Conversation                ├─ exec
-                  ├─ Archival (FTS5)             ├─ read_file / write_file / edit_file
-                  └─ Knowledge Graph             ├─ web_search / web_fetch
-                                                 ├─ browser (CDP)
-                  Skill Manager                  ├─ message
-                  ├─ Discovery (skill.toml)      ├─ sessions_*
-                  ├─ Process groups              ├─ cron
-                  ├─ Credential injection        ├─ memory_search / memory_get
-                  └─ Auto-reconciliation         ├─ knowledge_graph
+                  ├─ Core                        Tool Executor
+                  ├─ Conversation                      │
+                  ├─ Archival (FTS5)             Tool Registry
+                  └─ Knowledge Graph             ├─ exec
+                                                 ├─ read_file / write_file / edit_file
+                  Skill Manager                  ├─ web_search / web_fetch
+                  ├─ Discovery (skill.toml)      ├─ browser (CDP)
+                  ├─ Process groups              ├─ message
+                  ├─ Credential injection        ├─ sessions_*
+                  └─ Auto-reconciliation         ├─ cron
+                                                 ├─ memory_search / memory_get
+                                                 ├─ knowledge_graph
                                                  ├─ google_calendar / google_drive / google_docs
                                                  └─ image
 ```
@@ -104,7 +115,7 @@ For detailed architecture documentation, module layout, and development guidelin
 ## Tech Stack
 
 - **Rust** (2024 edition) -- backend, tool execution, agent loop
-- **Claude Code CLI** -- LLM reasoning and tool use
+- **LLM** -- Claude Code CLI (cloud) or llama-gguf (local GGUF models, optional)
 - **SQLite** -- conversation, memory, knowledge graph, approvals (WAL mode, FTS5)
 - **Svelte 5 + Vite + Tailwind CSS 4** -- dashboard frontend (compiled and embedded in the binary)
 - **axum** -- HTTP server and API
