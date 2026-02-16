@@ -124,7 +124,7 @@ required = true
 
 ## Tech Stack
 
-- **Language**: Rust (2021 edition)
+- **Language**: Rust (2024 edition)
 - **LLM**: Claude Code CLI (configurable profile and model via env vars)
 - **Database**: SQLite via `rusqlite` (WAL mode, FTS5, recursive CTEs)
 - **Web**: `axum` + Svelte 5 dashboard (compiled by Vite, embedded in binary)
@@ -286,6 +286,58 @@ All data is stored under `$XDG_DATA_HOME/safe-agent/` (typically `~/.local/share
 - `safe-agent.db` — SQLite database (conversation, memory, knowledge graph, approvals, stats)
 - `skills/` — Skill directories (each with `skill.toml`, entrypoint, `skill.log`, `data/`)
 - `skills/credentials.json` — Stored skill credentials
+
+## Git Workflow
+
+This project uses **git-flow** branching.
+
+### Branches
+
+- `main` — production-only. Never commit directly to `main`. It receives merges from `develop` when cutting a release.
+- `develop` — integration branch. All day-to-day work lands here.
+- `feature/<name>` — branched from `develop`, merged back into `develop` via PR.
+- `release/<version>` — branched from `develop` when preparing a release. Final fixes go here, then it merges into both `main` (tagged) and `develop`.
+- `hotfix/<name>` — branched from `main` for critical production fixes. Merges into both `main` (tagged) and `develop`.
+
+### Commit Messages
+
+Write commit messages as if Linus Torvalds is reviewing them.
+
+- **Subject line**: imperative mood, under 72 characters, no trailing period. Describe *what* the commit does, not what you did. Prefix with a type tag: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `build:`, `chore:`.
+- **Body** (when needed): separated by a blank line. Explain *why* the change was made, not *how* — the diff shows how. Wrap at 72 characters. Reference issues or prior commits when relevant.
+- Do not write meaningless messages like "fix stuff", "update", or "WIP". Every commit in the history should be a self-contained, reviewable unit of work.
+- Never use `--no-verify` to skip pre-commit or pre-push hooks. Fix the underlying issue instead.
+
+```
+feat: add web chat interface to dashboard
+
+The agent was only reachable via Telegram. Add POST /api/chat
+endpoint that calls the same handle_message() path and a ChatTab
+Svelte component so the operator can message the agent directly
+from the dashboard.
+```
+
+### Release Flow
+
+1. Branch `release/vX.Y.Z` from `develop`.
+2. Bump version numbers, update changelogs, fix release-blocking issues on the release branch.
+3. Merge the release branch into `main` with `--no-ff`. Tag the merge commit `vX.Y.Z`.
+4. Merge the release branch back into `develop` to pick up any last-minute fixes.
+5. Delete the release branch.
+
+```bash
+git checkout develop
+git checkout -b release/v0.2.0
+# ... version bumps, final fixes ...
+git checkout main
+git merge --no-ff release/v0.2.0
+git tag v0.2.0
+git push origin main --tags
+git checkout develop
+git merge --no-ff release/v0.2.0
+git push origin develop
+git branch -d release/v0.2.0
+```
 
 ## Development Guidelines
 

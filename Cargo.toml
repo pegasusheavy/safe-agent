@@ -1,7 +1,7 @@
 [package]
 name = "safe-agent"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 description = "Sandboxed autonomous AI agent with tool execution, knowledge graph, and multi-interface control"
 
 [dependencies]
