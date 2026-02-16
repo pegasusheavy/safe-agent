@@ -59,7 +59,7 @@ RUN mkdir -p /data/safe-agent/skills /config/safe-agent
 ENV XDG_DATA_HOME=/data
 ENV XDG_CONFIG_HOME=/config
 
-EXPOSE 3031
+EXPOSE 3031 443
 
 VOLUME ["/data/safe-agent", "/config/safe-agent"]
 

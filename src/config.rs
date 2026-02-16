@@ -41,6 +41,9 @@ pub struct Config {
 
     #[serde(default)]
     pub tunnel: TunnelConfig,
+
+    #[serde(default)]
+    pub tls: TlsConfig,
 }
 
 // -- LLM -----------------------------------------------------------------
@@ -251,6 +254,43 @@ pub struct SessionsConfig {
     pub max_agents: usize,
 }
 
+// -- TLS / ACME ----------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TlsConfig {
+    /// Enable ACME (Let's Encrypt) automatic certificate management.
+    /// When enabled, `acme_domains` and `acme_email` are required.
+    /// Can be overridden with `ACME_ENABLED=true`.
+    #[serde(default)]
+    pub acme_enabled: bool,
+
+    /// Domain name(s) for the certificate.
+    /// Can be overridden with `ACME_DOMAIN`.
+    #[serde(default)]
+    pub acme_domains: Vec<String>,
+
+    /// Contact email for Let's Encrypt (e.g. "mailto:admin@example.com").
+    /// Can be overridden with `ACME_EMAIL`.
+    #[serde(default)]
+    pub acme_email: String,
+
+    /// Use the Let's Encrypt production CA (true) or staging (false).
+    /// Staging is useful for testing — it doesn't enforce rate limits.
+    /// Can be overridden with `ACME_PRODUCTION=true`.
+    #[serde(default)]
+    pub acme_production: bool,
+
+    /// Directory to cache ACME account keys and certificates.
+    /// Defaults to `$XDG_DATA_HOME/safe-agent/acme-cache`.
+    #[serde(default)]
+    pub acme_cache_dir: String,
+
+    /// Port for the HTTPS listener (default: 443).
+    /// Can be overridden with `ACME_PORT`.
+    #[serde(default = "default_acme_port")]
+    pub acme_port: u16,
+}
+
 // -- Tunnel (ngrok) ------------------------------------------------------
 
 #[derive(Debug, Clone, Deserialize)]
@@ -361,6 +401,9 @@ fn default_cron_max_jobs() -> usize {
 fn default_sessions_max_agents() -> usize {
     10
 }
+fn default_acme_port() -> u16 {
+    443
+}
 fn default_ngrok_bin() -> String {
     "ngrok".to_string()
 }
@@ -465,6 +508,19 @@ impl Default for SessionsConfig {
     }
 }
 
+impl Default for TlsConfig {
+    fn default() -> Self {
+        Self {
+            acme_enabled: false,
+            acme_domains: Vec::new(),
+            acme_email: String::new(),
+            acme_production: false,
+            acme_cache_dir: String::new(),
+            acme_port: default_acme_port(),
+        }
+    }
+}
+
 impl Default for TunnelConfig {
     fn default() -> Self {
         Self {
@@ -493,6 +549,7 @@ impl Default for Config {
             telegram: TelegramConfig::default(),
             sessions: SessionsConfig::default(),
             tunnel: TunnelConfig::default(),
+            tls: TlsConfig::default(),
         }
     }
 }

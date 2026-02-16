@@ -141,6 +141,28 @@
 # Maximum number of concurrent cron jobs
 # max_jobs = 50
 
+[tls]
+# Automatic HTTPS via Let's Encrypt (ACME TLS-ALPN-01 challenge).
+# The container will abort if enabled and the certificate cannot be obtained.
+# acme_enabled = false
+
+# Domain(s) the certificate covers.  Override with ACME_DOMAIN env var.
+# acme_domains = ["agent.example.com"]
+
+# Contact email for Let's Encrypt.  Override with ACME_EMAIL env var.
+# acme_email = "admin@example.com"
+
+# Use Let's Encrypt production CA (true) or staging (false, default).
+# Start with staging to avoid rate limits while testing.
+# acme_production = false
+
+# Directory to cache account keys and certificates.
+# Defaults to $XDG_DATA_HOME/safe-agent/acme-cache.
+# acme_cache_dir = ""
+
+# HTTPS listen port (default: 443).  Override with ACME_PORT env var.
+# acme_port = 443
+
 [tunnel]
 # Enable ngrok tunnel for exposing the dashboard (and OAuth callbacks) publicly.
 # Also auto-enables if NGROK_AUTHTOKEN is set in the environment.

@@ -10,22 +10,48 @@ use tokio::sync::{broadcast, Mutex};
 use tracing::info;
 
 use crate::agent::Agent;
-use crate::config::Config;
+use crate::config::{Config, TlsConfig};
 use crate::error::{Result, SafeAgentError};
 
 pub async fn serve(
     config: Config,
     agent: Arc<Agent>,
     db: Arc<Mutex<Connection>>,
-    mut shutdown: broadcast::Receiver<()>,
+    shutdown: broadcast::Receiver<()>,
+    tls: Option<TlsConfig>,
 ) -> Result<()> {
     let app = routes::build(agent, config.clone(), db)?;
 
-    let listener = tokio::net::TcpListener::bind(&config.dashboard_bind)
-        .await
-        .map_err(|e| SafeAgentError::Config(format!("failed to bind {}: {e}", config.dashboard_bind)))?;
+    // If ACME TLS is configured, serve over HTTPS using rustls-acme.
+    // Otherwise fall back to plain HTTP on the dashboard_bind address.
+    if let Some(ref tls_config) = tls {
+        // Also start a plain-HTTP listener on the original dashboard_bind
+        // address so local/internal traffic still works.
+        let plain_app = app.clone();
+        let plain_bind = config.dashboard_bind.clone();
+        let plain_shutdown = shutdown.resubscribe();
+        tokio::spawn(async move {
+            if let Err(e) = serve_plain(plain_app, &plain_bind, plain_shutdown).await {
+                tracing::warn!(err = %e, "plain HTTP listener failed (HTTPS is primary)");
+            }
+        });
 
-    info!(bind = %config.dashboard_bind, "dashboard listening");
+        crate::acme::serve_https(tls_config, app, shutdown).await
+    } else {
+        serve_plain(app, &config.dashboard_bind, shutdown).await
+    }
+}
+
+async fn serve_plain(
+    app: axum::Router,
+    bind: &str,
+    mut shutdown: broadcast::Receiver<()>,
+) -> Result<()> {
+    let listener = tokio::net::TcpListener::bind(bind)
+        .await
+        .map_err(|e| SafeAgentError::Config(format!("failed to bind {bind}: {e}")))?;
+
+    info!(bind = %bind, "dashboard listening (HTTP)");
 
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {

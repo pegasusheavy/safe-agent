@@ -71,6 +71,7 @@ These flow through the approval queue — the dashboard and Telegram bot show th
 - **Dashboard JWT Auth**: `DASHBOARD_PASSWORD` and `JWT_SECRET` are **required** — the server will not start without them. Login issues HS256-signed HttpOnly cookies with 7-day expiry.
 - **Telegram auth**: Only configured chat IDs can control the bot.
 - **Google OAuth**: Handled by skills, not the core app.  Skills declare `[[credentials]]` in `skill.toml` for OAuth client ID/secret; values are injected as environment variables at runtime.
+- **ACME TLS**: Automatic Let's Encrypt HTTPS via `rustls-acme` (TLS-ALPN-01).  When enabled, the process **aborts** if the certificate cannot be obtained within 120 seconds, ensuring the container restarts cleanly rather than running without TLS.
 - **Ngrok tunnel**: Optional public exposure via ngrok. Spawned as a managed subprocess; public URL broadcast to skills via `TUNNEL_URL` / `PUBLIC_URL` environment variables and available at `/api/tunnel/status`.
 
 ### Knowledge Graph
@@ -142,6 +143,7 @@ required = true
 - **Scheduling**: `tokio-cron-scheduler` for cron jobs
 - **HTML to Markdown**: `htmd` for web_fetch
 - **Process management**: `libc` for Unix process group signals
+- **TLS**: `rustls-acme` + `axum-server` for automatic Let's Encrypt certificates
 - **Tunnel**: ngrok for exposing the dashboard and OAuth callbacks publicly
 
 ## Module Layout
@@ -172,6 +174,7 @@ src/
 │   ├── conversation.rs  # ConversationMemory (rolling window)
 │   ├── archival.rs      # ArchivalMemory (FTS5)
 │   └── knowledge.rs     # KnowledgeGraph (nodes, edges, traversal)
+├── acme.rs              # Let's Encrypt ACME certificate provisioning (TLS-ALPN-01)
 ├── tunnel.rs            # Ngrok tunnel manager (spawn, poll API, broadcast URL)
 ├── skills/
 │   ├── mod.rs           # Re-exports
@@ -330,6 +333,11 @@ See `config.example.toml` for all options with defaults.
 | `AIDER_MODEL`          | No       | Model string: `gpt-4o`, `claude-3.5-sonnet`, etc.     |
 | `MODEL_PATH`           | If `local` backend | Path to a `.gguf` model file              |
 | `TELEGRAM_BOT_TOKEN`   | If telegram enabled | Telegram Bot API token from @BotFather     |
+| `ACME_ENABLED`         | No       | Set to `true` to enable Let's Encrypt HTTPS               |
+| `ACME_DOMAIN`          | If ACME enabled | Comma-separated domain(s) for the certificate    |
+| `ACME_EMAIL`           | If ACME enabled | Contact email for Let's Encrypt                  |
+| `ACME_PRODUCTION`      | No       | `true` for production CA, `false` for staging (default)   |
+| `ACME_PORT`            | No       | HTTPS listen port (default: `443`)                        |
 | `NGROK_AUTHTOKEN`      | No (auto-enables tunnel) | ngrok auth token; setting this enables the tunnel |
 | `NGROK_BIN`            | No       | Path to ngrok binary (default: `ngrok`)               |
 | `NGROK_PORT`           | No       | Local port to expose (default: dashboard port)        |

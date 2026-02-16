@@ -64,6 +64,10 @@ dotenvy = "0.15.7"
 # JWT auth for dashboard
 jsonwebtoken = "9"
 
+# ACME / Let's Encrypt TLS
+rustls-acme = { version = "0.15", features = ["axum"] }
+axum-server = "0.8"
+
 # Unix process group management
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

@@ -1,3 +1,4 @@
+mod acme;
 mod agent;
 mod approval;
 mod config;
@@ -203,15 +204,43 @@ async fn main() {
         agent.set_tunnel_url(turl.clone()).await;
     }
 
+    // Resolve ACME / TLS configuration.
+    // If ACME is enabled, validate that the required fields are present.
+    // If validation fails the process aborts — this is intentional so the
+    // Docker container restarts with a clear error instead of running
+    // without TLS silently.
+    let tls_config = {
+        let tls = acme::resolve_tls_config(&config);
+        if tls.acme_enabled {
+            if let Err(e) = acme::validate_acme_config(&tls) {
+                error!("ACME configuration invalid — aborting: {e}");
+                std::process::exit(1);
+            }
+            info!(
+                domains = ?tls.acme_domains,
+                production = tls.acme_production,
+                port = tls.acme_port,
+                "ACME TLS enabled"
+            );
+            Some(tls)
+        } else {
+            None
+        }
+    };
+
     // Start the dashboard
     let dashboard_handle = {
         let agent = agent.clone();
         let config = config.clone();
         let db = db.clone();
         let shutdown_rx = shutdown_tx.subscribe();
+        let tls = tls_config.clone();
         tokio::spawn(async move {
-            if let Err(e) = dashboard::serve(config, agent, db, shutdown_rx).await {
+            if let Err(e) = dashboard::serve(config, agent, db, shutdown_rx, tls).await {
                 error!("dashboard error: {e}");
+                // If the dashboard (ACME cert acquisition) fails, kill the
+                // entire process so the container restarts.
+                std::process::exit(1);
             }
         })
     };
@@ -455,6 +484,22 @@ async fn run_checks(config: &Config, _sandbox: &SandboxedFs) {
         info!("tunnel: disabled");
     }
 
+    // ACME check
+    let tls = acme::resolve_tls_config(config);
+    if tls.acme_enabled {
+        info!("ACME TLS: enabled");
+        info!("  domains: {:?}", tls.acme_domains);
+        info!("  email: {}", tls.acme_email);
+        info!("  environment: {}", if tls.acme_production { "production" } else { "staging" });
+        info!("  port: {}", tls.acme_port);
+        match acme::validate_acme_config(&tls) {
+            Ok(()) => info!("ACME config: OK"),
+            Err(e) => error!("ACME config: INVALID — {e}"),
+        }
+    } else {
+        info!("ACME TLS: disabled");
+    }
+
 }
 
 fn print_usage() {
@@ -485,6 +530,14 @@ LLM BACKEND:
     AIDER_BIN             Path to aider binary (aider backend)
     AIDER_MODEL           Model string: gpt-4o, claude-3.5-sonnet (aider backend)
     MODEL_PATH            Path to .gguf model file (local backend)
+
+TLS / ACME (LET'S ENCRYPT):
+    ACME_ENABLED          Set to \"true\" to enable automatic HTTPS certificates
+    ACME_DOMAIN           Comma-separated domain(s) for the certificate
+    ACME_EMAIL            Contact email for Let's Encrypt (required)
+    ACME_PRODUCTION       \"true\" for production CA, \"false\" for staging (default)
+    ACME_CACHE_DIR        Directory to cache certs (default: $data_dir/acme-cache)
+    ACME_PORT             HTTPS listen port (default: 443)
 
 TUNNEL (NGROK):
     NGROK_AUTHTOKEN       Auth token from ngrok dashboard (auto-enables tunnel)
