@@ -21,6 +21,7 @@
 
 [llm]
 # Backend: "claude" (Claude Code CLI), "codex" (OpenAI Codex CLI),
+#          "gemini" (Google Gemini CLI), "aider" (Aider multi-provider),
 #          or "local" (GGUF via llama-gguf, requires --features local)
 # Override with LLM_BACKEND env var.
 # backend = "claude"
@@ -54,6 +55,27 @@
 # Codex config profile (from ~/.codex/config.toml).
 # Override with CODEX_PROFILE env var.
 # codex_profile = ""
+
+# -- Gemini CLI settings (backend = "gemini") --
+
+# Path to the `gemini` binary (default: "gemini")
+# Override with GEMINI_BIN env var
+# gemini_bin = "gemini"
+
+# Gemini model override (e.g. "gemini-2.5-pro", "gemini-2.5-flash").
+# Override with GEMINI_MODEL env var.
+# gemini_model = ""
+
+# -- Aider settings (backend = "aider") --
+
+# Path to the `aider` binary (default: "aider")
+# Override with AIDER_BIN env var
+# aider_bin = "aider"
+
+# Model string for aider (e.g. "gpt-4o", "claude-3.5-sonnet", "gemini/gemini-2.5-pro").
+# Aider supports many providers; set the corresponding API key env var.
+# Override with AIDER_MODEL env var.
+# aider_model = ""
 
 # -- Local model settings (backend = "local") --
 
