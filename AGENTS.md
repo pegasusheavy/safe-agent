@@ -29,7 +29,6 @@ Web Dashboard ─┘       │       ├─ Claude CLI  (Anthropic)
                   └─ Auto-reconciliation         ├─ cron
                                                  ├─ memory_search / memory_get
                                                  ├─ knowledge_graph
-                                                 ├─ google_calendar / google_drive / google_docs
                                                  └─ image
 ```
 
@@ -71,7 +70,7 @@ These flow through the approval queue — the dashboard and Telegram bot show th
 - **AllowlistedHttpClient**: Available for restricted HTTP access patterns.
 - **Dashboard JWT Auth**: `DASHBOARD_PASSWORD` and `JWT_SECRET` are **required** — the server will not start without them. Login issues HS256-signed HttpOnly cookies with 7-day expiry.
 - **Telegram auth**: Only configured chat IDs can control the bot.
-- **Google OAuth**: Tokens stored in SQLite; client secrets from env vars only.
+- **Google OAuth**: Handled by skills, not the core app.  Skills declare `[[credentials]]` in `skill.toml` for OAuth client ID/secret; values are injected as environment variables at runtime.
 
 ### Knowledge Graph
 
@@ -136,7 +135,7 @@ required = true
 - **Auth**: `jsonwebtoken` (HS256 JWT cookies)
 - **HTTP**: `reqwest` for outbound requests
 - **Telegram**: `teloxide` for bot interface
-- **Google OAuth**: `oauth2` crate + direct REST API calls
+- **Google OAuth**: Managed per-skill via credential injection (no built-in Google module)
 - **Browser**: `chromiumoxide` for CDP automation (scaffold)
 - **Scheduling**: `tokio-cron-scheduler` for cron jobs
 - **HTML to Markdown**: `htmd` for web_fetch
@@ -185,12 +184,7 @@ src/
 │   ├── cron.rs          # Scheduled task management
 │   ├── image.rs         # Image analysis (scaffold)
 │   ├── memory.rs        # Archival memory search/get
-│   ├── knowledge.rs     # Knowledge graph tool
-│   └── google.rs        # Google Calendar, Drive, Docs tools
-├── google/
-│   ├── mod.rs           # Re-exports
-│   ├── oauth.rs         # OAuth2 authorization flow
-│   └── tokens.rs        # Token storage and refresh
+│   └── knowledge.rs     # Knowledge graph tool
 ├── telegram/
 │   ├── mod.rs           # Bot setup and dispatcher
 │   ├── commands.rs      # Command handlers
@@ -332,8 +326,6 @@ See `config.example.toml` for all options with defaults.
 | `AIDER_MODEL`          | No       | Model string: `gpt-4o`, `claude-3.5-sonnet`, etc.     |
 | `MODEL_PATH`           | If `local` backend | Path to a `.gguf` model file              |
 | `TELEGRAM_BOT_TOKEN`   | If telegram enabled | Telegram Bot API token from @BotFather     |
-| `GOOGLE_CLIENT_ID`     | If google enabled   | Google OAuth2 client ID                    |
-| `GOOGLE_CLIENT_SECRET` | If google enabled   | Google OAuth2 client secret                |
 | `RUST_LOG`             | No       | Tracing filter (default: `info`)                      |
 
 ## Data Storage

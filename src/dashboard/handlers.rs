@@ -1,6 +1,6 @@
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
-use axum::response::{Json, Redirect};
+use axum::response::Json;
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
@@ -35,13 +35,6 @@ pub struct PaginationQuery {
 #[derive(Deserialize)]
 pub struct SearchQuery {
     pub q: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub struct GoogleCallbackQuery {
-    pub code: Option<String>,
-    pub state: Option<String>,
-    pub error: Option<String>,
 }
 
 // -- Status & Control ----------------------------------------------------
@@ -415,73 +408,6 @@ pub async fn get_knowledge_stats(
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
     Ok(Json(serde_json::json!({ "nodes": nodes, "edges": edges })))
-}
-
-// -- Google OAuth --------------------------------------------------------
-
-pub async fn google_auth_redirect(
-    State(state): State<DashState>,
-) -> Result<Redirect, StatusCode> {
-    if !state.config.google.enabled {
-        return Err(StatusCode::NOT_FOUND);
-    }
-    let (url, _state_param) = crate::google::oauth::authorization_url(&state.config).map_err(|e| {
-        error!("google auth url: {e}");
-        StatusCode::INTERNAL_SERVER_ERROR
-    })?;
-    Ok(Redirect::temporary(&url))
-}
-
-pub async fn google_auth_callback(
-    State(state): State<DashState>,
-    Query(params): Query<GoogleCallbackQuery>,
-) -> Result<axum::response::Html<String>, StatusCode> {
-    if let Some(err) = params.error {
-        return Ok(axum::response::Html(format!(
-            "<h1>Google OAuth Error</h1><p>{err}</p><a href=\"/\">Back to dashboard</a>"
-        )));
-    }
-
-    let code = params.code.ok_or(StatusCode::BAD_REQUEST)?;
-    let http = reqwest::Client::new();
-
-    crate::google::oauth::exchange_code(&state.config, &code, &state.db, &http)
-        .await
-        .map_err(|e| {
-            error!("google token exchange: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-
-    Ok(axum::response::Html(
-        "<h1>Google Connected!</h1><p>You can close this window.</p><script>window.close()</script>".to_string(),
-    ))
-}
-
-pub async fn google_status(
-    State(state): State<DashState>,
-) -> Json<serde_json::Value> {
-    let connected = crate::google::oauth::is_connected(&state.db).await;
-    Json(serde_json::json!({
-        "enabled": state.config.google.enabled,
-        "connected": connected,
-    }))
-}
-
-pub async fn google_disconnect(
-    State(state): State<DashState>,
-) -> Result<Json<ActionResponse>, StatusCode> {
-    let http = reqwest::Client::new();
-    crate::google::oauth::disconnect(&state.db, &http)
-        .await
-        .map_err(|e| {
-            error!("google disconnect: {e}");
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
-    Ok(Json(ActionResponse {
-        ok: true,
-        message: Some("Google disconnected".into()),
-        count: None,
-    }))
 }
 
 // -- Tools ---------------------------------------------------------------

@@ -4,7 +4,6 @@ mod config;
 mod dashboard;
 mod db;
 mod error;
-mod google;
 mod llm;
 mod memory;
 mod security;
@@ -237,12 +236,6 @@ fn build_tool_registry(config: &Config) -> ToolRegistry {
     registry.register(Box::new(memory::MemoryGetTool));
     registry.register(Box::new(knowledge::KnowledgeGraphTool::new()));
 
-    if config.google.enabled {
-        registry.register(Box::new(google::GoogleCalendarTool::new()));
-        registry.register(Box::new(google::GoogleDriveTool::new()));
-        registry.register(Box::new(google::GoogleDocsTool::new()));
-    }
-
     registry
 }
 
@@ -381,16 +374,6 @@ async fn run_checks(config: &Config, _sandbox: &SandboxedFs) {
         }
     }
 
-    if config.google.enabled {
-        match Config::google_client_id() {
-            Ok(_) => info!("GOOGLE_CLIENT_ID: set"),
-            Err(_) => error!("GOOGLE_CLIENT_ID: NOT SET (google enabled)"),
-        }
-        match Config::google_client_secret() {
-            Ok(_) => info!("GOOGLE_CLIENT_SECRET: set"),
-            Err(_) => error!("GOOGLE_CLIENT_SECRET: NOT SET (google enabled)"),
-        }
-    }
 }
 
 fn print_usage() {
@@ -426,8 +409,6 @@ ENVIRONMENT:
     DASHBOARD_PASSWORD    Required. Dashboard login password.
     JWT_SECRET            Required. Secret for signing dashboard JWT cookies.
     TELEGRAM_BOT_TOKEN    Required if Telegram is enabled.
-    GOOGLE_CLIENT_ID      Required if Google SSO is enabled.
-    GOOGLE_CLIENT_SECRET  Required if Google SSO is enabled.
     RUST_LOG              Optional. Tracing filter (default: info).
 "
     );

@@ -3,11 +3,6 @@ export interface AgentStatus {
     tools_count: number;
 }
 
-export interface GoogleStatus {
-    enabled: boolean;
-    connected: boolean;
-}
-
 export interface PendingAction {
     id: string;
     proposed_at: string;

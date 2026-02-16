@@ -149,14 +149,9 @@
 # Only these chat IDs can control the bot (empty = deny all)
 # allowed_chat_ids = []
 
-[google]
-# Enable Google OAuth2 integration
-# Client ID and secret must be set via environment variables:
-#   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET
-# enabled = false
-
-# OAuth2 redirect URI (must match Google Cloud Console config)
-# redirect_uri = "http://localhost:3030/auth/google/callback"
+# Note: Google API integration (Calendar, Drive, Docs) is handled through the
+# skill system.  Skills declare [[credentials]] in their skill.toml for any
+# API keys or OAuth secrets they need; configure values via the dashboard UI.
 
 [sessions]
 # Enable multi-agent session coordination

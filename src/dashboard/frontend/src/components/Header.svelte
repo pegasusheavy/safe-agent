@@ -1,7 +1,7 @@
 <script lang="ts">
     import { api } from '../lib/api';
     import { dashboard, auth, refreshAll } from '../lib/state.svelte';
-    import type { AgentStatus, GoogleStatus, ActionResponse } from '../lib/types';
+    import type { AgentStatus, ActionResponse } from '../lib/types';
 
     let paused = $state(false);
     let toolsCount = $state(0);
@@ -9,9 +9,6 @@
     let statusIcon = $state('fa-spinner fa-spin');
     let statusText = $state('loading...');
     let disconnected = $state(false);
-
-    let googleEnabled = $state(false);
-    let googleConnected = $state(false);
 
     async function loadStatus() {
         try {
@@ -37,14 +34,6 @@
         }
     }
 
-    async function loadGoogleStatus() {
-        try {
-            const status = await api<GoogleStatus>('GET', '/api/google/status');
-            googleEnabled = status.enabled;
-            googleConnected = status.connected;
-        } catch { /* ignore */ }
-    }
-
     async function pause() {
         await api<ActionResponse>('POST', '/api/agent/pause');
         refreshAll();
@@ -60,10 +49,6 @@
         refreshAll();
     }
 
-    function connectGoogle() {
-        window.open('/auth/google', '_blank', 'width=600,height=700');
-    }
-
     async function logout() {
         try {
             await fetch('/api/auth/logout', { method: 'POST' });
@@ -74,7 +59,6 @@
     $effect(() => {
         dashboard.refreshCounter;
         loadStatus();
-        loadGoogleStatus();
     });
 </script>
 
@@ -91,24 +75,6 @@
         </span>
     </div>
     <div class="flex gap-2">
-        {#if googleEnabled}
-            {#if googleConnected}
-                <button
-                    disabled
-                    class="px-4 py-2 border border-success-500 rounded-md bg-surface text-sm text-success-500"
-                >
-                    <i class="fa-brands fa-google mr-1"></i> Google Connected
-                </button>
-            {:else}
-                <button
-                    onclick={connectGoogle}
-                    class="px-4 py-2 border border-border rounded-md bg-surface text-sm hover:bg-surface-elevated transition-colors"
-                >
-                    <i class="fa-brands fa-google mr-1"></i> Connect Google
-                </button>
-            {/if}
-        {/if}
-
         {#if paused}
             <button
                 onclick={resume}
