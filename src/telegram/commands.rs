@@ -1,5 +1,6 @@
 use teloxide::prelude::*;
-use tracing::debug;
+use teloxide::types::ChatAction;
+use tracing::info;
 
 use super::TelegramState;
 
@@ -10,6 +11,7 @@ pub async fn handle_message(
     state: TelegramState,
 ) -> ResponseResult<()> {
     let chat_id = msg.chat.id.0;
+    info!(chat_id, "telegram message received from chat");
 
     // Authorization check
     if !state.config.allowed_chat_ids.is_empty()
@@ -21,19 +23,56 @@ pub async fn handle_message(
     }
 
     let text = msg.text().unwrap_or("");
-    debug!(chat_id, text, "telegram message received");
+    info!(chat_id, text, "telegram message authorized");
 
     if text.starts_with('/') {
         handle_command(&bot, &msg, text, &state).await?;
     } else {
-        // Free-text: store as conversation input for the agent
-        let db = state.db.lock().await;
-        let _ = db.execute(
-            "INSERT INTO conversation_history (role, content) VALUES ('user', ?1)",
-            [text],
-        );
-        bot.send_message(msg.chat.id, "📝 Message received. The agent will process it on the next tick.")
-            .await?;
+        // Send typing indicator so the user knows we're working
+        let _ = bot.send_chat_action(msg.chat.id, ChatAction::Typing).await;
+
+        let agent = state.agent.clone();
+        let chat = msg.chat.id;
+        let user_text = text.to_string();
+
+        tokio::spawn(async move {
+            // Keep sending "typing..." every 4 seconds while Claude works.
+            // Telegram's typing indicator expires after ~5 seconds.
+            let typing_bot = bot.clone();
+            let typing_handle = tokio::spawn(async move {
+                loop {
+                    tokio::time::sleep(tokio::time::Duration::from_secs(4)).await;
+                    if typing_bot
+                        .send_chat_action(chat, ChatAction::Typing)
+                        .await
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            });
+
+            let result = agent.handle_message(&user_text).await;
+
+            // Stop the typing indicator
+            typing_handle.abort();
+
+            match result {
+                Ok(reply) => {
+                    for chunk in split_message(&reply, 4096) {
+                        if let Err(e) = bot.send_message(chat, chunk).await {
+                            tracing::error!("failed to send telegram reply: {e}");
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("claude generation failed: {e}");
+                    let _ = bot
+                        .send_message(chat, format!("⚠️ Error: {e}"))
+                        .await;
+                }
+            }
+        });
     }
 
     Ok(())
@@ -46,9 +85,8 @@ async fn handle_command(
     state: &TelegramState,
 ) -> ResponseResult<()> {
     let parts: Vec<&str> = text.splitn(3, ' ').collect();
-    let cmd = parts[0].trim_end_matches(|c: char| c == '@' || c.is_alphanumeric() && false);
-    // Normalize command (strip @botname)
-    let cmd = cmd.split('@').next().unwrap_or(cmd);
+    let cmd = parts[0].split('@').next().unwrap_or(parts[0]);
+    info!(cmd, "handling telegram command");
 
     match cmd {
         "/start" | "/help" => {
@@ -66,7 +104,10 @@ async fn handle_command(
 /help - This message
 
 Or just type a message and the agent will read it on the next tick.";
-            bot.send_message(msg.chat.id, help).await?;
+            match bot.send_message(msg.chat.id, help).await {
+                Ok(_) => info!("help message sent successfully"),
+                Err(e) => info!("failed to send help message: {}", e),
+            }
         }
         "/status" => {
             let db = state.db.lock().await;
@@ -165,6 +206,24 @@ Or just type a message and the agent will read it on the next tick.";
                 bot.send_message(msg.chat.id, "Usage: /reject <id|all>").await?;
             }
         }
+        "/tick" => {
+            bot.send_message(msg.chat.id, "⏩ Forcing immediate tick...")
+                .await?;
+            let agent = state.agent.clone();
+            tokio::spawn(async move {
+                if let Err(e) = agent.force_tick().await {
+                    tracing::error!("forced tick failed: {e}");
+                }
+            });
+        }
+        "/pause" => {
+            state.agent.pause();
+            bot.send_message(msg.chat.id, "⏸ Agent paused.").await?;
+        }
+        "/resume" => {
+            state.agent.resume();
+            bot.send_message(msg.chat.id, "▶️ Agent resumed.").await?;
+        }
         "/memory" => {
             let query = parts.get(1).unwrap_or(&"");
             if query.is_empty() {
@@ -205,4 +264,29 @@ Or just type a message and the agent will read it on the next tick.";
     }
 
     Ok(())
+}
+
+/// Split a long message into chunks that fit within Telegram's character limit.
+fn split_message(text: &str, max_len: usize) -> Vec<&str> {
+    if text.len() <= max_len {
+        return vec![text];
+    }
+    let mut chunks = Vec::new();
+    let mut start = 0;
+    while start < text.len() {
+        let end = (start + max_len).min(text.len());
+        // Try to break at a newline within the last 200 chars of the chunk
+        let break_at = if end < text.len() {
+            text[start..end]
+                .rfind('\n')
+                .filter(|&pos| pos > end - start - 200)
+                .map(|pos| start + pos + 1)
+                .unwrap_or(end)
+        } else {
+            end
+        };
+        chunks.push(&text[start..break_at]);
+        start = break_at;
+    }
+    chunks
 }

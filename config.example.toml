@@ -10,7 +10,7 @@
 # Dashboard bind address
 # dashboard_bind = "127.0.0.1:3030"
 
-# Agent tick interval in seconds (how often the agent observes and thinks)
+# Agent tick interval in seconds (how often the agent runs maintenance)
 # tick_interval_secs = 120
 
 # Number of recent conversation messages to include in context
@@ -20,22 +20,20 @@
 # approval_expiry_secs = 3600
 
 [llm]
-# Path to GGUF model file (leave empty to use data_dir/models/<hf_filename>)
-# model_path = ""
+# Path to the `claude` binary (default: "claude")
+# Override with CLAUDE_BIN env var
+# claude_bin = "claude"
 
-# Sampling parameters
-# temperature = 0.7
-# top_k = 40
-# top_p = 0.9
-# repeat_penalty = 1.1
-# max_tokens = 512
+# Claude Code config directory for profile selection
+# Override with CLAUDE_CONFIG_DIR env var
+# claude_config_dir = ""
 
-# GPU acceleration (requires cuda feature)
-# use_gpu = false
+# Model to use: "sonnet", "opus", "haiku"
+# Override with CLAUDE_MODEL env var
+# model = "sonnet"
 
-# HuggingFace model to auto-download with --download-model
-# hf_repo = "Qwen/Qwen2.5-0.5B-Instruct-GGUF"
-# hf_filename = "qwen2.5-0.5b-instruct-q4_k_m.gguf"
+# Max tool-use turns per invocation
+# max_turns = 1
 
 [tools.exec]
 # Enable shell command execution tool

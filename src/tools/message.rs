@@ -1,13 +1,11 @@
 use async_trait::async_trait;
-use tracing::debug;
+use teloxide::prelude::*;
+use tracing::{debug, info};
 
 use super::{Tool, ToolContext, ToolOutput};
 use crate::error::Result;
 
-/// Messaging platform tool for sending messages across Discord, Telegram,
-/// Slack, and other platforms.
-///
-/// Scaffold — individual platform adapters will be added as the system matures.
+/// Messaging tool — currently supports Telegram.
 pub struct MessageTool;
 
 impl MessageTool {
@@ -23,49 +21,50 @@ impl Tool for MessageTool {
     }
 
     fn description(&self) -> &str {
-        "Send messages across messaging platforms (Discord, Telegram, Slack). Actions: send, search, react, reply."
+        "Send a message via Telegram. Params: {\"text\": \"your message\"}"
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
         serde_json::json!({
             "type": "object",
-            "required": ["action", "platform"],
+            "required": ["text"],
             "properties": {
-                "action": {
-                    "type": "string",
-                    "enum": ["send", "search", "react", "reply"],
-                    "description": "Messaging action to perform"
-                },
-                "platform": {
-                    "type": "string",
-                    "enum": ["telegram", "discord", "slack"],
-                    "description": "Target messaging platform"
-                },
-                "channel": {
-                    "type": "string",
-                    "description": "Channel or chat ID"
-                },
                 "text": {
                     "type": "string",
-                    "description": "Message text"
-                },
-                "reply_to": {
-                    "type": "string",
-                    "description": "Message ID to reply to"
+                    "description": "Message text to send"
                 }
             }
         })
     }
 
-    async fn execute(&self, params: serde_json::Value, _ctx: &ToolContext) -> Result<ToolOutput> {
-        let action = params.get("action").and_then(|v| v.as_str()).unwrap_or_default();
-        let platform = params.get("platform").and_then(|v| v.as_str()).unwrap_or_default();
+    async fn execute(&self, params: serde_json::Value, ctx: &ToolContext) -> Result<ToolOutput> {
+        let text = params
+            .get("text")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
 
-        debug!(action, platform, "message tool");
+        if text.is_empty() {
+            return Ok(ToolOutput::error("Missing 'text' parameter"));
+        }
 
-        // TODO: Wire up platform adapters
-        Ok(ToolOutput::ok(format!(
-            "Message {action} on {platform} — platform adapter pending"
-        )))
+        let bot = match &ctx.telegram_bot {
+            Some(b) => b,
+            None => return Ok(ToolOutput::error("Telegram bot not available")),
+        };
+
+        let chat_id = match ctx.telegram_chat_id {
+            Some(id) => ChatId(id),
+            None => return Ok(ToolOutput::error("No Telegram chat ID configured")),
+        };
+
+        debug!(chat_id = %chat_id, "sending telegram message");
+
+        match bot.send_message(chat_id, text).await {
+            Ok(_) => {
+                info!("telegram message sent successfully");
+                Ok(ToolOutput::ok("Message sent"))
+            }
+            Err(e) => Ok(ToolOutput::error(format!("Failed to send: {e}"))),
+        }
     }
 }

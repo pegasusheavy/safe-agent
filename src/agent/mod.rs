@@ -14,6 +14,7 @@ use crate::config::Config;
 use crate::error::Result;
 use crate::llm::LlmEngine;
 use crate::memory::MemoryManager;
+use crate::skills::SkillManager;
 use crate::tools::{ToolContext, ToolRegistry};
 use crate::security::SandboxedFs;
 
@@ -22,8 +23,9 @@ pub struct Agent {
     pub memory: MemoryManager,
     pub approval_queue: ApprovalQueue,
     pub tools: ToolRegistry,
-    pub llm: Arc<Mutex<LlmEngine>>,
+    pub llm: LlmEngine,
     pub ctx: ToolContext,
+    pub skill_manager: Mutex<SkillManager>,
     paused: AtomicBool,
     sse_tx: broadcast::Sender<String>,
 }
@@ -34,6 +36,8 @@ impl Agent {
         db: Arc<Mutex<Connection>>,
         sandbox: SandboxedFs,
         tools: ToolRegistry,
+        telegram_bot: Option<teloxide::Bot>,
+        telegram_chat_id: Option<i64>,
     ) -> Result<Self> {
         // Initialize memory
         let memory = MemoryManager::new(db.clone(), config.conversation_window);
@@ -42,8 +46,8 @@ impl Agent {
         // Initialize approval queue
         let approval_queue = ApprovalQueue::new(db.clone(), config.approval_expiry_secs);
 
-        // Load LLM
-        let llm = LlmEngine::load(&config)?;
+        // Initialize Claude CLI engine
+        let llm = LlmEngine::new(&config)?;
 
         // Build tool context
         let http_client = reqwest::Client::builder()
@@ -52,10 +56,17 @@ impl Agent {
             .unwrap_or_default();
 
         let ctx = ToolContext {
-            sandbox,
+            sandbox: sandbox.clone(),
             db: db.clone(),
             http_client,
+            telegram_bot,
+            telegram_chat_id,
         };
+
+        // Initialize skill manager
+        let skills_dir = sandbox.root().join("skills");
+        let bot_token = std::env::var("TELEGRAM_BOT_TOKEN").ok();
+        let skill_manager = SkillManager::new(skills_dir, bot_token, telegram_chat_id);
 
         // SSE broadcast channel
         let (sse_tx, _) = broadcast::channel(64);
@@ -65,8 +76,9 @@ impl Agent {
             memory,
             approval_queue,
             tools,
-            llm: Arc::new(Mutex::new(llm)),
+            llm,
             ctx,
+            skill_manager: Mutex::new(skill_manager),
             paused: AtomicBool::new(false),
             sse_tx,
         })
@@ -77,6 +89,14 @@ impl Agent {
         let tick_interval = tokio::time::Duration::from_secs(self.config.tick_interval_secs);
 
         info!(interval_secs = self.config.tick_interval_secs, "agent loop starting");
+
+        // Initial skill reconciliation on startup
+        {
+            let mut sm = self.skill_manager.lock().await;
+            if let Err(e) = sm.reconcile().await {
+                error!("initial skill reconciliation failed: {e}");
+            }
+        }
 
         loop {
             // Execute any approved actions first
@@ -95,6 +115,14 @@ impl Agent {
                 }
             }
 
+            // Reconcile skills every tick
+            {
+                let mut sm = self.skill_manager.lock().await;
+                if let Err(e) = sm.reconcile().await {
+                    error!("skill reconciliation failed: {e}");
+                }
+            }
+
             // Wait for tick interval or shutdown
             tokio::select! {
                 _ = tokio::time::sleep(tick_interval) => {}
@@ -104,11 +132,56 @@ impl Agent {
                 }
             }
         }
+
+        // Shut down all skills
+        {
+            let mut sm = self.skill_manager.lock().await;
+            sm.shutdown().await;
+        }
     }
 
     /// Force an immediate tick (from dashboard or Telegram).
     pub async fn force_tick(&self) -> Result<()> {
         self.tick().await
+    }
+
+    /// Handle an incoming user message: call Claude CLI and return the reply.
+    ///
+    /// This is the event-driven path — called directly from the Telegram
+    /// handler so the user gets a response in seconds, not on the next tick.
+    pub async fn handle_message(&self, user_message: &str) -> Result<String> {
+        // Store the user message in conversation history
+        self.memory
+            .conversation
+            .append("user", user_message)
+            .await?;
+
+        // Call Claude
+        let reply = self.llm.generate(user_message).await?;
+
+        // Store the assistant reply
+        self.memory
+            .conversation
+            .append("assistant", &reply)
+            .await?;
+
+        // Reconcile skills after every message so newly created or deleted
+        // skills are picked up immediately instead of waiting for the next tick.
+        {
+            let mut sm = self.skill_manager.lock().await;
+            if let Err(e) = sm.reconcile().await {
+                error!("skill reconciliation after message failed: {e}");
+            }
+        }
+
+        // Record the action
+        self.memory.record_action().await?;
+        self.memory
+            .log_activity("message", "claude reply", Some(&reply), "ok")
+            .await?;
+        self.notify_update();
+
+        Ok(reply)
     }
 
     pub fn is_paused(&self) -> bool {

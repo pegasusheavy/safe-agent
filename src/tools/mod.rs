@@ -69,6 +69,8 @@ pub struct ToolContext {
     pub sandbox: SandboxedFs,
     pub db: Arc<Mutex<Connection>>,
     pub http_client: reqwest::Client,
+    pub telegram_bot: Option<teloxide::Bot>,
+    pub telegram_chat_id: Option<i64>,
 }
 
 /// The trait all tools implement.

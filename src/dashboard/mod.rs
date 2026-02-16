@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod handlers;
 pub mod routes;
 pub mod sse;
@@ -18,7 +19,7 @@ pub async fn serve(
     db: Arc<Mutex<Connection>>,
     mut shutdown: broadcast::Receiver<()>,
 ) -> Result<()> {
-    let app = routes::build(agent, config.clone(), db);
+    let app = routes::build(agent, config.clone(), db)?;
 
     let listener = tokio::net::TcpListener::bind(&config.dashboard_bind)
         .await

@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "target": "ES2022",
+        "module": "ES2022",
+        "moduleResolution": "bundler",
+        "strict": true,
+        "noEmit": true,
+        "skipLibCheck": true,
+        "esModuleInterop": true,
+        "forceConsistentCasingInFileNames": true,
+        "isolatedModules": true,
+        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        "types": ["svelte"],
+        "verbatimModuleSyntax": true
+    },
+    "include": [
+        "src/dashboard/frontend/src/**/*.ts",
+        "src/dashboard/frontend/src/**/*.svelte",
+        "src/dashboard/frontend/vite-env.d.ts"
+    ]
+}

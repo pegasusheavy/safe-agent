@@ -1,0 +1,27 @@
+{
+    "name": "safe-agent",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Dashboard UI build for safe-agent",
+    "scripts": {
+        "build:ui": "vite build src/dashboard/frontend",
+        "dev:ui": "vite dev src/dashboard/frontend"
+    },
+    "author": "Pegasus Heavy Industries LLC <pegasusheavyindustries@gmail.com>",
+    "license": "UNLICENSED",
+    "packageManager": "pnpm@10.29.2",
+    "pnpm": {
+        "onlyBuiltDependencies": [
+            "esbuild"
+        ]
+    },
+    "devDependencies": {
+        "@sveltejs/vite-plugin-svelte": "^6.2.4",
+        "@tailwindcss/vite": "^4.1.18",
+        "svelte": "^5.51.2",
+        "tailwindcss": "^4.1.18",
+        "typescript": "^5.9.3",
+        "vite": "^7.3.1"
+    }
+}

@@ -1,126 +1,101 @@
-use serde::{Deserialize, Serialize};
-
-/// The structured JSON output the LLM should produce on each tick.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AgentReasoning {
-    pub internal_monologue: String,
-    #[serde(default)]
-    pub proposed_actions: Vec<serde_json::Value>,
-    #[serde(default)]
-    pub memory_updates: Vec<MemoryUpdate>,
-    #[serde(default)]
-    pub knowledge_updates: Vec<serde_json::Value>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MemoryUpdate {
-    pub category: String,
-    pub content: String,
-}
-
-pub const JSON_SCHEMA: &str = r#"{
-  "type": "object",
-  "required": ["internal_monologue", "proposed_actions", "memory_updates"],
-  "properties": {
-    "internal_monologue": { "type": "string" },
-    "proposed_actions": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["tool", "reasoning"],
-        "properties": {
-          "tool": { "type": "string", "description": "Name of the tool to invoke" },
-          "params": { "type": "object", "description": "Tool-specific parameters" },
-          "reasoning": { "type": "string", "description": "Why this action should be taken" }
-        }
-      }
-    },
-    "memory_updates": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["category", "content"],
-        "properties": {
-          "category": { "type": "string" },
-          "content": { "type": "string" }
-        }
-      }
-    },
-    "knowledge_updates": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "required": ["action"],
-        "properties": {
-          "action": { "type": "string", "enum": ["add_node", "add_edge", "update_node", "remove_node"] },
-          "label": { "type": "string" },
-          "node_type": { "type": "string" },
-          "content": { "type": "string" },
-          "confidence": { "type": "number" },
-          "source": { "type": "string" },
-          "target": { "type": "string" },
-          "relation": { "type": "string" },
-          "node_id": { "type": "integer" }
-        }
-      }
-    }
-  }
-}"#;
-
+/// Build the system prompt appended to every Claude CLI invocation.
 pub fn system_prompt(personality: &str, agent_name: &str) -> String {
-    let personality_line = if personality.is_empty() {
-        String::new()
+    let base = if personality.is_empty() {
+        format!("You are {agent_name}, a helpful AI assistant.")
     } else {
-        format!("\nPersonality: {personality}\n")
+        personality.to_string()
     };
 
     format!(
-        r#"You are {agent_name}, an autonomous AI agent.{personality_line}
-Respond with JSON only. Schema:
-{JSON_SCHEMA}
+        r#"{base}
 
-Rules: propose 0-3 actions per tick. All tool calls need operator approval. Use "internal_monologue" for reasoning."#
+You are communicating with the user via Telegram.
+Keep replies concise and conversational.
+Do not use markdown formatting unless the user asks for it.
+
+== SKILL SYSTEM ==
+
+You can create persistent services ("skills") that run alongside you.
+Skills are Python scripts managed by the agent's skill manager.
+
+To create a skill:
+
+1. Create a directory under /data/safe-agent/skills/<skill-name>/
+2. Write the Python script as main.py (or whatever entrypoint you choose)
+3. Create a skill.toml manifest in the same directory
+4. Optionally create requirements.txt for extra pip packages
+
+The skill manager automatically discovers new skills and starts them.
+If a daemon skill crashes, it will be restarted on the next tick (~2 min).
+
+== skill.toml format ==
+
+name = "my-skill"
+description = "What this skill does"
+skill_type = "daemon"    # "daemon" (long-running) or "oneshot" (run once)
+enabled = true
+entrypoint = "main.py"   # default
+
+[env]
+# Extra environment variables (optional, non-secret)
+SOME_KEY = "value"
+
+# Declare credentials the skill needs. The operator configures actual
+# values in the web dashboard — they are injected as env vars at runtime.
+[[credentials]]
+name = "GOOGLE_API_KEY"          # env var name passed to the skill
+label = "Google API Key"         # human-readable label shown in dashboard
+description = "API key for Google Calendar access"
+required = true
+
+[[credentials]]
+name = "WEBHOOK_SECRET"
+label = "Webhook Secret"
+description = "Optional webhook signing secret"
+required = false
+
+== Environment variables available to skills ==
+
+TELEGRAM_BOT_TOKEN  - Bot token for sending Telegram messages
+TELEGRAM_CHAT_ID    - Chat ID to send messages to
+SKILL_NAME          - Name of this skill
+SKILL_DIR           - Path to this skill's directory
+SKILL_DATA_DIR      - Path to this skill's persistent data directory
+
+== Sending Telegram messages from a skill ==
+
+Use the Telegram Bot API directly via HTTP:
+
+```python
+import os, requests
+
+TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
+CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
+
+def send_message(text):
+    requests.post(
+        f"https://api.telegram.org/bot{{TOKEN}}/sendMessage",
+        json={{"chat_id": CHAT_ID, "text": text}}
     )
-}
+```
 
-pub fn build_user_message(
-    context_summary: &str,
-    conversation_context: &str,
-    archival_context: &str,
-    stats: &str,
-    tool_schema: &str,
-) -> String {
-    let mut msg = String::new();
+== Important guidelines ==
 
-    if !context_summary.is_empty() {
-        msg.push_str("Context: ");
-        msg.push_str(context_summary);
-        msg.push('\n');
-    }
-
-    if !conversation_context.is_empty() {
-        msg.push_str("Conversation:\n");
-        msg.push_str(conversation_context);
-        msg.push('\n');
-    }
-
-    if !archival_context.is_empty() {
-        msg.push_str("Memories:\n");
-        msg.push_str(archival_context);
-        msg.push('\n');
-    }
-
-    if !stats.is_empty() {
-        msg.push_str("Stats: ");
-        msg.push_str(stats);
-        msg.push('\n');
-    }
-
-    if !tool_schema.is_empty() {
-        msg.push_str("Tools:\n");
-        msg.push_str(tool_schema);
-    }
-
-    msg.push_str("\nRespond with JSON. Propose tool calls if useful, otherwise empty proposed_actions.\n");
-    msg
+- Skills run as background processes inside a Docker container
+- The container has Python 3, pip, and common packages pre-installed:
+  requests, google-api-python-client, google-auth-httplib2,
+  google-auth-oauthlib, schedule, httpx, beautifulsoup4, feedparser,
+  icalendar
+- For additional packages, add them to requirements.txt
+- Store persistent data in SKILL_DATA_DIR
+- Log output goes to skill.log in the skill directory
+- Daemon skills should run in an infinite loop with appropriate sleep
+- Always include error handling and graceful degradation
+- When the user asks you to create a capability or service, create it as a skill
+- After creating the skill files, tell the user it will start automatically
+- If the user provides credentials or tokens, add [[credentials]] entries to
+  skill.toml so the operator can configure them via the dashboard. Never
+  hardcode secrets. The dashboard at /api/skills shows credential status.
+"#
+    )
 }

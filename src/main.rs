@@ -8,6 +8,7 @@ mod google;
 mod llm;
 mod memory;
 mod security;
+mod skills;
 mod telegram;
 mod tools;
 
@@ -92,26 +93,6 @@ async fn main() {
     };
     let db = Arc::new(Mutex::new(db));
 
-    // Handle --download-model
-    if args.iter().any(|a| a == "--download-model") {
-        info!("downloading model from HuggingFace...");
-        let config2 = config.clone();
-        let sandbox2 = sandbox.clone();
-        match tokio::task::spawn_blocking(move || llm::download_model(&config2, &sandbox2))
-            .await
-            .expect("download task panicked")
-        {
-            Ok(path) => {
-                info!(path = %path.display(), "model downloaded successfully");
-                return;
-            }
-            Err(e) => {
-                error!("failed to download model: {e}");
-                return;
-            }
-        }
-    }
-
     // Handle --check
     if args.iter().any(|a| a == "--check") {
         run_checks(&config, &sandbox).await;
@@ -125,8 +106,31 @@ async fn main() {
     // Shutdown signal
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
-    // Build the agent
-    let agent = match Agent::new(config.clone(), db.clone(), sandbox, tool_registry).await {
+    // Create Telegram bot handle early so we can share it with the agent's ToolContext
+    let telegram_bot = if config.telegram.enabled {
+        match config::Config::telegram_bot_token() {
+            Ok(token) => Some(teloxide::Bot::new(token)),
+            Err(e) => {
+                error!("TELEGRAM_BOT_TOKEN not set: {e}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // Build the agent (with telegram bot in ToolContext)
+    let telegram_chat_id = config.telegram.allowed_chat_ids.first().copied();
+    let agent = match Agent::new(
+        config.clone(),
+        db.clone(),
+        sandbox,
+        tool_registry,
+        telegram_bot.clone(),
+        telegram_chat_id,
+    )
+    .await
+    {
         Ok(a) => Arc::new(a),
         Err(e) => {
             error!("failed to initialize agent: {e}");
@@ -136,8 +140,8 @@ async fn main() {
 
     // Start Telegram bot (if enabled)
     let _telegram_shutdown = if config.telegram.enabled {
-        match telegram::start(db.clone(), config.telegram.clone()).await {
-            Ok(tx) => {
+        match telegram::start(db.clone(), config.telegram.clone(), agent.clone()).await {
+            Ok((_bot, tx)) => {
                 info!("telegram bot started");
                 Some(tx)
             }
@@ -242,21 +246,33 @@ fn build_tool_registry(config: &Config) -> ToolRegistry {
     registry
 }
 
-async fn run_checks(config: &Config, sandbox: &SandboxedFs) {
+async fn run_checks(config: &Config, _sandbox: &SandboxedFs) {
     info!("running pre-flight checks...");
 
     info!("config: OK");
     info!("  agent_name: {}", config.agent_name);
     info!("  dashboard_bind: {}", config.dashboard_bind);
+    info!("  model: {}", config.llm.model);
 
-    info!("sandbox root: {}", sandbox.root().display());
-
-    let model_path = config.resolved_model_path();
-    if model_path.exists() {
-        info!("model: OK ({})", model_path.display());
-    } else {
-        error!("model: NOT FOUND ({})", model_path.display());
-        error!("  run with --download-model to fetch it");
+    // Check claude CLI is reachable
+    match tokio::process::Command::new(&config.llm.claude_bin)
+        .arg("--version")
+        .output()
+        .await
+    {
+        Ok(out) if out.status.success() => {
+            let ver = String::from_utf8_lossy(&out.stdout);
+            info!("claude CLI: OK ({})", ver.trim());
+        }
+        Ok(out) => {
+            error!(
+                "claude CLI: exited with {}",
+                out.status
+            );
+        }
+        Err(e) => {
+            error!("claude CLI: NOT FOUND ({}): {e}", config.llm.claude_bin);
+        }
     }
 
     if config.telegram.enabled {
@@ -288,7 +304,6 @@ USAGE:
 OPTIONS:
     --config <PATH>     Path to config file (default: ~/.config/safe-agent/config.toml)
     --default-config    Print default config to stdout and exit
-    --download-model    Download the configured model from HuggingFace and exit
     --check             Validate config and connectivity, then exit
     -h, --help          Print this help message
 

@@ -503,3 +503,127 @@ pub async fn list_tools(
         .collect();
     Json(serde_json::to_value(tools).unwrap())
 }
+
+// -- Skills & Credentials ------------------------------------------------
+
+pub async fn list_skills(
+    State(state): State<DashState>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let sm = state.agent.skill_manager.lock().await;
+    let skills = sm.list();
+    Ok(Json(serde_json::to_value(skills).unwrap()))
+}
+
+#[derive(Deserialize)]
+pub struct SetCredentialBody {
+    pub key: String,
+    pub value: String,
+}
+
+pub async fn get_skill_credentials(
+    State(state): State<DashState>,
+    Path(skill_name): Path<String>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let sm = state.agent.skill_manager.lock().await;
+    let creds = sm.get_credentials(&skill_name);
+    // Return keys + whether they have values, but never expose raw secret values
+    let masked: Vec<serde_json::Value> = creds
+        .keys()
+        .map(|k| {
+            serde_json::json!({
+                "key": k,
+                "has_value": true,
+            })
+        })
+        .collect();
+    Ok(Json(serde_json::to_value(masked).unwrap()))
+}
+
+pub async fn set_skill_credential(
+    State(state): State<DashState>,
+    Path(skill_name): Path<String>,
+    Json(body): Json<SetCredentialBody>,
+) -> Result<Json<ActionResponse>, StatusCode> {
+    let mut sm = state.agent.skill_manager.lock().await;
+    sm.set_credential(&skill_name, &body.key, &body.value)
+        .map_err(|e| {
+            error!("set credential: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    Ok(Json(ActionResponse {
+        ok: true,
+        message: Some(format!("credential '{}' set for '{}'", body.key, skill_name)),
+        count: None,
+    }))
+}
+
+pub async fn delete_skill_credential(
+    State(state): State<DashState>,
+    Path((skill_name, key)): Path<(String, String)>,
+) -> Result<Json<ActionResponse>, StatusCode> {
+    let mut sm = state.agent.skill_manager.lock().await;
+    sm.delete_credential(&skill_name, &key)
+        .map_err(|e| {
+            error!("delete credential: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    Ok(Json(ActionResponse {
+        ok: true,
+        message: Some(format!("credential '{}' removed from '{}'", key, skill_name)),
+        count: None,
+    }))
+}
+
+pub async fn restart_skill(
+    State(state): State<DashState>,
+    Path(skill_name): Path<String>,
+) -> Result<Json<ActionResponse>, StatusCode> {
+    let mut sm = state.agent.skill_manager.lock().await;
+    sm.stop_skill(&skill_name).await;
+    drop(sm);
+    // Short delay so process cleanup completes
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    let mut sm = state.agent.skill_manager.lock().await;
+    let _ = sm.reconcile().await;
+    Ok(Json(ActionResponse {
+        ok: true,
+        message: Some(format!("skill '{}' restarted", skill_name)),
+        count: None,
+    }))
+}
+
+// -- Chat ----------------------------------------------------------------
+
+#[derive(Deserialize)]
+pub struct ChatMessageBody {
+    pub message: String,
+}
+
+#[derive(Serialize)]
+pub struct ChatResponse {
+    pub reply: String,
+    pub timestamp: String,
+}
+
+pub async fn send_chat_message(
+    State(state): State<DashState>,
+    Json(body): Json<ChatMessageBody>,
+) -> Result<Json<ChatResponse>, StatusCode> {
+    let message = body.message.trim().to_string();
+    if message.is_empty() {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    let reply = state
+        .agent
+        .handle_message(&message)
+        .await
+        .map_err(|e| {
+            error!("chat: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+
+    let timestamp = chrono::Utc::now().to_rfc3339();
+
+    Ok(Json(ChatResponse { reply, timestamp }))
+}

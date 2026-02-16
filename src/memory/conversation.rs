@@ -68,12 +68,60 @@ impl ConversationMemory {
     }
 
     /// Format recent conversation for inclusion in a prompt.
-    pub async fn format_for_prompt(&self) -> Result<String> {
+    ///
+    /// Returns `(text, has_pending_user_message)` where `has_pending_user_message`
+    /// is true only if the most recent message is from the user and hasn't been
+    /// responded to yet (no tool execution or assistant reply after it).
+    ///
+    /// Only includes user messages that are still pending (unanswered).
+    /// Already-handled user messages are omitted to prevent the model from
+    /// re-responding to old messages.
+    pub async fn format_for_prompt(&self) -> Result<(String, bool)> {
         let messages = self.recent().await?;
-        let mut out = String::new();
-        for msg in &messages {
-            out.push_str(&format!("[{}] {}: {}\n", msg.created_at, msg.role, msg.content));
+
+        // First pass: find whether the last message is an unanswered user message.
+        // Walk backwards from the most recent message:
+        // - If we hit a user message first → it's pending
+        // - If we hit assistant/system first → all user messages are handled
+        let mut has_pending = false;
+        let mut pending_user_content: Option<String> = None;
+        for msg in messages.iter().rev() {
+            if msg.role == "user" {
+                has_pending = true;
+                pending_user_content = Some(msg.content.chars().take(200).collect());
+                break;
+            } else if msg.role == "assistant" || msg.role == "system" {
+                // Agent already acted after the last user message
+                break;
+            }
         }
-        Ok(out)
+
+        // Build prompt text: only include the pending user message
+        // and a few recent system messages for context
+        let mut out = String::new();
+        let max_total = 500;
+
+        // Include recent system messages (tool results) for context
+        for msg in &messages {
+            if msg.role == "system" {
+                let content: String = msg.content.chars().take(200).collect();
+                let line = format!("[{}] {}\n", msg.role, content);
+                if out.len() + line.len() > max_total {
+                    break;
+                }
+                out.push_str(&line);
+            }
+            // Skip assistant and user messages — we only add the pending user message below
+        }
+
+        // Only add the user message if it's pending
+        if let Some(content) = &pending_user_content {
+            let line = format!("USER MESSAGE: {}\n", content);
+            if out.len() + line.len() <= max_total {
+                out.push_str(&line);
+            }
+        }
+
+        Ok((out, has_pending))
     }
 }

@@ -24,6 +24,9 @@ pub struct Config {
     #[serde(default = "default_approval_expiry_secs")]
     pub approval_expiry_secs: u64,
 
+    #[serde(default = "default_auto_approve_tools")]
+    pub auto_approve_tools: Vec<String>,
+
     #[serde(default)]
     pub llm: LlmConfig,
 
@@ -44,32 +47,28 @@ pub struct Config {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct LlmConfig {
+    /// Path to the `claude` binary (default: "claude").
+    /// Can be overridden with the `CLAUDE_BIN` env var.
+    #[serde(default = "default_claude_bin")]
+    pub claude_bin: String,
+
+    /// Claude Code config directory for profile selection.
+    /// Can be overridden with the `CLAUDE_CONFIG_DIR` env var.
     #[serde(default)]
-    pub model_path: String,
+    pub claude_config_dir: String,
 
-    #[serde(default = "default_temperature")]
-    pub temperature: f32,
+    /// Model to use (e.g. "sonnet", "opus", "haiku").
+    /// Can be overridden with the `CLAUDE_MODEL` env var.
+    #[serde(default = "default_model")]
+    pub model: String,
 
-    #[serde(default = "default_top_k")]
-    pub top_k: usize,
+    /// Maximum tool-use turns per Claude CLI invocation.
+    #[serde(default = "default_max_turns")]
+    pub max_turns: u32,
 
-    #[serde(default = "default_top_p")]
-    pub top_p: f32,
-
-    #[serde(default = "default_repeat_penalty")]
-    pub repeat_penalty: f32,
-
-    #[serde(default = "default_max_tokens")]
-    pub max_tokens: usize,
-
-    #[serde(default)]
-    pub use_gpu: bool,
-
-    #[serde(default = "default_hf_repo")]
-    pub hf_repo: String,
-
-    #[serde(default = "default_hf_filename")]
-    pub hf_filename: String,
+    /// Process timeout in seconds (0 = no timeout).
+    #[serde(default = "default_timeout_secs")]
+    pub timeout_secs: u64,
 }
 
 // -- Tools ---------------------------------------------------------------
@@ -133,7 +132,7 @@ pub struct BrowserToolConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct MessageToolConfig {
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub enabled: bool,
 }
 
@@ -191,31 +190,25 @@ fn default_tick_interval_secs() -> u64 {
     120
 }
 fn default_conversation_window() -> usize {
-    50
+    5
 }
 fn default_approval_expiry_secs() -> u64 {
     3600
 }
-fn default_temperature() -> f32 {
-    0.7
+fn default_auto_approve_tools() -> Vec<String> {
+    vec!["message".to_string(), "memory_search".to_string(), "memory_get".to_string()]
 }
-fn default_top_k() -> usize {
-    40
+fn default_claude_bin() -> String {
+    "claude".to_string()
 }
-fn default_top_p() -> f32 {
-    0.9
+fn default_model() -> String {
+    "sonnet".to_string()
 }
-fn default_repeat_penalty() -> f32 {
-    1.1
+fn default_max_turns() -> u32 {
+    10
 }
-fn default_max_tokens() -> usize {
-    64
-}
-fn default_hf_repo() -> String {
-    "Qwen/Qwen2.5-0.5B-Instruct-GGUF".to_string()
-}
-fn default_hf_filename() -> String {
-    "qwen2.5-0.5b-instruct-q4_k_m.gguf".to_string()
+fn default_timeout_secs() -> u64 {
+    120
 }
 fn default_true() -> bool {
     true
@@ -244,15 +237,11 @@ fn default_sessions_max_agents() -> usize {
 impl Default for LlmConfig {
     fn default() -> Self {
         Self {
-            model_path: String::new(),
-            temperature: default_temperature(),
-            top_k: default_top_k(),
-            top_p: default_top_p(),
-            repeat_penalty: default_repeat_penalty(),
-            max_tokens: default_max_tokens(),
-            use_gpu: false,
-            hf_repo: default_hf_repo(),
-            hf_filename: default_hf_filename(),
+            claude_bin: default_claude_bin(),
+            claude_config_dir: String::new(),
+            model: default_model(),
+            max_turns: default_max_turns(),
+            timeout_secs: default_timeout_secs(),
         }
     }
 }
@@ -339,6 +328,7 @@ impl Default for Config {
             tick_interval_secs: default_tick_interval_secs(),
             conversation_window: default_conversation_window(),
             approval_expiry_secs: default_approval_expiry_secs(),
+            auto_approve_tools: default_auto_approve_tools(),
             llm: LlmConfig::default(),
             tools: ToolsConfig::default(),
             telegram: TelegramConfig::default(),
@@ -402,26 +392,6 @@ impl Config {
     pub fn google_client_secret() -> Result<String> {
         std::env::var("GOOGLE_CLIENT_SECRET")
             .map_err(|_| SafeAgentError::Config("GOOGLE_CLIENT_SECRET environment variable not set".into()))
-    }
-
-    /// Resolve the model path: explicit config > HfClient cache layout > flat fallback
-    pub fn resolved_model_path(&self) -> PathBuf {
-        if !self.llm.model_path.is_empty() {
-            return PathBuf::from(&self.llm.model_path);
-        }
-
-        // HfClient caches to <cache_dir>/<owner>--<repo>/<filename>
-        let cache_subdir = self.llm.hf_repo.replace('/', "--");
-        let hf_path = Self::data_dir()
-            .join("models")
-            .join(&cache_subdir)
-            .join(&self.llm.hf_filename);
-        if hf_path.exists() {
-            return hf_path;
-        }
-
-        // Flat fallback
-        Self::data_dir().join("models").join(&self.llm.hf_filename)
     }
 
     /// Generate the default config file contents.

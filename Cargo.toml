@@ -5,9 +5,6 @@ edition = "2021"
 description = "Sandboxed autonomous AI agent with tool execution, knowledge graph, and multi-interface control"
 
 [dependencies]
-# LLM inference
-llama-gguf = { version = "0.7.3", default-features = false, features = ["cpu", "cuda", "huggingface"] }
-
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"
@@ -58,3 +55,10 @@ chromiumoxide = { version = "0.7", default-features = false, features = ["tokio-
 # Cron scheduling
 tokio-cron-scheduler = "0.13"
 dotenvy = "0.15.7"
+
+# JWT auth for dashboard
+jsonwebtoken = "9"
+
+# Unix process group management
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
