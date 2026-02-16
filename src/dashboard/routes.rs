@@ -90,11 +90,6 @@ pub fn build(agent: Arc<Agent>, config: Config, db: Arc<Mutex<Connection>>) -> R
         .route("/api/knowledge/nodes/{id}/neighbors", get(handlers::get_knowledge_neighbors))
         .route("/api/knowledge/search", get(handlers::search_knowledge))
         .route("/api/knowledge/stats", get(handlers::get_knowledge_stats))
-        // API — Google OAuth
-        .route("/auth/google", get(handlers::google_auth_redirect))
-        .route("/auth/google/callback", get(handlers::google_auth_callback))
-        .route("/api/google/status", get(handlers::google_status))
-        .route("/auth/google/disconnect", post(handlers::google_disconnect))
         // API — Tools
         .route("/api/tools", get(handlers::list_tools))
         // API — Chat

@@ -13,7 +13,7 @@ safe-agent pairs a pluggable LLM backend (Claude Code CLI, OpenAI Codex CLI, Goo
 - **Knowledge graph** -- SQLite-backed graph of typed nodes and edges that the agent grows autonomously. Full-text search via FTS5 and recursive traversal via CTEs.
 - **Memory hierarchy** -- core personality, rolling conversation window, archival long-term storage with full-text search.
 - **Sandboxed file I/O** -- all file operations are confined to the data directory with path traversal prevention.
-- **13 built-in tools** -- shell exec, file read/write/edit, web search, URL fetch, browser automation (CDP), messaging, cron scheduling, memory search, knowledge graph, Google Calendar/Drive/Docs, image analysis.
+- **10 built-in tools** -- shell exec, file read/write/edit, web search, URL fetch, browser automation (CDP), messaging, cron scheduling, memory search, knowledge graph, image analysis.
 
 ## Quick Start
 
@@ -98,8 +98,6 @@ Secrets are loaded from environment variables, never config files. See [`.env.ex
 | `AIDER_MODEL` | Model string: `gpt-4o`, `claude-3.5-sonnet`, etc. |
 | `MODEL_PATH` | Path to a `.gguf` model file (required when `LLM_BACKEND=local`) |
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot API token (from @BotFather) |
-| `GOOGLE_CLIENT_ID` | Google OAuth2 client ID |
-| `GOOGLE_CLIENT_SECRET` | Google OAuth2 client secret |
 | `RUST_LOG` | Tracing filter (default: `info`) |
 
 ## Architecture
@@ -127,7 +125,6 @@ Web Dashboard ─┘       │       ├─ Claude CLI  (Anthropic)
                   └─ Auto-reconciliation         ├─ cron
                                                  ├─ memory_search / memory_get
                                                  ├─ knowledge_graph
-                                                 ├─ google_calendar / google_drive / google_docs
                                                  └─ image
 ```
 

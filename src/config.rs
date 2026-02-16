@@ -37,9 +37,6 @@ pub struct Config {
     pub telegram: TelegramConfig,
 
     #[serde(default)]
-    pub google: GoogleConfig,
-
-    #[serde(default)]
     pub sessions: SessionsConfig,
 }
 
@@ -240,17 +237,6 @@ pub struct TelegramConfig {
     pub allowed_chat_ids: Vec<i64>,
 }
 
-// -- Google --------------------------------------------------------------
-
-#[derive(Debug, Clone, Deserialize)]
-pub struct GoogleConfig {
-    #[serde(default)]
-    pub enabled: bool,
-
-    #[serde(default = "default_google_redirect_uri")]
-    pub redirect_uri: String,
-}
-
 // -- Sessions ------------------------------------------------------------
 
 #[derive(Debug, Clone, Deserialize)]
@@ -335,9 +321,6 @@ fn default_web_max_results() -> usize {
 }
 fn default_cron_max_jobs() -> usize {
     50
-}
-fn default_google_redirect_uri() -> String {
-    "http://localhost:3030/auth/google/callback".to_string()
 }
 fn default_sessions_max_agents() -> usize {
     10
@@ -428,15 +411,6 @@ impl Default for TelegramConfig {
     }
 }
 
-impl Default for GoogleConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            redirect_uri: default_google_redirect_uri(),
-        }
-    }
-}
-
 impl Default for SessionsConfig {
     fn default() -> Self {
         Self {
@@ -459,7 +433,6 @@ impl Default for Config {
             llm: LlmConfig::default(),
             tools: ToolsConfig::default(),
             telegram: TelegramConfig::default(),
-            google: GoogleConfig::default(),
             sessions: SessionsConfig::default(),
         }
     }
@@ -507,18 +480,6 @@ impl Config {
     pub fn telegram_bot_token() -> Result<String> {
         std::env::var("TELEGRAM_BOT_TOKEN")
             .map_err(|_| SafeAgentError::Config("TELEGRAM_BOT_TOKEN environment variable not set".into()))
-    }
-
-    /// Get the Google OAuth2 client ID from the environment.
-    pub fn google_client_id() -> Result<String> {
-        std::env::var("GOOGLE_CLIENT_ID")
-            .map_err(|_| SafeAgentError::Config("GOOGLE_CLIENT_ID environment variable not set".into()))
-    }
-
-    /// Get the Google OAuth2 client secret from the environment.
-    pub fn google_client_secret() -> Result<String> {
-        std::env::var("GOOGLE_CLIENT_SECRET")
-            .map_err(|_| SafeAgentError::Config("GOOGLE_CLIENT_SECRET environment variable not set".into()))
     }
 
     /// Generate the default config file contents.

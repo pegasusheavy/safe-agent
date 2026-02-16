@@ -72,8 +72,8 @@ fn mint_token(secret: &[u8]) -> Result<String, jsonwebtoken::errors::Error> {
 
 /// Middleware that enforces JWT authentication on all API routes.
 ///
-/// Always passes through: static assets (`/`, `/style.css`, `/app.js`),
-/// auth endpoints (`/api/auth/*`), and Google OAuth callbacks.
+/// Always passes through: static assets (`/`, `/style.css`, `/app.js`)
+/// and auth endpoints (`/api/auth/*`).
 pub async fn require_auth(
     State(state): State<DashState>,
     req: Request<Body>,
@@ -85,7 +85,6 @@ pub async fn require_auth(
         || path == "/style.css"
         || path == "/app.js"
         || path.starts_with("/api/auth/")
-        || path.starts_with("/auth/google")
     {
         return next.run(req).await;
     }
