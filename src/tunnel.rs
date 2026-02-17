@@ -69,19 +69,24 @@ impl TunnelManager {
             cmd.arg("--authtoken").arg(token);
         }
 
-        if !config.domain.is_empty() {
-            cmd.arg("--domain").arg(&config.domain);
+        let domain = std::env::var("NGROK_DOMAIN")
+            .ok()
+            .filter(|d| !d.is_empty())
+            .unwrap_or_else(|| config.domain.clone());
+
+        if !domain.is_empty() {
+            cmd.arg("--domain").arg(&domain);
         }
 
         cmd.stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::piped());
+            .stderr(Stdio::inherit());
 
         info!(
             ngrok_bin = %ngrok_bin,
             port,
             inspect_port = config.inspect_port,
-            domain = %config.domain,
+            domain = %domain,
             "starting ngrok tunnel"
         );
 

@@ -11,6 +11,8 @@ COPY Cargo.toml Cargo.lock ./
 COPY src/ src/
 COPY config.example.toml ./
 
+# Cache buster — pass --build-arg CACHEBUST=$(date +%s) to force rebuild
+ARG CACHEBUST=1
 RUN cargo build --release
 
 # Stage 2: Runtime with Node.js + Claude CLI + Python
@@ -34,8 +36,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 RUN npm install -g @anthropic-ai/claude-code
 
 # Install ngrok for tunnel support
-RUN curl -sSL https://ngrok-agent.s3.amazonaws.com/ngrok-v3-stable-linux-amd64.tgz \
-    | tar -xz -C /usr/local/bin
+RUN curl -fsSL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz \
+    -o /tmp/ngrok.tgz \
+    && tar -xzf /tmp/ngrok.tgz -C /usr/local/bin \
+    && rm /tmp/ngrok.tgz \
+    && chmod +x /usr/local/bin/ngrok
 
 # Install common Python packages that skills are likely to need
 RUN pip3 install --no-cache-dir --break-system-packages \
