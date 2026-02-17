@@ -1,30 +1,8 @@
 <script lang="ts">
     import { api } from '../lib/api';
     import { dashboard } from '../lib/state.svelte';
-    import type { SkillStatus } from '../lib/types';
+    import type { SkillStatus, ActionResponse } from '../lib/types';
     import SkillCard from './SkillCard.svelte';
-
-    interface OAuthAccount {
-        account: string;
-        email: string;
-        scopes: string[];
-        expires_at: string | null;
-        updated_at: string | null;
-        has_refresh_token: boolean;
-    }
-
-    interface ProviderStatus {
-        id: string;
-        name: string;
-        icon: string;
-        configured: boolean;
-        authorize_url: string;
-        accounts: OAuthAccount[];
-    }
-
-    interface AllOAuthStatus {
-        providers: ProviderStatus[];
-    }
 
     interface SkillExtInfo {
         skill_name: string;
@@ -41,10 +19,16 @@
 
     let skills = $state<SkillStatus[]>([]);
     let error = $state(false);
-    let oauth = $state<AllOAuthStatus | null>(null);
     let extensions = $state<SkillExtInfo[]>([]);
-    let refreshing = $state<string | null>(null);
-    let expandedProviders = $state<Set<string>>(new Set());
+
+    // Import form state
+    let showImport = $state(false);
+    let importSource = $state<'git' | 'url' | 'path'>('git');
+    let importLocation = $state('');
+    let importName = $state('');
+    let importing = $state(false);
+    let importError = $state('');
+    let importSuccess = $state('');
 
     async function load() {
         error = false;
@@ -68,192 +52,42 @@
         return extensions.find(e => e.skill_name === skillName) ?? null;
     }
 
-    async function loadOAuth() {
+    async function importSkill() {
+        const loc = importLocation.trim();
+        if (!loc) return;
+        importing = true;
+        importError = '';
+        importSuccess = '';
         try {
-            oauth = await api<AllOAuthStatus>('GET', '/api/oauth/status');
+            const body: Record<string, unknown> = { source: importSource, location: loc };
+            const name = importName.trim();
+            if (name) body.name = name;
+            const res = await api<ActionResponse>('POST', '/api/skills/import', body);
+            if (res.ok) {
+                importSuccess = res.message ?? 'Skill imported successfully';
+                importLocation = '';
+                importName = '';
+                setTimeout(() => { importSuccess = ''; showImport = false; }, 3000);
+                load();
+                loadExtensions();
+            } else {
+                importError = res.message ?? 'Import failed';
+            }
         } catch (e) {
-            console.error('loadOAuth:', e);
-        }
-    }
-
-    async function refreshToken(providerId: string, account?: string) {
-        refreshing = account ?? `${providerId}:all`;
-        try {
-            const path = account
-                ? `/api/oauth/${providerId}/refresh?account=${encodeURIComponent(account)}`
-                : `/api/oauth/${providerId}/refresh`;
-            await api('POST', path);
-            await loadOAuth();
-        } catch (e) {
-            console.error('refreshToken:', e);
+            importError = (e as Error).message;
         } finally {
-            refreshing = null;
+            importing = false;
         }
-    }
-
-    async function disconnect(providerId: string, account: string, email: string) {
-        if (!confirm(`Disconnect ${email} from ${providerId}?`)) return;
-        try {
-            await api('POST', `/api/oauth/${providerId}/disconnect/${encodeURIComponent(account)}`);
-            await loadOAuth();
-        } catch (e) {
-            console.error('disconnect:', e);
-        }
-    }
-
-    function toggleProvider(id: string) {
-        const next = new Set(expandedProviders);
-        if (next.has(id)) next.delete(id); else next.add(id);
-        expandedProviders = next;
-    }
-
-    function connectedProviders(providers: ProviderStatus[]) {
-        return providers.filter(p => p.accounts.length > 0);
-    }
-
-    function availableProviders(providers: ProviderStatus[]) {
-        return providers.filter(p => p.accounts.length === 0);
     }
 
     $effect(() => {
         if (dashboard.currentTab === 'skills') {
             dashboard.refreshCounter;
             load();
-            loadOAuth();
             loadExtensions();
         }
     });
 </script>
-
-<!-- OAuth Connections -->
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden mb-4">
-    <div class="flex justify-between items-center border-b border-border">
-        <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
-            <i class="fa-solid fa-link mr-1.5"></i> Connected Accounts
-        </h2>
-        {#if oauth}
-            <span class="text-xs text-text-muted pr-3">
-                {connectedProviders(oauth.providers).reduce((n, p) => n + p.accounts.length, 0)} account{connectedProviders(oauth.providers).reduce((n, p) => n + p.accounts.length, 0) !== 1 ? 's' : ''}
-            </span>
-        {/if}
-    </div>
-    <div class="p-3">
-        {#if oauth === null}
-            <p class="text-text-subtle text-sm italic text-center py-2">Loading...</p>
-        {:else}
-            <!-- Connected providers -->
-            {#each connectedProviders(oauth.providers) as provider (provider.id)}
-                <div class="mb-3 last:mb-0">
-                    <div
-                        onclick={() => toggleProvider(provider.id)}
-                        role="button"
-                        tabindex="0"
-                        onkeydown={(e) => { if (e.key === 'Enter') toggleProvider(provider.id); }}
-                        class="w-full flex items-center justify-between p-2.5 rounded-lg bg-surface-elevated border border-border hover:border-text-subtle/30 transition-colors cursor-pointer"
-                    >
-                        <div class="flex items-center gap-2">
-                            <i class="{provider.icon} text-sm w-5 text-center"></i>
-                            <span class="text-sm font-medium text-text">{provider.name}</span>
-                            <span class="text-xs px-1.5 py-0.5 rounded-full bg-green-900/40 text-green-400 border border-green-800/50">
-                                {provider.accounts.length}
-                            </span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            {#if provider.accounts.length > 1}
-                                <button
-                                    onclick={(e) => { e.stopPropagation(); refreshToken(provider.id); }}
-                                    disabled={refreshing !== null}
-                                    class="px-2 py-0.5 text-xs border border-border rounded bg-surface hover:bg-surface-elevated transition-colors disabled:opacity-50"
-                                    title="Refresh all"
-                                >
-                                    <i class="fa-solid fa-arrows-rotate" class:fa-spin={refreshing === `${provider.id}:all`}></i>
-                                </button>
-                            {/if}
-                            <a
-                                href={provider.authorize_url}
-                                onclick={(e) => e.stopPropagation()}
-                                class="px-2 py-0.5 text-xs border border-border rounded bg-surface hover:bg-surface-elevated transition-colors text-text-muted"
-                                title="Add account"
-                            >
-                                <i class="fa-solid fa-plus"></i>
-                            </a>
-                            <i class="fa-solid fa-chevron-{expandedProviders.has(provider.id) ? 'up' : 'down'} text-xs text-text-subtle"></i>
-                        </div>
-                    </div>
-
-                    {#if expandedProviders.has(provider.id) || provider.accounts.length <= 2}
-                        <div class="mt-1.5 space-y-1.5 pl-7">
-                            {#each provider.accounts as acct (acct.account)}
-                                <div class="flex items-center justify-between p-2 rounded-md bg-surface border border-border/50">
-                                    <div class="min-w-0 flex-1 space-y-0.5">
-                                        <div class="text-sm text-text truncate">{acct.email}</div>
-                                        <div class="flex items-center gap-2 text-xs text-text-subtle">
-                                            {#if acct.updated_at}
-                                                <span>Updated: {acct.updated_at}</span>
-                                            {/if}
-                                            {#if !acct.has_refresh_token}
-                                                <span class="text-amber-400">
-                                                    <i class="fa-solid fa-triangle-exclamation"></i> No refresh token
-                                                </span>
-                                            {/if}
-                                        </div>
-                                    </div>
-                                    <div class="flex gap-1.5 ml-2 flex-shrink-0">
-                                        <button
-                                            onclick={() => refreshToken(provider.id, acct.account)}
-                                            disabled={refreshing !== null}
-                                            class="px-2 py-1 text-xs border border-border rounded bg-surface hover:bg-surface-elevated transition-colors disabled:opacity-50"
-                                            title="Refresh"
-                                        >
-                                            <i class="fa-solid fa-arrows-rotate" class:fa-spin={refreshing === acct.account}></i>
-                                        </button>
-                                        <button
-                                            onclick={() => disconnect(provider.id, acct.account, acct.email)}
-                                            class="px-2 py-1 text-xs border border-red-800/50 rounded bg-red-900/20 text-red-400 hover:bg-red-900/40 transition-colors"
-                                            title="Disconnect"
-                                        >
-                                            <i class="fa-solid fa-xmark"></i>
-                                        </button>
-                                    </div>
-                                </div>
-                            {/each}
-                        </div>
-                    {/if}
-                </div>
-            {/each}
-
-            <!-- Available providers (not connected yet) -->
-            {#if availableProviders(oauth.providers).length > 0}
-                <div class="mt-3 pt-3 border-t border-border/50">
-                    <p class="text-xs text-text-subtle mb-2 uppercase tracking-wider">Available Integrations</p>
-                    <div class="flex flex-wrap gap-2">
-                        {#each availableProviders(oauth.providers) as provider (provider.id)}
-                            {#if provider.configured}
-                                <a
-                                    href={provider.authorize_url}
-                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-border bg-surface hover:bg-surface-elevated hover:border-text-subtle/30 transition-colors text-text"
-                                >
-                                    <i class="{provider.icon}"></i> {provider.name}
-                                </a>
-                            {:else}
-                                <span
-                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md border border-border/50 bg-surface text-text-subtle opacity-50 cursor-not-allowed"
-                                    title="Not configured — set {provider.id.toUpperCase()}_CLIENT_ID and {provider.id.toUpperCase()}_CLIENT_SECRET"
-                                >
-                                    <i class="{provider.icon}"></i> {provider.name}
-                                </span>
-                            {/if}
-                        {/each}
-                    </div>
-                </div>
-            {/if}
-
-            {#if oauth.providers.length === 0}
-                <p class="text-text-subtle text-sm italic text-center py-2">No OAuth providers available.</p>
-            {/if}
-        {/if}
-    </div>
-</section>
 
 <!-- Skills List -->
 <section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden">
@@ -266,6 +100,12 @@
                 {skills.length} skill{skills.length !== 1 ? 's' : ''}
             </span>
             <button
+                onclick={() => { showImport = !showImport; importError = ''; importSuccess = ''; }}
+                class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface hover:bg-primary-500/10 hover:border-primary-500 text-primary-400 transition-colors"
+            >
+                <i class="fa-solid fa-file-import mr-1"></i> Import
+            </button>
+            <button
                 onclick={load}
                 class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface hover:bg-surface-elevated transition-colors"
             >
@@ -273,12 +113,89 @@
             </button>
         </div>
     </div>
+
+    <!-- Import panel -->
+    {#if showImport}
+        <div class="border-b border-border bg-surface-muted p-4">
+            <div class="text-xs font-semibold uppercase tracking-wider text-primary-400 mb-3">
+                <i class="fa-solid fa-file-import mr-1"></i> Import Skill
+            </div>
+
+            <!-- Source type selector -->
+            <div class="flex items-center gap-1 mb-3">
+                <button
+                    onclick={() => importSource = 'git'}
+                    class="px-3 py-1.5 text-xs rounded-md transition-colors {importSource === 'git' ? 'bg-primary-500/20 text-primary-400 border border-primary-500/50' : 'border border-border text-text-muted hover:bg-surface-elevated'}"
+                >
+                    <i class="fa-brands fa-git-alt mr-1"></i> Git Repository
+                </button>
+                <button
+                    onclick={() => importSource = 'url'}
+                    class="px-3 py-1.5 text-xs rounded-md transition-colors {importSource === 'url' ? 'bg-primary-500/20 text-primary-400 border border-primary-500/50' : 'border border-border text-text-muted hover:bg-surface-elevated'}"
+                >
+                    <i class="fa-solid fa-globe mr-1"></i> Archive URL
+                </button>
+                <button
+                    onclick={() => importSource = 'path'}
+                    class="px-3 py-1.5 text-xs rounded-md transition-colors {importSource === 'path' ? 'bg-primary-500/20 text-primary-400 border border-primary-500/50' : 'border border-border text-text-muted hover:bg-surface-elevated'}"
+                >
+                    <i class="fa-solid fa-folder mr-1"></i> Local Path
+                </button>
+            </div>
+
+            <!-- Location input -->
+            <div class="flex flex-col gap-2">
+                <input
+                    type="text"
+                    bind:value={importLocation}
+                    placeholder={importSource === 'git' ? 'https://github.com/user/skill-repo.git' : importSource === 'url' ? 'https://example.com/skill.tar.gz' : '/path/to/skill-directory'}
+                    class="w-full px-3 py-2 text-sm border border-border rounded-md bg-background text-text font-mono outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-900 placeholder:text-text-subtle"
+                />
+                <div class="flex items-center gap-2">
+                    <input
+                        type="text"
+                        bind:value={importName}
+                        placeholder="Skill name (optional, auto-detected)"
+                        class="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background text-text outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-900 placeholder:text-text-subtle"
+                    />
+                    <button
+                        onclick={importSkill}
+                        disabled={importing || !importLocation.trim()}
+                        class="px-4 py-2 text-xs font-semibold border border-primary-500/50 rounded-md bg-primary-500/15 text-primary-400 hover:bg-primary-500/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                    >
+                        {#if importing}
+                            <i class="fa-solid fa-spinner fa-spin mr-1"></i> Importing...
+                        {:else}
+                            <i class="fa-solid fa-download mr-1"></i> Import Skill
+                        {/if}
+                    </button>
+                </div>
+            </div>
+
+            {#if importError}
+                <div class="mt-2 text-xs text-error-400 p-2 bg-error-500/10 border border-error-500/30 rounded">
+                    <i class="fa-solid fa-triangle-exclamation mr-1"></i>{importError}
+                </div>
+            {/if}
+            {#if importSuccess}
+                <div class="mt-2 text-xs text-success-500 p-2 bg-success-500/10 border border-success-500/30 rounded">
+                    <i class="fa-solid fa-check mr-1"></i>{importSuccess}
+                </div>
+            {/if}
+
+            <p class="mt-2 text-[11px] text-text-subtle">
+                Import an existing OpenClaw skill from a Git repository, archive URL (.tar.gz/.zip), or local directory.
+                The skill must contain a <code class="font-mono text-accent-300">skill.toml</code> manifest.
+            </p>
+        </div>
+    {/if}
+
     <div class="p-3">
         {#if error}
             <p class="text-text-subtle text-sm italic text-center py-4">Error loading skills</p>
         {:else if skills.length === 0}
             <p class="text-text-subtle text-sm italic text-center py-4">
-                No skills installed. Skills will appear here when the agent creates them.
+                No skills installed. Skills will appear here when the agent creates them, or use the <strong>Import</strong> button above.
             </p>
         {:else}
             {#each skills as skill (skill.name)}

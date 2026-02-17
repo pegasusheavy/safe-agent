@@ -7,6 +7,7 @@ use tracing::{debug, info, warn};
 use crate::config::Config;
 use crate::error::{Result, SafeAgentError};
 use crate::llm::prompts;
+use crate::tools::ToolRegistry;
 
 /// LLM engine backed by the OpenAI Codex CLI.
 ///
@@ -22,7 +23,9 @@ pub struct CodexEngine {
     codex_bin: String,
     model: Option<String>,
     profile: Option<String>,
-    system_prompt: String,
+    personality: String,
+    agent_name: String,
+    timezone: String,
     timeout_secs: u64,
 }
 
@@ -51,11 +54,6 @@ impl CodexEngine {
                 }
             });
 
-        let system_prompt = prompts::system_prompt(
-            &config.core_personality,
-            &config.agent_name,
-        );
-
         let timeout_secs = config.llm.timeout_secs;
 
         info!(
@@ -70,13 +68,15 @@ impl CodexEngine {
             codex_bin,
             model,
             profile,
-            system_prompt,
+            personality: config.core_personality.clone(),
+            agent_name: config.agent_name.clone(),
+            timezone: config.timezone.clone(),
             timeout_secs,
         })
     }
 
     /// Send a message to Codex and return the plain-text response.
-    pub async fn generate(&self, message: &str) -> Result<String> {
+    pub async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
         let mut cmd = Command::new(&self.codex_bin);
 
         cmd.arg("exec")
@@ -101,9 +101,10 @@ impl CodexEngine {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
+        let system_prompt = prompts::system_prompt(&self.personality, &self.agent_name, tools, Some(&self.timezone));
         let prompt = format!(
             "{}\n\n---\n\nThe user says: {}",
-            self.system_prompt, message
+            system_prompt, message
         );
 
         debug!(

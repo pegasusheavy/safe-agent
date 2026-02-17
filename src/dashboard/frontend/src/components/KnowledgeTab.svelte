@@ -1,6 +1,7 @@
 <script lang="ts">
     import { api } from '../lib/api';
     import { dashboard } from '../lib/state.svelte';
+    import { formatDateTime } from '../lib/time';
     import type { KnowledgeStats, KnowledgeNode, KnowledgeNeighbor } from '../lib/types';
 
     let stats = $state<KnowledgeStats>({ nodes: 0, edges: 0 });
@@ -125,7 +126,7 @@
                     <div class="text-sm font-semibold mb-1">{n.label}</div>
                     <div class="text-xs text-text-muted">{n.content.slice(0, 200)}</div>
                     <div class="text-[11px] text-text-subtle mt-1">
-                        confidence: {(n.confidence ?? 1).toFixed(2)} &middot; {n.updated_at}
+                        confidence: {(n.confidence ?? 1).toFixed(2)} &middot; {formatDateTime(n.updated_at)}
                     </div>
                 </button>
             {/each}

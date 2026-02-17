@@ -12,6 +12,16 @@ pub struct Config {
     #[serde(default)]
     pub core_personality: String,
 
+    /// Default timezone for the system (IANA name, e.g. "America/New_York").
+    /// Per-user overrides take precedence.  Defaults to "UTC".
+    #[serde(default = "default_timezone")]
+    pub timezone: String,
+
+    /// Default locale for date/number formatting (BCP 47 tag, e.g. "en-US").
+    /// Per-user overrides take precedence.  Defaults to "en-US".
+    #[serde(default = "default_locale")]
+    pub locale: String,
+
     #[serde(default = "default_dashboard_bind")]
     pub dashboard_bind: String,
 
@@ -27,6 +37,11 @@ pub struct Config {
     #[serde(default = "default_auto_approve_tools")]
     pub auto_approve_tools: Vec<String>,
 
+    /// Maximum number of tool-call round-trips per user message before the
+    /// agent returns whatever it has.  Prevents infinite tool-call loops.
+    #[serde(default = "default_max_tool_turns")]
+    pub max_tool_turns: usize,
+
     #[serde(default)]
     pub llm: LlmConfig,
 
@@ -34,7 +49,13 @@ pub struct Config {
     pub tools: ToolsConfig,
 
     #[serde(default)]
+    pub dashboard: DashboardConfig,
+
+    #[serde(default)]
     pub telegram: TelegramConfig,
+
+    #[serde(default)]
+    pub whatsapp: WhatsAppConfig,
 
     #[serde(default)]
     pub sessions: SessionsConfig,
@@ -44,6 +65,98 @@ pub struct Config {
 
     #[serde(default)]
     pub tls: TlsConfig,
+
+    #[serde(default)]
+    pub security: SecurityConfig,
+
+    #[serde(default)]
+    pub federation: FederationConfig,
+}
+
+// -- Federation --------------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct FederationConfig {
+    /// Enable multi-node federation.
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// Display name for this node (defaults to agent_name).
+    #[serde(default)]
+    pub node_name: String,
+
+    /// Advertised address of this node (e.g. "http://host:3031").
+    /// Peers use this to connect back.
+    #[serde(default)]
+    pub advertise_address: String,
+
+    /// Peer node addresses to connect to on startup.
+    #[serde(default)]
+    pub peers: Vec<String>,
+
+    /// Heartbeat interval in seconds (default: 30).
+    #[serde(default = "default_heartbeat_interval")]
+    pub heartbeat_interval_secs: u64,
+
+    /// Sync interval in seconds (default: 5).
+    #[serde(default = "default_sync_interval")]
+    pub sync_interval_secs: u64,
+}
+
+impl Default for FederationConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            node_name: String::new(),
+            advertise_address: String::new(),
+            peers: Vec::new(),
+            heartbeat_interval_secs: default_heartbeat_interval(),
+            sync_interval_secs: default_sync_interval(),
+        }
+    }
+}
+
+fn default_heartbeat_interval() -> u64 {
+    30
+}
+
+fn default_sync_interval() -> u64 {
+    5
+}
+
+// -- Security ----------------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SecurityConfig {
+    /// Tools that are completely blocked (never executable).
+    #[serde(default)]
+    pub blocked_tools: Vec<String>,
+
+    /// Tools that require 2FA (confirmation on a second channel) before execution.
+    #[serde(default = "default_2fa_tools")]
+    pub require_2fa: Vec<String>,
+
+    /// Maximum tool calls per minute (0 = unlimited).
+    #[serde(default = "default_rate_limit_per_minute")]
+    pub rate_limit_per_minute: u32,
+
+    /// Maximum tool calls per hour (0 = unlimited).
+    #[serde(default = "default_rate_limit_per_hour")]
+    pub rate_limit_per_hour: u32,
+
+    /// Maximum estimated LLM cost per day in USD (0.0 = unlimited).
+    #[serde(default)]
+    pub daily_cost_limit_usd: f64,
+
+    /// Enable PII/sensitive data detection in LLM responses.
+    #[serde(default = "default_true")]
+    pub pii_detection: bool,
+
+    /// Capability restrictions per tool. Keys are tool names, values are
+    /// lists of allowed operations/capabilities.
+    /// e.g. { "exec" = ["echo", "ls", "cat"], "file" = ["read"] }
+    #[serde(default)]
+    pub tool_capabilities: std::collections::HashMap<String, Vec<String>>,
 }
 
 // -- LLM -----------------------------------------------------------------
@@ -258,11 +371,42 @@ pub struct MessageToolConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CronToolConfig {
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub enabled: bool,
 
     #[serde(default = "default_cron_max_jobs")]
     pub max_jobs: usize,
+}
+
+// -- Dashboard -----------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DashboardConfig {
+    /// Whether password-based login is enabled (default: true).
+    /// Set to false to require SSO-only login.
+    #[serde(default = "default_true")]
+    pub password_enabled: bool,
+
+    /// SSO providers enabled for dashboard login.
+    /// Use provider IDs from the OAuth registry: "google", "github",
+    /// "microsoft", "discord", etc.
+    #[serde(default)]
+    pub sso_providers: Vec<String>,
+
+    /// Email addresses allowed to sign in via SSO.
+    /// Empty means any authenticated SSO user is allowed.
+    #[serde(default)]
+    pub sso_allowed_emails: Vec<String>,
+}
+
+impl Default for DashboardConfig {
+    fn default() -> Self {
+        Self {
+            password_enabled: true,
+            sso_providers: Vec::new(),
+            sso_allowed_emails: Vec::new(),
+        }
+    }
 }
 
 // -- Telegram ------------------------------------------------------------
@@ -274,6 +418,44 @@ pub struct TelegramConfig {
 
     #[serde(default)]
     pub allowed_chat_ids: Vec<i64>,
+}
+
+// -- WhatsApp ------------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct WhatsAppConfig {
+    #[serde(default)]
+    pub enabled: bool,
+
+    #[serde(default = "default_whatsapp_bridge_port")]
+    pub bridge_port: u16,
+
+    /// The dashboard port used to construct the webhook URL that the
+    /// bridge POSTs incoming messages to.
+    #[serde(default = "default_whatsapp_webhook_port")]
+    pub webhook_port: u16,
+
+    #[serde(default)]
+    pub allowed_numbers: Vec<String>,
+}
+
+fn default_whatsapp_bridge_port() -> u16 {
+    3033
+}
+
+fn default_whatsapp_webhook_port() -> u16 {
+    3030
+}
+
+impl Default for WhatsAppConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            bridge_port: default_whatsapp_bridge_port(),
+            webhook_port: default_whatsapp_webhook_port(),
+            allowed_numbers: Vec::new(),
+        }
+    }
 }
 
 // -- Sessions ------------------------------------------------------------
@@ -362,6 +544,12 @@ pub struct TunnelConfig {
 fn default_agent_name() -> String {
     "safe-agent".to_string()
 }
+fn default_timezone() -> String {
+    "UTC".to_string()
+}
+fn default_locale() -> String {
+    "en-US".to_string()
+}
 fn default_dashboard_bind() -> String {
     "127.0.0.1:3030".to_string()
 }
@@ -375,7 +563,15 @@ fn default_approval_expiry_secs() -> u64 {
     3600
 }
 fn default_auto_approve_tools() -> Vec<String> {
-    vec!["message".to_string(), "memory_search".to_string(), "memory_get".to_string()]
+    vec![
+        "message".to_string(),
+        "memory_search".to_string(),
+        "memory_get".to_string(),
+        "goal".to_string(),
+    ]
+}
+fn default_max_tool_turns() -> usize {
+    5
 }
 fn default_backend() -> String {
     "claude".to_string()
@@ -445,6 +641,17 @@ fn default_ngrok_inspect_port() -> u16 {
 }
 fn default_ngrok_poll_interval() -> u64 {
     15
+}
+fn default_2fa_tools() -> Vec<String> {
+    vec![
+        "exec".to_string(),
+    ]
+}
+fn default_rate_limit_per_minute() -> u32 {
+    30
+}
+fn default_rate_limit_per_hour() -> u32 {
+    300
 }
 
 // -- Default impls -------------------------------------------------------
@@ -523,7 +730,7 @@ impl Default for MessageToolConfig {
 impl Default for CronToolConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: true,
             max_jobs: default_cron_max_jobs(),
         }
     }
@@ -573,22 +780,43 @@ impl Default for TunnelConfig {
     }
 }
 
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        Self {
+            blocked_tools: Vec::new(),
+            require_2fa: default_2fa_tools(),
+            rate_limit_per_minute: default_rate_limit_per_minute(),
+            rate_limit_per_hour: default_rate_limit_per_hour(),
+            daily_cost_limit_usd: 0.0,
+            pii_detection: true,
+            tool_capabilities: std::collections::HashMap::new(),
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             agent_name: default_agent_name(),
             core_personality: String::new(),
+            timezone: default_timezone(),
+            locale: default_locale(),
             dashboard_bind: default_dashboard_bind(),
             tick_interval_secs: default_tick_interval_secs(),
             conversation_window: default_conversation_window(),
             approval_expiry_secs: default_approval_expiry_secs(),
             auto_approve_tools: default_auto_approve_tools(),
+            max_tool_turns: default_max_tool_turns(),
             llm: LlmConfig::default(),
             tools: ToolsConfig::default(),
+            dashboard: DashboardConfig::default(),
             telegram: TelegramConfig::default(),
+            whatsapp: WhatsAppConfig::default(),
             sessions: SessionsConfig::default(),
             tunnel: TunnelConfig::default(),
             tls: TlsConfig::default(),
+            security: SecurityConfig::default(),
+            federation: FederationConfig::default(),
         }
     }
 }
@@ -640,5 +868,209 @@ impl Config {
     /// Generate the default config file contents.
     pub fn default_config_contents() -> &'static str {
         include_str!("../config.example.toml")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_config_has_expected_values() {
+        let c = Config::default();
+        assert_eq!(c.agent_name, "safe-agent");
+        assert_eq!(c.dashboard_bind, "127.0.0.1:3030");
+        assert_eq!(c.tick_interval_secs, 120);
+        assert_eq!(c.conversation_window, 5);
+        assert_eq!(c.approval_expiry_secs, 3600);
+        assert_eq!(c.max_tool_turns, 5);
+        assert!(c.core_personality.is_empty());
+    }
+
+    #[test]
+    fn test_default_auto_approve_tools() {
+        let c = Config::default();
+        assert!(c.auto_approve_tools.contains(&"message".to_string()));
+        assert!(c.auto_approve_tools.contains(&"memory_search".to_string()));
+        assert!(c.auto_approve_tools.contains(&"memory_get".to_string()));
+        assert!(c.auto_approve_tools.contains(&"goal".to_string()));
+        assert_eq!(c.auto_approve_tools.len(), 4);
+    }
+
+    #[test]
+    fn default_llm_config() {
+        let llm = LlmConfig::default();
+        assert_eq!(llm.backend, "claude");
+        assert_eq!(llm.claude_bin, "claude");
+        assert_eq!(llm.model, "sonnet");
+        assert_eq!(llm.max_turns, 10);
+        assert_eq!(llm.timeout_secs, 120);
+        assert!((llm.temperature - 0.7).abs() < 0.001);
+        assert_eq!(llm.top_k, 40);
+        assert!((llm.top_p - 0.95).abs() < 0.001);
+        assert!((llm.repeat_penalty - 1.1).abs() < 0.001);
+        assert_eq!(llm.max_tokens, 2048);
+        assert!(!llm.use_gpu);
+    }
+
+    #[test]
+    fn default_tools_config() {
+        let tools = ToolsConfig::default();
+        assert!(tools.exec.enabled);
+        assert_eq!(tools.exec.timeout_secs, 30);
+        assert_eq!(tools.exec.security, "approval");
+        assert!(tools.web.enabled);
+        assert!(tools.web.safe_search);
+        assert_eq!(tools.web.max_results, 10);
+        assert!(!tools.browser.enabled);
+        assert!(tools.browser.headless);
+        assert!(!tools.message.enabled);
+        assert!(tools.cron.enabled);
+        assert_eq!(tools.cron.max_jobs, 50);
+    }
+
+    #[test]
+    fn default_dashboard_config() {
+        let d = DashboardConfig::default();
+        assert!(d.password_enabled);
+        assert!(d.sso_providers.is_empty());
+        assert!(d.sso_allowed_emails.is_empty());
+    }
+
+    #[test]
+    fn default_telegram_config() {
+        let t = TelegramConfig::default();
+        assert!(!t.enabled);
+        assert!(t.allowed_chat_ids.is_empty());
+    }
+
+    #[test]
+    fn default_whatsapp_config() {
+        let w = WhatsAppConfig::default();
+        assert!(!w.enabled);
+        assert_eq!(w.bridge_port, 3033);
+        assert_eq!(w.webhook_port, 3030);
+        assert!(w.allowed_numbers.is_empty());
+    }
+
+    #[test]
+    fn default_sessions_config() {
+        let s = SessionsConfig::default();
+        assert!(!s.enabled);
+        assert_eq!(s.max_agents, 10);
+    }
+
+    #[test]
+    fn default_tls_config() {
+        let t = TlsConfig::default();
+        assert!(!t.acme_enabled);
+        assert!(t.acme_domains.is_empty());
+        assert!(t.acme_email.is_empty());
+        assert!(!t.acme_production);
+        assert_eq!(t.acme_port, 443);
+    }
+
+    #[test]
+    fn default_tunnel_config() {
+        let t = TunnelConfig::default();
+        assert!(!t.enabled);
+        assert_eq!(t.ngrok_bin, "ngrok");
+        assert!(t.authtoken.is_empty());
+        assert!(t.domain.is_empty());
+        assert_eq!(t.inspect_port, 4040);
+        assert_eq!(t.poll_interval_secs, 15);
+    }
+
+    #[test]
+    fn parse_minimal_toml() {
+        let toml_str = r#"agent_name = "TestBot""#;
+        let c: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(c.agent_name, "TestBot");
+        assert_eq!(c.dashboard_bind, "127.0.0.1:3030");
+        assert_eq!(c.max_tool_turns, 5);
+    }
+
+    #[test]
+    fn parse_llm_section() {
+        let toml_str = r#"
+        [llm]
+        backend = "openrouter"
+        model = "opus"
+        max_turns = 20
+        temperature = 0.5
+        "#;
+        let c: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(c.llm.backend, "openrouter");
+        assert_eq!(c.llm.model, "opus");
+        assert_eq!(c.llm.max_turns, 20);
+        assert!((c.llm.temperature - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn parse_tools_section() {
+        let toml_str = r#"
+        [tools.exec]
+        enabled = false
+        timeout_secs = 60
+        security = "sandbox"
+        "#;
+        let c: Config = toml::from_str(toml_str).unwrap();
+        assert!(!c.tools.exec.enabled);
+        assert_eq!(c.tools.exec.timeout_secs, 60);
+        assert_eq!(c.tools.exec.security, "sandbox");
+    }
+
+    #[test]
+    fn parse_dashboard_sso() {
+        let toml_str = r#"
+        [dashboard]
+        password_enabled = false
+        sso_providers = ["google", "github"]
+        sso_allowed_emails = ["admin@example.com"]
+        "#;
+        let c: Config = toml::from_str(toml_str).unwrap();
+        assert!(!c.dashboard.password_enabled);
+        assert_eq!(c.dashboard.sso_providers, vec!["google", "github"]);
+        assert_eq!(c.dashboard.sso_allowed_emails, vec!["admin@example.com"]);
+    }
+
+    #[test]
+    fn load_nonexistent_returns_defaults() {
+        let c = Config::load(Some(Path::new("/tmp/nonexistent-safe-agent-test.toml"))).unwrap();
+        assert_eq!(c.agent_name, "safe-agent");
+    }
+
+    #[test]
+    fn load_invalid_toml_returns_error() {
+        let path = std::env::temp_dir().join("bad-safe-agent.toml");
+        std::fs::write(&path, "this is not valid %%% toml").unwrap();
+        let result = Config::load(Some(&path));
+        assert!(result.is_err());
+        std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn default_config_path_has_safe_agent() {
+        let path = Config::default_config_path();
+        assert!(path.to_string_lossy().contains("safe-agent"));
+        assert!(path.to_string_lossy().contains("config.toml"));
+    }
+
+    #[test]
+    fn data_dir_has_safe_agent() {
+        let path = Config::data_dir();
+        assert!(path.to_string_lossy().contains("safe-agent"));
+    }
+
+    #[test]
+    fn telegram_bot_token_without_env_var_errors() {
+        unsafe { std::env::remove_var("TELEGRAM_BOT_TOKEN"); }
+        assert!(Config::telegram_bot_token().is_err());
+    }
+
+    #[test]
+    fn default_config_contents_is_non_empty() {
+        let contents = Config::default_config_contents();
+        assert!(!contents.is_empty());
     }
 }

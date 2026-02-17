@@ -211,6 +211,36 @@ Before opening a PR, verify:
 - [ ] PR targets `develop`, not `main`
 - [ ] New tools/endpoints are documented in `AGENTS.md`
 
+## AI-Generated Contributions
+
+We welcome contributions that involve AI assistance, but transparency is required.
+
+If any part of your contribution was generated or substantially authored by an AI model (e.g., ChatGPT, Claude, Copilot, Gemini, a local model, etc.), you **must**:
+
+1. **Attest to the model used.** Include a line in your commit message body or PR description identifying the AI system. For example:
+
+   ```
+   Co-authored-by: Claude 4 Opus (Anthropic)
+   ```
+
+   ```
+   Co-authored-by: GPT-4o (OpenAI)
+   ```
+
+   ```
+   Co-authored-by: Qwen 3 235B (Alibaba Cloud)
+   ```
+
+2. **Credit the AI as a co-author.** Use the `Co-authored-by` git trailer (as shown above) in every commit that contains AI-generated code. This is not optional -- it is a condition of contribution.
+
+3. **You are responsible for correctness.** AI co-authorship does not reduce your obligation to review, test, and understand the code you submit. The human contributor remains accountable for the contribution's quality, security implications, and adherence to this project's style and standards.
+
+4. **Disclose the scope.** If only a portion of a commit was AI-generated (e.g., boilerplate, tests, documentation), note that in the commit body. If the entire implementation was AI-driven, say so.
+
+**Why we require this:** safe-agent is itself an AI agent project. We believe in honest attribution. Knowing which code was human-written vs. AI-assisted helps reviewers calibrate their review, helps maintainers understand the provenance of the codebase, and sets an industry norm for transparency.
+
+Contributions that omit required AI attribution may be rejected or asked to amend their commit history.
+
 ## Security
 
 If you discover a security vulnerability, **do not** open a public issue. Email [pegasusheavyindustries@gmail.com](mailto:pegasusheavyindustries@gmail.com) directly.

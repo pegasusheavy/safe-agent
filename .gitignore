@@ -1,4 +1,44 @@
-/target
-.env
-config.toml
+# === Rust ===
+/target/
+**/*.rs.bk
+
+# === Node / pnpm ===
 node_modules/
+.pnpm-store/
+dist/
+
+# === Python (skills runtime) ===
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# === Environment & secrets ===
+.env
+.env.*
+!.env.example
+config.toml
+
+# === IDE / editor ===
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# === OS junk ===
+.DS_Store
+Thumbs.db
+
+# === Docker (local overrides) ===
+docker-compose.override.yml
+
+# === Coverage / profiling ===
+*.profraw
+lcov.info
+coverage/
+tarpaulin-report.html
+
+# === Misc build artifacts ===
+*.log

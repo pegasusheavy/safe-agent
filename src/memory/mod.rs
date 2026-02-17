@@ -131,3 +131,78 @@ pub struct ActivityEntry {
     pub status: String,
     pub created_at: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::test_db;
+
+    fn make_manager() -> MemoryManager {
+        MemoryManager::new(test_db(), 50)
+    }
+
+    #[tokio::test]
+    async fn init_sets_personality() {
+        let mm = make_manager();
+        mm.init("Helpful assistant").await.unwrap();
+        let p = mm.core.get().await.unwrap();
+        assert_eq!(p, "Helpful assistant");
+    }
+
+    #[tokio::test]
+    async fn record_tick_increments_stats() {
+        let mm = make_manager();
+        let s0 = mm.get_stats().await.unwrap();
+        assert_eq!(s0.total_ticks, 0);
+        mm.record_tick().await.unwrap();
+        mm.record_tick().await.unwrap();
+        let s1 = mm.get_stats().await.unwrap();
+        assert_eq!(s1.total_ticks, 2);
+        assert!(s1.last_tick_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn record_action_increments_stats() {
+        let mm = make_manager();
+        mm.record_action().await.unwrap();
+        let s = mm.get_stats().await.unwrap();
+        assert_eq!(s.total_actions, 1);
+    }
+
+    #[tokio::test]
+    async fn log_activity_and_retrieve() {
+        let mm = make_manager();
+        mm.log_activity("test", "did something", Some("details here"), "ok").await.unwrap();
+        mm.log_activity("test", "another", None, "error").await.unwrap();
+        let entries = mm.recent_activity(10, 0).await.unwrap();
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].summary, "another");
+        assert_eq!(entries[0].status, "error");
+        assert_eq!(entries[1].summary, "did something");
+        assert_eq!(entries[1].detail.as_deref(), Some("details here"));
+    }
+
+    #[tokio::test]
+    async fn recent_activity_pagination() {
+        let mm = make_manager();
+        for i in 0..5 {
+            mm.log_activity("t", &format!("entry {i}"), None, "ok").await.unwrap();
+        }
+        let page = mm.recent_activity(2, 2).await.unwrap();
+        assert_eq!(page.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn get_stats_has_started_at() {
+        let mm = make_manager();
+        let s = mm.get_stats().await.unwrap();
+        assert!(!s.started_at.is_empty());
+    }
+
+    #[tokio::test]
+    async fn recent_activity_empty() {
+        let mm = make_manager();
+        let activity = mm.recent_activity(10, 0).await.unwrap();
+        assert!(activity.is_empty());
+    }
+}

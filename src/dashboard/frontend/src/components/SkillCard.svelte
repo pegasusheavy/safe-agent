@@ -42,6 +42,7 @@
 
     let newEnvKey = $state('');
     let newEnvValue = $state('');
+    let deleting = $state(false);
 
     async function toggleExpand() {
         expanded = !expanded;
@@ -154,6 +155,23 @@
         }
     }
 
+    async function deleteSkill() {
+        if (!confirm(`Permanently delete skill "${skill.name}"? This cannot be undone.`)) return;
+        deleting = true;
+        try {
+            await api<ActionResponse>(
+                'DELETE',
+                `/api/skills/${encodeURIComponent(skill.name)}`,
+            );
+            onrefresh();
+        } catch (e) {
+            console.error('deleteSkill:', e);
+            alert('Failed to delete skill: ' + (e as Error).message);
+        } finally {
+            deleting = false;
+        }
+    }
+
     function switchTab(tab: TabName) {
         activeTab = tab;
         if (tab === 'logs') loadLog();
@@ -249,6 +267,18 @@
                     class="px-3 py-1.5 text-xs border border-border rounded-md bg-surface hover:bg-surface-elevated transition-colors"
                 >
                     <i class="fa-solid fa-arrows-rotate mr-1"></i>Refresh
+                </button>
+                <div class="flex-1"></div>
+                <button
+                    onclick={deleteSkill}
+                    disabled={deleting}
+                    class="px-3 py-1.5 text-xs border border-error-500/40 rounded-md bg-surface text-error-400 hover:bg-error-500/10 hover:border-error-500 transition-colors disabled:opacity-50"
+                >
+                    {#if deleting}
+                        <i class="fa-solid fa-spinner fa-spin mr-1"></i>Deleting...
+                    {:else}
+                        <i class="fa-solid fa-trash-can mr-1"></i>Delete
+                    {/if}
                 </button>
             </div>
 

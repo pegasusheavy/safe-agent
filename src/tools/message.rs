@@ -1,11 +1,11 @@
 use async_trait::async_trait;
-use teloxide::prelude::*;
 use tracing::{debug, info};
 
 use super::{Tool, ToolContext, ToolOutput};
 use crate::error::Result;
 
-/// Messaging tool — currently supports Telegram.
+/// Messaging tool — sends messages via the primary messaging backend
+/// (Telegram, WhatsApp, or whatever is configured first).
 pub struct MessageTool;
 
 impl MessageTool {
@@ -21,7 +21,7 @@ impl Tool for MessageTool {
     }
 
     fn description(&self) -> &str {
-        "Send a message via Telegram. Params: {\"text\": \"your message\"}"
+        "Send a message to the operator via the primary messaging platform. Params: {\"text\": \"your message\", \"platform\": \"telegram|whatsapp (optional)\"}"
     }
 
     fn parameters_schema(&self) -> serde_json::Value {
@@ -32,6 +32,10 @@ impl Tool for MessageTool {
                 "text": {
                     "type": "string",
                     "description": "Message text to send"
+                },
+                "platform": {
+                    "type": "string",
+                    "description": "Target platform (optional, defaults to primary)"
                 }
             }
         })
@@ -47,24 +51,50 @@ impl Tool for MessageTool {
             return Ok(ToolOutput::error("Missing 'text' parameter"));
         }
 
-        let bot = match &ctx.telegram_bot {
-            Some(b) => b,
-            None => return Ok(ToolOutput::error("Telegram bot not available")),
-        };
+        let platform = params.get("platform").and_then(|v| v.as_str());
 
-        let chat_id = match ctx.telegram_chat_id {
-            Some(id) => ChatId(id),
-            None => return Ok(ToolOutput::error("No Telegram chat ID configured")),
-        };
+        if ctx.messaging.is_empty() {
+            return Ok(ToolOutput::error("No messaging backends configured"));
+        }
 
-        debug!(chat_id = %chat_id, "sending telegram message");
-
-        match bot.send_message(chat_id, text).await {
-            Ok(_) => {
-                info!("telegram message sent successfully");
-                Ok(ToolOutput::ok("Message sent"))
+        match platform {
+            Some(p) => {
+                // Send to a specific platform
+                let backend = match ctx.messaging.get(p) {
+                    Some(b) => b,
+                    None => {
+                        return Ok(ToolOutput::error(format!(
+                            "Unknown platform '{p}'. Available: {}",
+                            ctx.messaging.platforms().join(", ")
+                        )));
+                    }
+                };
+                let channel = match ctx.messaging.primary_channel(p) {
+                    Some(c) => c.to_string(),
+                    None => {
+                        return Ok(ToolOutput::error(format!(
+                            "No primary channel for platform '{p}'"
+                        )));
+                    }
+                };
+                debug!(platform = p, channel = %channel, "sending message");
+                backend.send_message(&channel, text).await?;
+                info!(platform = p, "message sent successfully");
+                Ok(ToolOutput::ok(format!("Message sent via {p}")))
             }
-            Err(e) => Ok(ToolOutput::error(format!("Failed to send: {e}"))),
+            None => {
+                // Send via the primary (first) backend
+                let (backend, channel) = match ctx.messaging.default_channel() {
+                    Some(pair) => pair,
+                    None => return Ok(ToolOutput::error("No messaging backends configured")),
+                };
+                let platform_name = backend.platform_name().to_string();
+                let channel_str = channel.to_string();
+                debug!(platform = %platform_name, channel = %channel_str, "sending message");
+                backend.send_message(&channel_str, text).await?;
+                info!(platform = %platform_name, "message sent successfully");
+                Ok(ToolOutput::ok(format!("Message sent via {platform_name}")))
+            }
         }
     }
 }

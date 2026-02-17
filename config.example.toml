@@ -7,6 +7,13 @@
 # Core personality (instructions that persist across all interactions)
 # core_personality = "You are a helpful autonomous AI assistant."
 
+# Default timezone (IANA name).  Per-user overrides take precedence.
+# The agent includes current local time in its system prompt for time-aware responses.
+# timezone = "UTC"
+
+# Default locale for date/number formatting (BCP 47 tag).  Per-user overrides take precedence.
+# locale = "en-US"
+
 # Dashboard bind address
 # dashboard_bind = "127.0.0.1:3030"
 
@@ -18,6 +25,12 @@
 
 # Seconds before unapproved actions expire
 # approval_expiry_secs = 3600
+
+# Maximum tool-call round-trips per user message (prevents infinite loops)
+# max_tool_turns = 5
+
+# Tools that are auto-approved (no human approval needed)
+# auto_approve_tools = ["message", "memory_search", "memory_get"]
 
 [llm]
 # Backend: "claude" (Claude Code CLI), "codex" (OpenAI Codex CLI),
@@ -216,6 +229,20 @@
 # How often (seconds) to poll the ngrok API for the tunnel URL
 # poll_interval_secs = 15
 
+[dashboard]
+# Whether password-based login is enabled (default: true).
+# Set to false to require SSO-only login (requires sso_providers to be set).
+# password_enabled = true
+
+# SSO providers enabled for dashboard login.
+# Uses the same OAuth client credentials as the Connected Accounts system.
+# Provider IDs: "google", "github", "microsoft", "discord", "linkedin", etc.
+# sso_providers = ["google", "github"]
+
+# Email addresses allowed to sign in via SSO.
+# Empty = any authenticated SSO user is allowed.
+# sso_allowed_emails = ["admin@example.com"]
+
 [telegram]
 # Enable Telegram bot interface
 # Token must be set via environment variable: TELEGRAM_BOT_TOKEN
@@ -224,9 +251,76 @@
 # Only these chat IDs can control the bot (empty = deny all)
 # allowed_chat_ids = []
 
+[whatsapp]
+# Enable WhatsApp bot interface via Baileys (Node.js bridge)
+# enabled = false
+
+# Port for the Baileys bridge HTTP API
+# bridge_port = 3033
+
+# Dashboard port (used to construct webhook URL for incoming messages)
+# webhook_port = 3030
+
+# Allowed phone numbers (E.164 format, empty = deny all)
+# allowed_numbers = ["+1234567890"]
+
 # Note: Google API integration (Calendar, Drive, Docs) is handled through the
 # skill system.  Skills declare [[credentials]] in their skill.toml for any
 # API keys or OAuth secrets they need; configure values via the dashboard UI.
+
+[security]
+# Tools that are completely blocked (never executable, regardless of approval)
+# blocked_tools = []
+
+# Tools that require 2FA (second-channel confirmation) before execution
+# Default: ["exec"] — shell commands require dashboard confirmation
+# require_2fa = ["exec"]
+
+# Maximum tool calls per minute (0 = unlimited)
+# rate_limit_per_minute = 30
+
+# Maximum tool calls per hour (0 = unlimited)
+# rate_limit_per_hour = 300
+
+# Maximum estimated LLM cost per day in USD (0.0 = unlimited)
+# daily_cost_limit_usd = 0.0
+
+# Enable PII/sensitive data detection in LLM responses
+# Flags SSNs, credit cards, API keys, passwords, etc.
+# pii_detection = true
+
+# Fine-grained capability restrictions per tool.
+# Keys are tool names, values are lists of allowed operations.
+# If a tool is listed here, ONLY the specified operations are permitted.
+# Examples:
+#   exec = ["ls", "cat", "echo", "grep"]    # only these commands allowed
+#   file = ["read"]                           # read-only file access
+# [security.tool_capabilities]
+# exec = ["ls", "cat", "echo", "grep", "find", "wc"]
+
+# ── Federation ──────────────────────────────────────────────────
+# Multi-node federation allows multiple safe-agent instances to share
+# memory and coordinate tasks.
+[federation]
+
+# Enable federation (default: false)
+# enabled = false
+
+# Display name for this node (defaults to agent_name)
+# node_name = "node-1"
+
+# The address peers use to connect back to this node.
+# Must be reachable from all peer nodes.
+# advertise_address = "http://192.168.1.100:3031"
+
+# Peer addresses to connect to on startup.
+# peers = ["http://192.168.1.101:3031", "http://192.168.1.102:3031"]
+
+# Heartbeat interval in seconds (default: 30)
+# heartbeat_interval_secs = 30
+
+# Memory sync interval in seconds (default: 5)
+# sync_interval_secs = 5
 
 [sessions]
 # Enable multi-agent session coordination

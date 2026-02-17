@@ -204,3 +204,139 @@ fn parse_status(s: &str) -> ApprovalStatus {
         _ => ApprovalStatus::Pending,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db;
+
+    fn setup_db() -> Arc<tokio::sync::Mutex<Connection>> {
+        db::test_db()
+    }
+
+    #[tokio::test]
+    async fn test_propose() {
+        let db = setup_db();
+        let queue = ApprovalQueue::new(db, 3600);
+        let id = queue
+            .propose(
+                serde_json::json!({"tool": "exec", "params": {}}),
+                "reason",
+                "ctx",
+            )
+            .await
+            .unwrap();
+        assert!(!id.is_empty());
+        let pending = queue.list_pending().await.unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].id, id);
+    }
+
+    #[tokio::test]
+    async fn test_approve() {
+        let db = setup_db();
+        let queue = ApprovalQueue::new(db, 3600);
+        let id = queue.propose(serde_json::json!({}), "r", "c").await.unwrap();
+        queue.approve(&id).await.unwrap();
+        let pending = queue.list_pending().await.unwrap();
+        assert!(pending.is_empty());
+        let next = queue.next_approved().await.unwrap();
+        assert!(next.is_some());
+        assert_eq!(next.unwrap().id, id);
+    }
+
+    #[tokio::test]
+    async fn test_reject() {
+        let db = setup_db();
+        let queue = ApprovalQueue::new(db, 3600);
+        let id = queue.propose(serde_json::json!({}), "r", "c").await.unwrap();
+        queue.reject(&id).await.unwrap();
+        let pending = queue.list_pending().await.unwrap();
+        assert!(pending.is_empty());
+        let next = queue.next_approved().await.unwrap();
+        assert!(next.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_approve_nonexistent_fails() {
+        let db = setup_db();
+        let queue = ApprovalQueue::new(db, 3600);
+        let err = queue.approve("nonexistent-id").await.unwrap_err();
+        assert!(err.to_string().contains("not found"));
+    }
+
+    #[tokio::test]
+    async fn test_approve_all() {
+        let db = setup_db();
+        let queue = ApprovalQueue::new(db, 3600);
+        queue.propose(serde_json::json!({}), "r1", "c").await.unwrap();
+        queue.propose(serde_json::json!({}), "r2", "c").await.unwrap();
+        let count = queue.approve_all().await.unwrap();
+        assert_eq!(count, 2);
+        let pending = queue.list_pending().await.unwrap();
+        assert!(pending.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_reject_all() {
+        let db = setup_db();
+        let queue = ApprovalQueue::new(db, 3600);
+        queue.propose(serde_json::json!({}), "r1", "c").await.unwrap();
+        let count = queue.reject_all().await.unwrap();
+        assert_eq!(count, 1);
+        let pending = queue.list_pending().await.unwrap();
+        assert!(pending.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_list_pending_empty() {
+        let db = setup_db();
+        let queue = ApprovalQueue::new(db, 3600);
+        let pending = queue.list_pending().await.unwrap();
+        assert!(pending.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_next_approved_fifo() {
+        let db = setup_db();
+        let queue = ApprovalQueue::new(db, 3600);
+        let id1 = queue.propose(serde_json::json!({"n":1}), "r", "c").await.unwrap();
+        let id2 = queue.propose(serde_json::json!({"n":2}), "r", "c").await.unwrap();
+        queue.approve_all().await.unwrap();
+        let first = queue.next_approved().await.unwrap().unwrap();
+        assert_eq!(first.id, id1);
+        queue.mark_executed(&id1, true).await.unwrap();
+        let second = queue.next_approved().await.unwrap().unwrap();
+        assert_eq!(second.id, id2);
+    }
+
+    #[tokio::test]
+    async fn test_mark_executed() {
+        let db = setup_db();
+        let queue = ApprovalQueue::new(db, 3600);
+        let id = queue.propose(serde_json::json!({}), "r", "c").await.unwrap();
+        queue.approve(&id).await.unwrap();
+        queue.mark_executed(&id, true).await.unwrap();
+        let next = queue.next_approved().await.unwrap();
+        assert!(next.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_expire_stale() {
+        let db = setup_db();
+        let queue = ApprovalQueue::new(db.clone(), 3600);
+        let id = queue.propose(serde_json::json!({}), "r", "c").await.unwrap();
+        {
+            let conn = db.lock().await;
+            conn.execute(
+                "UPDATE pending_actions SET proposed_at = datetime('now', '-4000 seconds') WHERE id = ?1",
+                [&id],
+            )
+            .unwrap();
+        }
+        let count = queue.expire_stale().await.unwrap();
+        assert_eq!(count, 1);
+        let pending = queue.list_pending().await.unwrap();
+        assert!(pending.is_empty());
+    }
+}

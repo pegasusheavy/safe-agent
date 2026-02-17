@@ -62,7 +62,7 @@ pub struct ExtensionManager {
 
 impl ExtensionManager {
     pub fn new(skills_dir: PathBuf, db_path: PathBuf) -> Self {
-        let engine = create_engine(db_path.clone());
+        let engine = create_engine(db_path.clone(), skills_dir.clone());
         Self {
             engine,
             extensions: HashMap::new(),
@@ -268,17 +268,12 @@ impl ExtensionManager {
     pub fn read_static_file(&self, skill_name: &str, file_path: &str) -> Option<(Vec<u8>, String)> {
         let ext = self.extensions.get(skill_name)?;
 
-        // Prevent path traversal
-        let clean = file_path.replace("..", "").replace("//", "/");
-        let full_path = ext.skill_dir.join(&clean);
+        // Use PathJail for proper canonicalization-based traversal prevention
+        let jail = crate::security::PathJail::new(ext.skill_dir.clone())?;
+        let safe_path = jail.validate(file_path)?;
 
-        // Must be within the skill directory
-        if !full_path.starts_with(&ext.skill_dir) {
-            return None;
-        }
-
-        let content = std::fs::read(&full_path).ok()?;
-        let content_type = mime_guess::from_path(&full_path)
+        let content = std::fs::read(&safe_path).ok()?;
+        let content_type = mime_guess::from_path(&safe_path)
             .first_or_octet_stream()
             .to_string();
 
@@ -405,7 +400,7 @@ pub fn json_to_rhai(val: &serde_json::Value) -> Dynamic {
 // Rhai engine setup with API functions
 // ---------------------------------------------------------------------------
 
-fn create_engine(db_path: PathBuf) -> Engine {
+fn create_engine(db_path: PathBuf, skills_dir: PathBuf) -> Engine {
     let mut engine = Engine::new();
 
     // --- Route registration helper ---
@@ -461,8 +456,13 @@ fn create_engine(db_path: PathBuf) -> Engine {
         resp
     });
 
-    // --- HTTP client functions ---
+    // --- HTTP client functions (with URL validation) ---
+    // Blocks file://, private networks, and localhost to prevent SSRF.
     engine.register_fn("http_get", |url: String| -> Dynamic {
+        if let Err(e) = crate::security::validate_url(&url) {
+            tracing::warn!(url = %url, err = %e, "http_get: URL blocked");
+            return Dynamic::from(format!("error: {e}"));
+        }
         match reqwest::blocking::get(&url) {
             Ok(resp) => {
                 if let Ok(text) = resp.text() {
@@ -480,6 +480,10 @@ fn create_engine(db_path: PathBuf) -> Engine {
     });
 
     engine.register_fn("http_post", |url: String, body: String| -> Dynamic {
+        if let Err(e) = crate::security::validate_url(&url) {
+            tracing::warn!(url = %url, err = %e, "http_post: URL blocked");
+            return Dynamic::from(format!("error: {e}"));
+        }
         let client = reqwest::blocking::Client::new();
         match client.post(&url)
             .header("Content-Type", "application/json")
@@ -502,6 +506,10 @@ fn create_engine(db_path: PathBuf) -> Engine {
     });
 
     engine.register_fn("http_post", |url: String, body: Map| -> Dynamic {
+        if let Err(e) = crate::security::validate_url(&url) {
+            tracing::warn!(url = %url, err = %e, "http_post: URL blocked");
+            return Dynamic::from(format!("error: {e}"));
+        }
         let json_body = rhai_to_json(Dynamic::from(body));
         let client = reqwest::blocking::Client::new();
         match client.post(&url)
@@ -523,37 +531,123 @@ fn create_engine(db_path: PathBuf) -> Engine {
         }
     });
 
-    // --- File I/O (scoped to skill data dir) ---
-    engine.register_fn("data_read", |path: String| -> Dynamic {
-        // __data_dir is set in the scope before calling handler
-        // We rely on the caller to resolve the path; this is a simple read
-        match std::fs::read_to_string(&path) {
-            Ok(content) => Dynamic::from(content),
-            Err(_) => Dynamic::UNIT,
+    // --- File I/O (jailed to skills directory) ---
+    // All data_* functions validate paths are inside the skills directory tree.
+    // This prevents path traversal attacks from Rhai extensions.
+    let jail_root = skills_dir.clone();
+    let jail_r = jail_root.clone();
+    engine.register_fn("data_read", move |path: String| -> Dynamic {
+        let jail = match crate::security::PathJail::new(jail_r.clone()) {
+            Some(j) => j,
+            None => return Dynamic::from("error: cannot initialize path jail"),
+        };
+        match jail.validate(&path) {
+            Some(safe_path) => match std::fs::read_to_string(&safe_path) {
+                Ok(content) => Dynamic::from(content),
+                Err(_) => Dynamic::UNIT,
+            },
+            None => {
+                tracing::warn!(path = %path, "data_read: path rejected by jail");
+                Dynamic::UNIT
+            }
         }
     });
 
-    engine.register_fn("data_write", |path: String, content: String| -> bool {
-        if let Some(parent) = std::path::Path::new(&path).parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        std::fs::write(&path, content).is_ok()
-    });
-
-    engine.register_fn("data_list", |dir: String| -> rhai::Array {
-        let mut result = rhai::Array::new();
-        if let Ok(entries) = std::fs::read_dir(&dir) {
-            for entry in entries.flatten() {
-                if let Some(name) = entry.file_name().to_str() {
-                    result.push(Dynamic::from(name.to_string()));
+    let jail_w = jail_root.clone();
+    engine.register_fn("data_write", move |path: String, content: String| -> bool {
+        let jail = match crate::security::PathJail::new(jail_w.clone()) {
+            Some(j) => j,
+            None => return false,
+        };
+        match jail.validate(&path) {
+            Some(safe_path) => {
+                if let Some(parent) = safe_path.parent() {
+                    let _ = std::fs::create_dir_all(parent);
                 }
+                std::fs::write(&safe_path, content).is_ok()
+            }
+            None => {
+                tracing::warn!(path = %path, "data_write: path rejected by jail");
+                false
+            }
+        }
+    });
+
+    let jail_l = jail_root.clone();
+    engine.register_fn("data_list", move |dir: String| -> rhai::Array {
+        let jail = match crate::security::PathJail::new(jail_l.clone()) {
+            Some(j) => j,
+            None => return rhai::Array::new(),
+        };
+        let mut result = rhai::Array::new();
+        match jail.validate(&dir) {
+            Some(safe_dir) => {
+                if let Ok(entries) = std::fs::read_dir(&safe_dir) {
+                    for entry in entries.flatten() {
+                        if let Some(name) = entry.file_name().to_str() {
+                            result.push(Dynamic::from(name.to_string()));
+                        }
+                    }
+                }
+            }
+            None => {
+                tracing::warn!(dir = %dir, "data_list: path rejected by jail");
             }
         }
         result
     });
 
-    engine.register_fn("data_exists", |path: String| -> bool {
-        std::path::Path::new(&path).exists()
+    let jail_e = jail_root.clone();
+    engine.register_fn("data_exists", move |path: String| -> bool {
+        let jail = match crate::security::PathJail::new(jail_e.clone()) {
+            Some(j) => j,
+            None => return false,
+        };
+        match jail.validate(&path) {
+            Some(safe_path) => safe_path.exists(),
+            None => {
+                tracing::warn!(path = %path, "data_exists: path rejected by jail");
+                false
+            }
+        }
+    });
+
+    // --- data_delete (moves to trash) ---
+    let jail_d = jail_root.clone();
+    let trash_data_dir = skills_dir
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .to_path_buf();
+    engine.register_fn("data_delete", move |path: String| -> bool {
+        let jail = match crate::security::PathJail::new(jail_d.clone()) {
+            Some(j) => j,
+            None => return false,
+        };
+        match jail.validate(&path) {
+            Some(safe_path) => {
+                if !safe_path.exists() {
+                    tracing::warn!(path = %path, "data_delete: file not found");
+                    return false;
+                }
+                match crate::trash::TrashManager::new(&trash_data_dir) {
+                    Ok(trash) => match trash.trash(&safe_path, "rhai:data_delete") {
+                        Ok(_) => true,
+                        Err(e) => {
+                            tracing::error!(path = %path, err = %e, "data_delete: trash failed");
+                            false
+                        }
+                    },
+                    Err(e) => {
+                        tracing::error!(err = %e, "data_delete: cannot init trash");
+                        false
+                    }
+                }
+            }
+            None => {
+                tracing::warn!(path = %path, "data_delete: path rejected by jail");
+                false
+            }
+        }
     });
 
     // --- JSON helpers ---
@@ -572,8 +666,12 @@ fn create_engine(db_path: PathBuf) -> Engine {
         serde_json::to_string_pretty(&rhai_to_json(val)).unwrap_or_else(|_| "null".into())
     });
 
-    // --- Environment ---
+    // --- Environment (restricted to safe variables) ---
     engine.register_fn("env_get", |key: String| -> Dynamic {
+        if !crate::security::is_safe_env_var(&key) {
+            tracing::warn!(key = %key, "env_get: blocked access to sensitive variable");
+            return Dynamic::UNIT;
+        }
         match std::env::var(&key) {
             Ok(val) => Dynamic::from(val),
             Err(_) => Dynamic::UNIT,
@@ -589,15 +687,24 @@ fn create_engine(db_path: PathBuf) -> Engine {
         chrono::Utc::now().timestamp()
     });
 
-    // --- Database access ---
-    // Open a read-only connection for queries.
+    // --- Database access (with SQL validation) ---
+    // db_query: read-only; only SELECT/WITH/EXPLAIN allowed.
+    // db_execute: write; blocks DROP, ALTER, ATTACH, PRAGMA writes, etc.
     let db_path_query = db_path.clone();
     engine.register_fn("db_query", move |sql: String| -> Dynamic {
+        if let Err(e) = crate::security::validate_sql_readonly(&sql) {
+            tracing::warn!(sql = %sql, err = %e, "db_query: SQL blocked");
+            return Dynamic::from(format!("error: {e}"));
+        }
         db_execute_query(&db_path_query, &sql, &[])
     });
 
     let db_path_query2 = db_path.clone();
     engine.register_fn("db_query", move |sql: String, params: rhai::Array| -> Dynamic {
+        if let Err(e) = crate::security::validate_sql_readonly(&sql) {
+            tracing::warn!(sql = %sql, err = %e, "db_query: SQL blocked");
+            return Dynamic::from(format!("error: {e}"));
+        }
         let str_params: Vec<String> = params
             .iter()
             .map(|p| p.to_string())
@@ -611,11 +718,19 @@ fn create_engine(db_path: PathBuf) -> Engine {
 
     let db_path_exec = db_path.clone();
     engine.register_fn("db_execute", move |sql: String| -> Dynamic {
+        if let Err(e) = crate::security::validate_sql(&sql) {
+            tracing::warn!(sql = %sql, err = %e, "db_execute: SQL blocked");
+            return Dynamic::from(format!("error: {e}"));
+        }
         db_execute_stmt(&db_path_exec, &sql, &[])
     });
 
     let db_path_exec2 = db_path;
     engine.register_fn("db_execute", move |sql: String, params: rhai::Array| -> Dynamic {
+        if let Err(e) = crate::security::validate_sql(&sql) {
+            tracing::warn!(sql = %sql, err = %e, "db_execute: SQL blocked");
+            return Dynamic::from(format!("error: {e}"));
+        }
         let str_params: Vec<String> = params
             .iter()
             .map(|p| p.to_string())

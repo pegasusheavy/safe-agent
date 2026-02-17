@@ -199,3 +199,165 @@ impl Tool for KnowledgeGraphTool {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db;
+    use crate::messaging::MessagingManager;
+    use crate::security::SandboxedFs;
+    use crate::trash::TrashManager;
+    use std::sync::Arc;
+
+    fn test_ctx() -> ToolContext {
+        let base = std::env::temp_dir().join(format!("sa-kgtest-{}", std::process::id()));
+        let sandbox_dir = base.join("sandbox");
+        let trash_dir = base.join("trash");
+        std::fs::create_dir_all(&sandbox_dir).unwrap();
+        std::fs::create_dir_all(&trash_dir).unwrap();
+
+        ToolContext {
+            sandbox: SandboxedFs::new(sandbox_dir).unwrap(),
+            db: db::test_db(),
+            http_client: reqwest::Client::new(),
+            messaging: Arc::new(MessagingManager::new()),
+            trash: Arc::new(TrashManager::new(&trash_dir).unwrap()),
+        }
+    }
+
+    #[tokio::test]
+    async fn add_node_success() {
+        let ctx = test_ctx();
+        let tool = KnowledgeGraphTool::new();
+        let result = tool.execute(
+            serde_json::json!({"action": "add_node", "label": "Rust", "node_type": "language", "content": "Systems language", "confidence": 0.95}),
+            &ctx,
+        ).await.unwrap();
+        assert!(result.success);
+        assert!(result.output.contains("Added node 'Rust'"));
+        assert!(result.metadata.is_some());
+    }
+
+    #[tokio::test]
+    async fn add_node_missing_label() {
+        let ctx = test_ctx();
+        let tool = KnowledgeGraphTool::new();
+        let result = tool.execute(
+            serde_json::json!({"action": "add_node", "node_type": "t"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(!result.success);
+        assert!(result.output.contains("label is required"));
+    }
+
+    #[tokio::test]
+    async fn add_edge_success() {
+        let ctx = test_ctx();
+        let tool = KnowledgeGraphTool::new();
+        let kg = KnowledgeGraph::new(ctx.db.clone());
+        let a = kg.add_node("A", "t", "", 1.0).await.unwrap();
+        let b = kg.add_node("B", "t", "", 1.0).await.unwrap();
+        let result = tool.execute(
+            serde_json::json!({"action": "add_edge", "source_id": a, "target_id": b, "relation": "knows"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(result.success);
+        assert!(result.output.contains("knows"));
+    }
+
+    #[tokio::test]
+    async fn add_edge_missing_fields() {
+        let ctx = test_ctx();
+        let tool = KnowledgeGraphTool::new();
+        let result = tool.execute(
+            serde_json::json!({"action": "add_edge", "source_id": 1}),
+            &ctx,
+        ).await.unwrap();
+        assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn search_finds_results() {
+        let ctx = test_ctx();
+        let tool = KnowledgeGraphTool::new();
+        let kg = KnowledgeGraph::new(ctx.db.clone());
+        kg.add_node("Quick brown fox", "animal", "The fox jumps", 1.0).await.unwrap();
+        let result = tool.execute(
+            serde_json::json!({"action": "search", "query": "brown fox"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(result.success);
+        assert!(result.output.contains("fox"));
+    }
+
+    #[tokio::test]
+    async fn search_empty_query() {
+        let ctx = test_ctx();
+        let tool = KnowledgeGraphTool::new();
+        let result = tool.execute(
+            serde_json::json!({"action": "search", "query": ""}),
+            &ctx,
+        ).await.unwrap();
+        assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn neighbors_success() {
+        let ctx = test_ctx();
+        let tool = KnowledgeGraphTool::new();
+        let kg = KnowledgeGraph::new(ctx.db.clone());
+        let a = kg.add_node("X", "t", "", 1.0).await.unwrap();
+        let b = kg.add_node("Y", "t", "", 1.0).await.unwrap();
+        kg.add_edge(a, b, "links", 1.0).await.unwrap();
+        let result = tool.execute(
+            serde_json::json!({"action": "neighbors", "node_id": a}),
+            &ctx,
+        ).await.unwrap();
+        assert!(result.success);
+        assert!(result.output.contains("Y"));
+    }
+
+    #[tokio::test]
+    async fn neighbors_missing_node_id() {
+        let ctx = test_ctx();
+        let tool = KnowledgeGraphTool::new();
+        let result = tool.execute(
+            serde_json::json!({"action": "neighbors"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(!result.success);
+    }
+
+    #[tokio::test]
+    async fn stats_action() {
+        let ctx = test_ctx();
+        let tool = KnowledgeGraphTool::new();
+        let result = tool.execute(
+            serde_json::json!({"action": "stats"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(result.success);
+        assert!(result.output.contains("0 nodes"));
+    }
+
+    #[tokio::test]
+    async fn unknown_action() {
+        let ctx = test_ctx();
+        let tool = KnowledgeGraphTool::new();
+        let result = tool.execute(
+            serde_json::json!({"action": "foobar"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(!result.success);
+        assert!(result.output.contains("unknown action"));
+    }
+
+    #[tokio::test]
+    async fn tool_metadata() {
+        let tool = KnowledgeGraphTool::new();
+        assert_eq!(tool.name(), "knowledge_graph");
+        assert!(!tool.description().is_empty());
+        let schema = tool.parameters_schema();
+        assert!(schema["required"].as_array().unwrap().contains(&serde_json::json!("action")));
+    }
+}

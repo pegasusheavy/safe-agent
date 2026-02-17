@@ -7,6 +7,7 @@ use tracing::{debug, info, warn};
 use crate::config::Config;
 use crate::error::{Result, SafeAgentError};
 use crate::llm::prompts;
+use crate::tools::ToolRegistry;
 
 const DEFAULT_BASE_URL: &str = "https://openrouter.ai/api/v1";
 
@@ -25,7 +26,9 @@ pub struct OpenRouterEngine {
     api_key: String,
     base_url: String,
     model: String,
-    system_prompt: String,
+    personality: String,
+    agent_name: String,
+    timezone: String,
     max_tokens: usize,
     temperature: f32,
     top_p: f32,
@@ -128,11 +131,6 @@ impl OpenRouterEngine {
             })
             .unwrap_or_else(|| "anthropic/claude-sonnet-4".to_string());
 
-        let system_prompt = prompts::system_prompt(
-            &config.core_personality,
-            &config.agent_name,
-        );
-
         let max_tokens = if config.llm.openrouter_max_tokens > 0 {
             config.llm.openrouter_max_tokens
         } else {
@@ -183,7 +181,9 @@ impl OpenRouterEngine {
             api_key,
             base_url,
             model,
-            system_prompt,
+            personality: config.core_personality.clone(),
+            agent_name: config.agent_name.clone(),
+            timezone: config.timezone.clone(),
             max_tokens,
             temperature,
             top_p,
@@ -193,7 +193,8 @@ impl OpenRouterEngine {
     }
 
     /// Send a message to OpenRouter and return the plain-text response.
-    pub async fn generate(&self, message: &str) -> Result<String> {
+    pub async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
+        let system_prompt = prompts::system_prompt(&self.personality, &self.agent_name, tools, Some(&self.timezone));
         let url = format!("{}/chat/completions", self.base_url);
 
         let body = ChatRequest {
@@ -201,7 +202,7 @@ impl OpenRouterEngine {
             messages: vec![
                 ChatMessage {
                     role: "system".to_string(),
-                    content: self.system_prompt.clone(),
+                    content: system_prompt,
                 },
                 ChatMessage {
                     role: "user".to_string(),

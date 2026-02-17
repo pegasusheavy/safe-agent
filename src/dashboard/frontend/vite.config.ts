@@ -1,10 +1,18 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { svelteTesting } from '@testing-library/svelte/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
 
 export default defineConfig({
-    plugins: [tailwindcss(), svelte()],
+    plugins: [tailwindcss(), svelte(), svelteTesting()],
+    test: {
+        globals: true,
+        environment: 'jsdom',
+        setupFiles: ['./src/test/setup.ts'],
+        testTransformMode: { web: [/\.svelte$/] },
+    },
     build: {
         outDir: resolve(import.meta.dirname!, '../ui'),
         emptyOutDir: false,

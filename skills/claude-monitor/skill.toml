@@ -1,0 +1,23 @@
+name = "claude-monitor"
+description = "Monitors Claude Code OAuth token expiry and usage. Auto-refreshes tokens before they expire and sends Telegram alerts when usage approaches configurable thresholds."
+skill_type = "daemon"
+enabled = true
+entrypoint = "main.py"
+
+[env]
+# OAuth client ID used by Claude Code CLI
+CLAUDE_OAUTH_CLIENT_ID = ""
+# Percentage of estimated daily limit to warn at (0-100)
+USAGE_WARN_PERCENT = "85"
+# Token refresh buffer in seconds (refresh when less than this much time left)
+TOKEN_REFRESH_BUFFER_SECS = "3600"
+# Check interval in seconds
+CHECK_INTERVAL_SECS = "120"
+# Estimated daily output token budget (adjust based on your plan).
+# Max 5x plan: ~45k output tokens/day is a reasonable estimate.
+DAILY_OUTPUT_TOKEN_BUDGET = "45000"
+# Path to Claude Code credentials file
+CLAUDE_CREDENTIALS_PATH = ""
+
+[ui]
+panel = "panel.html"

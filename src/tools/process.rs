@@ -103,3 +103,62 @@ impl Tool for ProcessTool {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db;
+    use crate::messaging::MessagingManager;
+    use crate::security::SandboxedFs;
+    use crate::trash::TrashManager;
+
+    fn test_ctx() -> ToolContext {
+        let base = std::env::temp_dir().join(format!("sa-proctest-{}", std::process::id()));
+        let sandbox_dir = base.join("sandbox");
+        let trash_dir = base.join("trash");
+        std::fs::create_dir_all(&sandbox_dir).unwrap();
+        std::fs::create_dir_all(&trash_dir).unwrap();
+
+        ToolContext {
+            sandbox: SandboxedFs::new(sandbox_dir).unwrap(),
+            db: db::test_db(),
+            http_client: reqwest::Client::new(),
+            messaging: Arc::new(MessagingManager::new()),
+            trash: Arc::new(TrashManager::new(&trash_dir).unwrap()),
+        }
+    }
+
+    #[tokio::test]
+    async fn list_empty() {
+        let ctx = test_ctx();
+        let tool = ProcessTool::new();
+        let r = tool.execute(serde_json::json!({"action": "list"}), &ctx).await.unwrap();
+        assert!(r.success);
+        assert!(r.output.contains("No background processes"));
+    }
+
+    #[tokio::test]
+    async fn kill_missing_pid() {
+        let ctx = test_ctx();
+        let tool = ProcessTool::new();
+        let r = tool.execute(serde_json::json!({"action": "kill"}), &ctx).await.unwrap();
+        assert!(!r.success);
+        assert!(r.output.contains("pid is required"));
+    }
+
+    #[tokio::test]
+    async fn unknown_action() {
+        let ctx = test_ctx();
+        let tool = ProcessTool::new();
+        let r = tool.execute(serde_json::json!({"action": "restart"}), &ctx).await.unwrap();
+        assert!(!r.success);
+        assert!(r.output.contains("unknown action"));
+    }
+
+    #[test]
+    fn tool_metadata() {
+        let tool = ProcessTool::new();
+        assert_eq!(tool.name(), "process");
+        assert!(!tool.description().is_empty());
+    }
+}

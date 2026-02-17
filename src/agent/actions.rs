@@ -33,3 +33,57 @@ pub async fn execute_tool_call(
     debug!(tool = %call.tool, "executing tool call");
     registry.execute(&call.tool, call.params.clone(), ctx).await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_tool_call_full() {
+        let json = serde_json::json!({
+            "tool": "exec",
+            "params": {"command": "ls -la"},
+            "reasoning": "list files"
+        });
+        let call = parse_tool_call(&json).unwrap();
+        assert_eq!(call.tool, "exec");
+        assert_eq!(call.params["command"], "ls -la");
+        assert_eq!(call.reasoning, "list files");
+    }
+
+    #[test]
+    fn parse_tool_call_missing_fields() {
+        let json = serde_json::json!({});
+        let call = parse_tool_call(&json).unwrap();
+        assert_eq!(call.tool, "");
+        assert_eq!(call.params, serde_json::Value::default());
+        assert_eq!(call.reasoning, "");
+    }
+
+    #[test]
+    fn parse_tool_call_partial_fields() {
+        let json = serde_json::json!({"tool": "read_file"});
+        let call = parse_tool_call(&json).unwrap();
+        assert_eq!(call.tool, "read_file");
+        assert_eq!(call.reasoning, "");
+    }
+
+    #[test]
+    fn parse_tool_call_non_string_tool() {
+        let json = serde_json::json!({"tool": 42});
+        let call = parse_tool_call(&json).unwrap();
+        assert_eq!(call.tool, "");
+    }
+
+    #[test]
+    fn parse_tool_call_params_preserved() {
+        let json = serde_json::json!({
+            "tool": "web_search",
+            "params": {"query": "rust testing", "limit": 10},
+            "reasoning": "search"
+        });
+        let call = parse_tool_call(&json).unwrap();
+        assert_eq!(call.params["query"], "rust testing");
+        assert_eq!(call.params["limit"], 10);
+    }
+}

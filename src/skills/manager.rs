@@ -1,12 +1,16 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 use tokio::process::{Child, Command};
 use tracing::{error, info, warn};
 
 use crate::error::{Result, SafeAgentError};
 use crate::tunnel::TunnelUrl;
+
+use super::rhai_runtime;
 
 /// Manifest describing a skill, read from `skill.toml` in the skill directory.
 #[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
@@ -23,6 +27,13 @@ pub struct SkillManifest {
     /// Entry point relative to the skill directory (default: "main.py").
     #[serde(default = "default_entrypoint")]
     pub entrypoint: String,
+    /// Python virtual-environment policy.
+    ///
+    /// - `"auto"` (default) — create a `.venv/` when `requirements.txt` exists.
+    /// - `"always"` — always create a `.venv/`, even without `requirements.txt`.
+    /// - `"never"` — install into the system Python (legacy behaviour).
+    #[serde(default = "default_venv")]
+    pub venv: String,
     /// Extra environment variables to pass to the skill process.
     #[serde(default)]
     pub env: HashMap<String, String>,
@@ -57,11 +68,26 @@ fn default_true() -> bool {
 fn default_entrypoint() -> String {
     "main.py".to_string()
 }
+fn default_venv() -> String {
+    "auto".to_string()
+}
 
-/// Tracks a running skill process.
+/// Handle to a running skill — either an external child process or an
+/// in-process Rhai script on a blocking thread.
+enum SkillHandle {
+    /// External process (Python, Node.js, shell).
+    Process(Child),
+    /// Embedded Rhai script running on a `spawn_blocking` thread.
+    Embedded {
+        task: tokio::task::JoinHandle<()>,
+        cancel: Arc<AtomicBool>,
+    },
+}
+
+/// Tracks a running skill.
 struct RunningSkill {
     manifest: SkillManifest,
-    child: Child,
+    handle: SkillHandle,
     dir: PathBuf,
 }
 
@@ -76,6 +102,9 @@ pub struct SkillManager {
     credentials_path: PathBuf,
     /// Ngrok tunnel public URL receiver.
     tunnel_url: Option<TunnelUrl>,
+    /// Skills that were manually stopped via API and should not be
+    /// auto-restarted by `reconcile()` until explicitly started again.
+    manually_stopped: std::collections::HashSet<String>,
 }
 
 impl SkillManager {
@@ -105,6 +134,7 @@ impl SkillManager {
             credentials,
             credentials_path,
             tunnel_url: None,
+            manually_stopped: std::collections::HashSet::new(),
         }
     }
 
@@ -206,8 +236,10 @@ impl SkillManager {
                 continue;
             }
 
-            // If not already running, start it
-            if !self.running.contains_key(&manifest.name) {
+            // If not already running (and not manually stopped), start it
+            if !self.running.contains_key(&manifest.name)
+                && !self.manually_stopped.contains(&manifest.name)
+            {
                 self.start_skill(manifest, path).await;
             }
         }
@@ -228,7 +260,8 @@ impl SkillManager {
         Ok(())
     }
 
-    /// Start a skill process.
+    /// Start a skill — either as an external process (Python, Node.js, shell)
+    /// or as an embedded Rhai script.
     async fn start_skill(&mut self, manifest: SkillManifest, dir: PathBuf) {
         let entrypoint = dir.join(&manifest.entrypoint);
         if !entrypoint.exists() {
@@ -240,40 +273,60 @@ impl SkillManager {
             return;
         }
 
-        // Install requirements if present
-        let requirements = dir.join("requirements.txt");
-        if requirements.exists() {
-            info!(skill = %manifest.name, "installing skill requirements");
-            let install = Command::new("pip3")
-                .args(["install", "--no-cache-dir", "--break-system-packages", "-r"])
-                .arg(&requirements)
+        // Create skill data directory
+        let _ = std::fs::create_dir_all(dir.join("data"));
+
+        // Collect environment variables that apply to every skill type.
+        let env_vars = self.collect_skill_env(&manifest, &dir);
+
+        // ── Rhai scripts: run in-process ──────────────────────────────────
+        if manifest.entrypoint.ends_with(".rhai") {
+            self.start_rhai_skill(manifest, dir, entrypoint, env_vars).await;
+            return;
+        }
+
+        // ── External process skills (Python, Node.js, shell) ─────────────
+
+        let is_python = matches!(manifest.entrypoint.rsplit('.').next(), Some("py"));
+
+        // -- Python: virtual-environment + requirements ────────────────────
+        let venv_python = if is_python {
+            self.setup_python_venv(&manifest, &dir).await
+        } else {
+            None
+        };
+
+        // -- Node.js: package.json install -────────────────────────────────
+        let package_json = dir.join("package.json");
+        if package_json.exists() {
+            info!(skill = %manifest.name, "installing Node.js dependencies");
+            let npm_cmd = if which_exists("pnpm") { "pnpm" } else { "npm" };
+            let install = Command::new(npm_cmd)
+                .arg("install")
+                .current_dir(&dir)
                 .stdout(Stdio::null())
                 .stderr(Stdio::piped())
                 .status()
                 .await;
-
             match install {
-                Ok(s) if s.success() => {
-                    info!(skill = %manifest.name, "requirements installed");
-                }
-                Ok(s) => {
-                    warn!(skill = %manifest.name, status = %s, "pip install failed");
-                }
-                Err(e) => {
-                    warn!(skill = %manifest.name, err = %e, "pip install error");
-                }
+                Ok(s) if s.success() => info!(skill = %manifest.name, npm_cmd, "node dependencies installed"),
+                Ok(s) => warn!(skill = %manifest.name, status = %s, npm_cmd, "npm install failed"),
+                Err(e) => warn!(skill = %manifest.name, err = %e, npm_cmd, "npm install error"),
             }
         }
 
-        // Determine the interpreter from the entrypoint extension
-        let interpreter = if manifest.entrypoint.ends_with(".py") {
-            "python3"
+        // -- Determine interpreter -────────────────────────────────────────
+        let interpreter: String = if let Some(ref vpy) = venv_python {
+            vpy.clone()
         } else {
-            "sh"
+            match manifest.entrypoint.rsplit('.').next() {
+                Some("py") => "python3".into(),
+                Some("js" | "mjs" | "cjs") => "node".into(),
+                _ => "sh".into(),
+            }
         };
 
         let log_path = dir.join("skill.log");
-
         let log_file = match std::fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -293,68 +346,57 @@ impl SkillManager {
             }
         };
 
-        let mut cmd = Command::new(interpreter);
+        let mut cmd = Command::new(&interpreter);
         cmd.arg(&entrypoint)
             .current_dir(&dir)
             .stdout(Stdio::from(log_file))
-            .stderr(Stdio::from(stderr_log))
-            .env("SKILL_NAME", &manifest.name)
-            .env("SKILL_DIR", &dir)
-            .env("SKILL_DATA_DIR", dir.join("data"))
-            .env("SKILLS_DIR", &self.skills_dir);
+            .stderr(Stdio::from(stderr_log));
 
-        // Put the skill in its own process group so we can kill the entire
-        // group (including any child processes) on stop.
-        #[cfg(unix)]
-        #[allow(unused_imports)]
-        {
-            use std::os::unix::process::CommandExt;
-            cmd.process_group(0);
+        // If running inside a venv, prepend the venv bin dir to PATH so
+        // sub-processes spawned by the skill also resolve to venv packages.
+        if let Some(ref vpy) = venv_python {
+            let venv_bin = std::path::Path::new(vpy)
+                .parent()
+                .expect("venv python has parent dir");
+            let sys_path = std::env::var("PATH").unwrap_or_default();
+            cmd.env("PATH", format!("{}:{}", venv_bin.display(), sys_path));
+            cmd.env("VIRTUAL_ENV", dir.join(".venv"));
         }
 
-        if let Some(ref token) = self.telegram_bot_token {
-            cmd.env("TELEGRAM_BOT_TOKEN", token);
-        }
-        if let Some(chat_id) = self.telegram_chat_id {
-            cmd.env("TELEGRAM_CHAT_ID", chat_id.to_string());
-        }
-
-        // Pass any extra env vars from the manifest
-        for (k, v) in &manifest.env {
+        // Set all collected environment variables.
+        for (k, v) in &env_vars {
             cmd.env(k, v);
         }
 
-        // Inject stored credentials
-        if let Some(creds) = self.credentials.get(&manifest.name) {
-            for (k, v) in creds {
-                cmd.env(k, v);
+        // On Unix: set process group + apply resource limits (rlimit)
+        #[cfg(unix)]
+        {
+            #[allow(unused_imports)]
+            use std::os::unix::process::CommandExt;
+            let limits = crate::security::ProcessLimits::skill();
+            unsafe {
+                cmd.pre_exec(move || {
+                    libc::setpgid(0, 0);
+                    crate::security::apply_process_limits(&limits)?;
+                    Ok(())
+                });
             }
         }
-
-        // Inject ngrok tunnel URL so skills can use it for callbacks
-        if let Some(ref tunnel) = self.tunnel_url {
-            if let Some(ref url) = *tunnel.borrow() {
-                cmd.env("TUNNEL_URL", url);
-                cmd.env("PUBLIC_URL", url);
-            }
-        }
-
-        // Create skill data directory
-        let _ = std::fs::create_dir_all(dir.join("data"));
 
         match cmd.spawn() {
             Ok(child) => {
                 info!(
                     skill = %manifest.name,
                     pid = ?child.id(),
+                    %interpreter,
                     entrypoint = %manifest.entrypoint,
-                    "skill started"
+                    "skill started (with resource limits)"
                 );
                 self.running.insert(
                     manifest.name.clone(),
                     RunningSkill {
                         manifest,
-                        child,
+                        handle: SkillHandle::Process(child),
                         dir,
                     },
                 );
@@ -365,35 +407,328 @@ impl SkillManager {
         }
     }
 
+    /// Set up a Python virtual environment for a skill if required.
+    ///
+    /// Returns `Some(path_to_venv_python)` if a venv was created/reused,
+    /// or `None` if the skill should use the system Python.
+    async fn setup_python_venv(
+        &self,
+        manifest: &SkillManifest,
+        dir: &Path,
+    ) -> Option<String> {
+        let requirements = dir.join("requirements.txt");
+        let venv_dir = dir.join(".venv");
+
+        let want_venv = match manifest.venv.as_str() {
+            "always" => true,
+            "never" => false,
+            // "auto" (default) — venv when requirements.txt exists
+            _ => requirements.exists(),
+        };
+
+        if !want_venv {
+            // Legacy path: install globally if there are requirements.
+            if requirements.exists() {
+                info!(skill = %manifest.name, "installing Python requirements (system-wide)");
+                let install = Command::new("pip3")
+                    .args(["install", "--no-cache-dir", "--break-system-packages", "-r"])
+                    .arg(&requirements)
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::piped())
+                    .status()
+                    .await;
+                match install {
+                    Ok(s) if s.success() => {
+                        info!(skill = %manifest.name, "requirements installed (system-wide)");
+                    }
+                    Ok(s) => warn!(skill = %manifest.name, status = %s, "pip install failed"),
+                    Err(e) => warn!(skill = %manifest.name, err = %e, "pip install error"),
+                }
+            }
+            return None;
+        }
+
+        // Determine which python3 binary to use for creating the venv.
+        let python_bin = if which_exists("python3") {
+            "python3"
+        } else if which_exists("python") {
+            "python"
+        } else {
+            warn!(skill = %manifest.name, "no python3 binary found; cannot create venv");
+            return None;
+        };
+
+        // Create the venv if it doesn't already exist.
+        let venv_python = if cfg!(windows) {
+            venv_dir.join("Scripts").join("python.exe")
+        } else {
+            venv_dir.join("bin").join("python")
+        };
+
+        if !venv_python.exists() {
+            info!(
+                skill = %manifest.name,
+                venv = %venv_dir.display(),
+                "creating Python virtual environment"
+            );
+            let create = Command::new(python_bin)
+                .args(["-m", "venv"])
+                .arg(&venv_dir)
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
+                .status()
+                .await;
+            match create {
+                Ok(s) if s.success() => {
+                    info!(skill = %manifest.name, "venv created");
+                }
+                Ok(s) => {
+                    warn!(skill = %manifest.name, status = %s, "venv creation failed");
+                    return None;
+                }
+                Err(e) => {
+                    warn!(skill = %manifest.name, err = %e, "venv creation error");
+                    return None;
+                }
+            }
+        }
+
+        // Upgrade pip inside the venv (best-effort, silent).
+        let _ = Command::new(venv_python.as_os_str())
+            .args(["-m", "pip", "install", "--upgrade", "pip"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .await;
+
+        // Install requirements into the venv.
+        if requirements.exists() {
+            info!(
+                skill = %manifest.name,
+                venv = %venv_dir.display(),
+                "installing Python requirements into venv"
+            );
+            let install = Command::new(venv_python.as_os_str())
+                .args(["-m", "pip", "install", "--no-cache-dir", "-r"])
+                .arg(&requirements)
+                .stdout(Stdio::null())
+                .stderr(Stdio::piped())
+                .status()
+                .await;
+            match install {
+                Ok(s) if s.success() => {
+                    info!(skill = %manifest.name, "venv requirements installed");
+                }
+                Ok(s) => {
+                    warn!(skill = %manifest.name, status = %s, "venv pip install failed");
+                }
+                Err(e) => {
+                    warn!(skill = %manifest.name, err = %e, "venv pip install error");
+                }
+            }
+        }
+
+        Some(venv_python.to_string_lossy().into_owned())
+    }
+
+    /// Launch a Rhai skill on a blocking thread.
+    async fn start_rhai_skill(
+        &mut self,
+        manifest: SkillManifest,
+        dir: PathBuf,
+        script_path: PathBuf,
+        env_vars: HashMap<String, String>,
+    ) {
+        let log_path = dir.join("skill.log");
+        let log_file = match std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+        {
+            Ok(f) => f,
+            Err(e) => {
+                error!(skill = %manifest.name, err = %e, "failed to open skill log for Rhai");
+                return;
+            }
+        };
+
+        let cancel = Arc::new(AtomicBool::new(false));
+        let ctx = Arc::new(rhai_runtime::RhaiSkillCtx {
+            cancel: cancel.clone(),
+            env_vars,
+            data_dir: dir.join("data"),
+            log_file: Arc::new(std::sync::Mutex::new(log_file)),
+            telegram_token: self.telegram_bot_token.clone(),
+            telegram_chat_id: self.telegram_chat_id.map(|id| id.to_string()),
+        });
+
+        let skill_name = manifest.name.clone();
+        let task = tokio::task::spawn_blocking(move || {
+            let engine = rhai_runtime::build_engine(ctx.clone());
+            if let Err(e) = rhai_runtime::run_script(&engine, &script_path) {
+                if !ctx.cancel.load(Ordering::Relaxed) {
+                    eprintln!("[rhai-skill:{skill_name}] {e}");
+                }
+            }
+        });
+
+        info!(
+            skill = %manifest.name,
+            entrypoint = %manifest.entrypoint,
+            "embedded Rhai skill started"
+        );
+
+        self.running.insert(
+            manifest.name.clone(),
+            RunningSkill {
+                manifest,
+                handle: SkillHandle::Embedded { task, cancel },
+                dir,
+            },
+        );
+    }
+
+    /// Collect all environment variables for a skill (system + manifest +
+    /// credentials + tunnel).
+    fn collect_skill_env(
+        &self,
+        manifest: &SkillManifest,
+        dir: &Path,
+    ) -> HashMap<String, String> {
+        let mut env = HashMap::new();
+
+        // Core skill env
+        env.insert("SKILL_NAME".into(), manifest.name.clone());
+        env.insert("SKILL_DIR".into(), dir.to_string_lossy().to_string());
+        env.insert("SKILL_DATA_DIR".into(), dir.join("data").to_string_lossy().to_string());
+        env.insert("SKILLS_DIR".into(), self.skills_dir.to_string_lossy().to_string());
+        env.insert("PYTHONUNBUFFERED".into(), "1".into());
+
+        // Telegram
+        if let Some(ref token) = self.telegram_bot_token {
+            env.insert("TELEGRAM_BOT_TOKEN".into(), token.clone());
+        }
+        if let Some(chat_id) = self.telegram_chat_id {
+            env.insert("TELEGRAM_CHAT_ID".into(), chat_id.to_string());
+        }
+
+        // Manifest env
+        for (k, v) in &manifest.env {
+            env.insert(k.clone(), v.clone());
+        }
+
+        // Stored credentials
+        if let Some(creds) = self.credentials.get(&manifest.name) {
+            for (k, v) in creds {
+                env.insert(k.clone(), v.clone());
+            }
+        }
+
+        // Tunnel URL
+        if let Some(ref tunnel) = self.tunnel_url {
+            if let Some(ref url) = *tunnel.borrow() {
+                env.insert("TUNNEL_URL".into(), url.clone());
+                env.insert("PUBLIC_URL".into(), url.clone());
+            }
+        }
+
+        env
+    }
+
     /// Stop a running skill by name, killing the entire process group.
     pub async fn stop_skill(&mut self, name: &str) {
-        if let Some(mut skill) = self.running.remove(name) {
-            if let Some(pid) = skill.child.id() {
-                info!(skill = %name, pid, "stopping skill (killing process group)");
-                // Kill the entire process group so child processes don't linger.
-                // On Unix, negate the PID to target the process group.
-                #[cfg(unix)]
-                {
-                    unsafe {
-                        libc::kill(-(pid as i32), libc::SIGTERM);
+        if let Some(skill) = self.running.remove(name) {
+            match skill.handle {
+                SkillHandle::Process(mut child) => {
+                    if let Some(pid) = child.id() {
+                        info!(skill = %name, pid, "stopping skill (killing process group)");
+                        #[cfg(unix)]
+                        {
+                            unsafe {
+                                libc::kill(-(pid as i32), libc::SIGTERM);
+                            }
+                            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+                            unsafe {
+                                libc::kill(-(pid as i32), libc::SIGKILL);
+                            }
+                        }
+                        #[cfg(not(unix))]
+                        {
+                            let _ = child.kill().await;
+                        }
+                    } else {
+                        info!(skill = %name, "stopping skill");
+                        let _ = child.kill().await;
                     }
-                    // Give the process a moment to exit gracefully, then force-kill.
-                    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-                    unsafe {
-                        libc::kill(-(pid as i32), libc::SIGKILL);
-                    }
+                    let _ = child.wait().await;
                 }
-                #[cfg(not(unix))]
-                {
-                    let _ = skill.child.kill().await;
+                SkillHandle::Embedded { task, cancel } => {
+                    info!(skill = %name, "stopping embedded Rhai skill");
+                    cancel.store(true, Ordering::Relaxed);
+                    task.abort();
+                    let _ = task.await;
                 }
-            } else {
-                info!(skill = %name, "stopping skill");
-                let _ = skill.child.kill().await;
             }
-            // Ensure we reap the child
-            let _ = skill.child.wait().await;
         }
+    }
+
+    /// Stop a running skill and mark it as manually stopped so that
+    /// `reconcile()` will not auto-restart it.  Call `start_skill_by_name`
+    /// or `restart_skill_by_name` to clear the manual-stop flag.
+    pub async fn stop_skill_manual(&mut self, name: &str) {
+        self.manually_stopped.insert(name.to_string());
+        self.stop_skill(name).await;
+        info!(skill = %name, "skill manually stopped (will not auto-restart)");
+    }
+
+    /// Start a skill by name.  Clears any manual-stop flag, locates the
+    /// skill directory and manifest, and launches the process.  Returns
+    /// `Ok(true)` if the skill was started, `Ok(false)` if it was already
+    /// running, or an error if the skill was not found or is disabled.
+    pub async fn start_skill_by_name(&mut self, name: &str) -> Result<bool> {
+        // Clear manual-stop flag regardless
+        self.manually_stopped.remove(name);
+
+        // Already running?
+        if self.running.contains_key(name) {
+            return Ok(false);
+        }
+
+        let dir = self.find_skill_dir(name).ok_or_else(|| {
+            SafeAgentError::Config(format!("skill '{name}' not found"))
+        })?;
+
+        let manifest = self.read_manifest(&dir.join("skill.toml"))?;
+
+        if !manifest.enabled {
+            return Err(SafeAgentError::Config(format!(
+                "skill '{name}' is disabled — enable it first"
+            )));
+        }
+
+        self.start_skill(manifest, dir).await;
+        Ok(true)
+    }
+
+    /// Restart a skill by name: stop it, then start it again.
+    /// Clears any manual-stop flag.
+    pub async fn restart_skill_by_name(&mut self, name: &str) -> Result<()> {
+        self.manually_stopped.remove(name);
+        self.stop_skill(name).await;
+        // Brief pause for process cleanup
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+        let dir = self.find_skill_dir(name).ok_or_else(|| {
+            SafeAgentError::Config(format!("skill '{name}' not found"))
+        })?;
+        let manifest = self.read_manifest(&dir.join("skill.toml"))?;
+        self.start_skill(manifest, dir).await;
+        Ok(())
+    }
+
+    /// Returns true if the given skill has been manually stopped.
+    pub fn is_manually_stopped(&self, name: &str) -> bool {
+        self.manually_stopped.contains(name)
     }
 
     /// Check running skills for any that have exited, and remove them so
@@ -402,26 +737,44 @@ impl SkillManager {
         let mut finished = Vec::new();
 
         for (name, skill) in &mut self.running {
-            match skill.child.try_wait() {
-                Ok(Some(status)) => {
-                    if status.success() && skill.manifest.skill_type == "oneshot" {
-                        info!(skill = %name, "oneshot skill completed");
-                    } else if status.success() {
-                        info!(skill = %name, "daemon skill exited (will restart)");
-                    } else {
-                        warn!(
-                            skill = %name,
-                            status = %status,
-                            "skill exited with error (will restart)"
-                        );
+            let done = match &mut skill.handle {
+                SkillHandle::Process(child) => match child.try_wait() {
+                    Ok(Some(status)) => {
+                        if status.success() && skill.manifest.skill_type == "oneshot" {
+                            info!(skill = %name, "oneshot skill completed");
+                        } else if status.success() {
+                            info!(skill = %name, "daemon skill exited (will restart)");
+                        } else {
+                            warn!(
+                                skill = %name,
+                                status = %status,
+                                "skill exited with error (will restart)"
+                            );
+                        }
+                        true
                     }
-                    finished.push(name.clone());
+                    Ok(None) => false,
+                    Err(e) => {
+                        warn!(skill = %name, err = %e, "error checking skill status");
+                        true
+                    }
+                },
+                SkillHandle::Embedded { task, .. } => {
+                    if task.is_finished() {
+                        if skill.manifest.skill_type == "oneshot" {
+                            info!(skill = %name, "oneshot Rhai skill completed");
+                        } else {
+                            info!(skill = %name, "Rhai skill exited (will restart)");
+                        }
+                        true
+                    } else {
+                        false
+                    }
                 }
-                Ok(None) => {} // still running
-                Err(e) => {
-                    warn!(skill = %name, err = %e, "error checking skill status");
-                    finished.push(name.clone());
-                }
+            };
+
+            if done {
+                finished.push(name.clone());
             }
         }
 
@@ -463,7 +816,10 @@ impl SkillManager {
                 let pid = self
                     .running
                     .get(&name)
-                    .and_then(|s| s.child.id());
+                    .and_then(|s| match &s.handle {
+                        SkillHandle::Process(child) => child.id(),
+                        SkillHandle::Embedded { .. } => None,
+                    });
 
                 let stored = self.get_credentials(&name);
                 let credential_status: Vec<CredentialStatus> = manifest
@@ -485,6 +841,8 @@ impl SkillManager {
                     })
                     .collect();
 
+                let stopped = self.manually_stopped.contains(&name);
+                let has_venv = path.join(".venv").join("bin").join("python").exists();
                 result.push(SkillStatus {
                     name,
                     description: manifest.description,
@@ -492,6 +850,8 @@ impl SkillManager {
                     enabled: manifest.enabled,
                     running,
                     pid,
+                    manually_stopped: stopped,
+                    has_venv,
                     credentials: credential_status,
                 });
             }
@@ -535,7 +895,10 @@ impl SkillManager {
         let log_tail = Self::tail_file(&log_path, 100);
 
         let running = self.running.contains_key(name);
-        let pid = self.running.get(name).and_then(|s| s.child.id());
+        let pid = self.running.get(name).and_then(|s| match &s.handle {
+            SkillHandle::Process(child) => child.id(),
+            SkillHandle::Embedded { .. } => None,
+        });
 
         let stored = self.get_credentials(name);
         let credential_status: Vec<CredentialStatus> = manifest
@@ -557,6 +920,14 @@ impl SkillManager {
             })
             .collect();
 
+        let stopped = self.manually_stopped.contains(name);
+        let venv_dir = dir.join(".venv");
+        let has_venv = venv_dir.join("bin").join("python").exists();
+        let venv_path = if has_venv {
+            Some(venv_dir.to_string_lossy().into_owned())
+        } else {
+            None
+        };
         Ok(SkillDetail {
             status: SkillStatus {
                 name: manifest.name.clone(),
@@ -565,6 +936,8 @@ impl SkillManager {
                 enabled: manifest.enabled,
                 running,
                 pid,
+                manually_stopped: stopped,
+                has_venv,
                 credentials: credential_status,
             },
             manifest_raw,
@@ -572,6 +945,7 @@ impl SkillManager {
             log_tail,
             dir: dir.to_string_lossy().to_string(),
             entrypoint: manifest.entrypoint.clone(),
+            venv_path,
         })
     }
 
@@ -700,6 +1074,253 @@ impl SkillManager {
         Ok(())
     }
 
+    // -- Import / Delete ---------------------------------------------------
+
+    /// Import a skill from a source into the skills directory.
+    ///
+    /// Supported sources:
+    /// - **git**: clone a git repository URL
+    /// - **path**: copy a local directory
+    /// - **url**: download a `.tar.gz` or `.zip` archive from a URL
+    ///
+    /// An optional `name` override renames the skill directory (and updates
+    /// the manifest). If omitted, the directory name is inferred from the
+    /// source (repo basename, archive name, or directory name).
+    ///
+    /// Returns the skill name and directory path on success.
+    pub async fn import_skill(
+        &self,
+        source: &str,
+        location: &str,
+        name_override: Option<&str>,
+    ) -> Result<(String, PathBuf)> {
+        let dest_name = match name_override {
+            Some(n) if !n.is_empty() => sanitize_skill_name(n),
+            _ => infer_name_from_source(source, location),
+        };
+
+        if dest_name.is_empty() {
+            return Err(SafeAgentError::Config(
+                "could not determine skill name from source".into(),
+            ));
+        }
+
+        let dest = self.skills_dir.join(&dest_name);
+        if dest.exists() {
+            return Err(SafeAgentError::Config(format!(
+                "skill directory '{}' already exists — delete or rename it first",
+                dest_name,
+            )));
+        }
+
+        match source {
+            "git" => self.import_from_git(location, &dest).await?,
+            "path" => self.import_from_path(location, &dest)?,
+            "url" => self.import_from_url(location, &dest).await?,
+            other => {
+                return Err(SafeAgentError::Config(format!(
+                    "unknown import source type: '{other}' (expected git, path, or url)"
+                )));
+            }
+        }
+
+        // Validate that a skill.toml exists after import
+        let manifest_path = dest.join("skill.toml");
+        if !manifest_path.exists() {
+            // Check if the archive extracted into a single subdirectory
+            // (common pattern: repo-name/skill.toml)
+            if let Some(inner) = Self::find_nested_skill_dir(&dest) {
+                // Move contents up one level
+                Self::hoist_inner_dir(&inner, &dest)?;
+            }
+        }
+
+        if !dest.join("skill.toml").exists() {
+            // Clean up the directory we created
+            let _ = std::fs::remove_dir_all(&dest);
+            return Err(SafeAgentError::Config(
+                "imported source does not contain a skill.toml manifest".into(),
+            ));
+        }
+
+        // If a name override was given, patch the manifest
+        if name_override.is_some() {
+            let manifest_path = dest.join("skill.toml");
+            if let Ok(contents) = std::fs::read_to_string(&manifest_path) {
+                if let Ok(mut doc) = contents.parse::<toml::Value>() {
+                    if let Some(table) = doc.as_table_mut() {
+                        table.insert(
+                            "name".to_string(),
+                            toml::Value::String(dest_name.clone()),
+                        );
+                    }
+                    if let Ok(new_toml) = toml::to_string_pretty(&doc) {
+                        let _ = std::fs::write(&manifest_path, new_toml);
+                    }
+                }
+            }
+        }
+
+        // Read the final manifest name
+        let manifest = self.read_manifest(&dest.join("skill.toml"))?;
+        info!(
+            skill = %manifest.name,
+            source,
+            location,
+            "skill imported successfully"
+        );
+
+        Ok((manifest.name, dest))
+    }
+
+    /// Clone a git repo into the destination directory.
+    async fn import_from_git(&self, url: &str, dest: &Path) -> Result<()> {
+        info!(url, "cloning skill from git");
+        let output = Command::new("git")
+            .args(["clone", "--depth", "1", url])
+            .arg(dest)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+            .map_err(|e| SafeAgentError::Config(format!("failed to run git: {e}")))?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(SafeAgentError::Config(format!(
+                "git clone failed: {stderr}"
+            )));
+        }
+
+        // Remove the .git directory — we don't need the history
+        let _ = std::fs::remove_dir_all(dest.join(".git"));
+        Ok(())
+    }
+
+    /// Copy a local directory into the skills directory.
+    fn import_from_path(&self, src: &str, dest: &Path) -> Result<()> {
+        let src_path = std::path::Path::new(src);
+        if !src_path.is_dir() {
+            return Err(SafeAgentError::Config(format!(
+                "source path '{src}' is not a directory"
+            )));
+        }
+        copy_dir_recursive(src_path, dest)?;
+        Ok(())
+    }
+
+    /// Download an archive from a URL and extract it.
+    async fn import_from_url(&self, url: &str, dest: &Path) -> Result<()> {
+        info!(url, "downloading skill archive");
+        let response = reqwest::get(url)
+            .await
+            .map_err(|e| SafeAgentError::Config(format!("download failed: {e}")))?;
+
+        if !response.status().is_success() {
+            return Err(SafeAgentError::Config(format!(
+                "download returned HTTP {}",
+                response.status()
+            )));
+        }
+
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| SafeAgentError::Config(format!("failed to read response: {e}")))?;
+
+        std::fs::create_dir_all(dest).map_err(SafeAgentError::Io)?;
+
+        if url.ends_with(".tar.gz") || url.ends_with(".tgz") {
+            Self::extract_tar_gz(&bytes, dest)?;
+        } else if url.ends_with(".zip") {
+            Self::extract_zip(&bytes, dest)?;
+        } else {
+            // Try tar.gz first, fall back to zip
+            if Self::extract_tar_gz(&bytes, dest).is_err() {
+                if Self::extract_zip(&bytes, dest).is_err() {
+                    let _ = std::fs::remove_dir_all(dest);
+                    return Err(SafeAgentError::Config(
+                        "could not extract archive — unsupported format (expected .tar.gz or .zip)".into(),
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn extract_tar_gz(data: &[u8], dest: &Path) -> Result<()> {
+        use std::io::Read;
+        let gz = flate2::read::GzDecoder::new(data);
+        let mut archive = tar::Archive::new(gz);
+        archive
+            .unpack(dest)
+            .map_err(|e| SafeAgentError::Config(format!("tar extract failed: {e}")))?;
+        Ok(())
+    }
+
+    fn extract_zip(data: &[u8], dest: &Path) -> Result<()> {
+        let cursor = std::io::Cursor::new(data);
+        let mut archive = zip::ZipArchive::new(cursor)
+            .map_err(|e| SafeAgentError::Config(format!("zip open failed: {e}")))?;
+        archive
+            .extract(dest)
+            .map_err(|e| SafeAgentError::Config(format!("zip extract failed: {e}")))?;
+        Ok(())
+    }
+
+    /// Look for a single subdirectory that contains skill.toml (common when
+    /// cloning repos or extracting archives that wrap everything in one dir).
+    fn find_nested_skill_dir(dir: &Path) -> Option<PathBuf> {
+        let entries: Vec<_> = std::fs::read_dir(dir)
+            .ok()?
+            .flatten()
+            .filter(|e| e.path().is_dir())
+            .collect();
+
+        if entries.len() == 1 {
+            let inner = entries[0].path();
+            if inner.join("skill.toml").exists() {
+                return Some(inner);
+            }
+        }
+        None
+    }
+
+    /// Move all contents from `inner` up into `dest`, then remove the inner
+    /// directory.
+    fn hoist_inner_dir(inner: &Path, dest: &Path) -> Result<()> {
+        for entry in std::fs::read_dir(inner).map_err(SafeAgentError::Io)?.flatten() {
+            let from = entry.path();
+            let name = entry.file_name();
+            let to = dest.join(&name);
+            std::fs::rename(&from, &to).map_err(SafeAgentError::Io)?;
+        }
+        let _ = std::fs::remove_dir(inner);
+        Ok(())
+    }
+
+    /// Delete a skill directory entirely (stopping it first if running).
+    pub async fn delete_skill(&mut self, name: &str) -> Result<()> {
+        // Stop if running
+        if self.running.contains_key(name) {
+            self.stop_skill(name).await;
+        }
+
+        let dir = self.find_skill_dir(name).ok_or_else(|| {
+            SafeAgentError::Config(format!("skill '{name}' not found"))
+        })?;
+
+        std::fs::remove_dir_all(&dir).map_err(SafeAgentError::Io)?;
+
+        // Clean up credentials
+        self.credentials.remove(name);
+        self.save_credentials()?;
+
+        info!(skill = %name, "skill deleted");
+        Ok(())
+    }
+
     /// Stop all running skills (called on shutdown).
     pub async fn shutdown(&mut self) {
         let names: Vec<String> = self.running.keys().cloned().collect();
@@ -718,6 +1339,10 @@ pub struct SkillStatus {
     pub enabled: bool,
     pub running: bool,
     pub pid: Option<u32>,
+    /// True if the skill was manually stopped via API and won't auto-restart.
+    pub manually_stopped: bool,
+    /// Whether a Python venv exists for this skill.
+    pub has_venv: bool,
     pub credentials: Vec<CredentialStatus>,
 }
 
@@ -745,4 +1370,69 @@ pub struct SkillDetail {
     pub dir: String,
     /// Entrypoint file name
     pub entrypoint: String,
+    /// Path to the Python venv directory, if one exists.
+    pub venv_path: Option<String>,
+}
+
+// -- Free helpers --------------------------------------------------------
+
+/// Sanitise a user-provided skill name to a filesystem-safe directory name.
+fn sanitize_skill_name(name: &str) -> String {
+    name.chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_lowercase()
+}
+
+/// Infer a reasonable directory name from the import source.
+fn infer_name_from_source(source: &str, location: &str) -> String {
+    let raw = match source {
+        "git" => {
+            // https://github.com/user/repo.git -> repo
+            let base = location.rsplit('/').next().unwrap_or(location);
+            base.trim_end_matches(".git").to_string()
+        }
+        "path" => {
+            std::path::Path::new(location)
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_default()
+        }
+        "url" => {
+            let base = location.rsplit('/').next().unwrap_or(location);
+            base.trim_end_matches(".tar.gz")
+                .trim_end_matches(".tgz")
+                .trim_end_matches(".zip")
+                .to_string()
+        }
+        _ => String::new(),
+    };
+    sanitize_skill_name(&raw)
+}
+
+/// Check whether a command exists on `$PATH`.
+fn which_exists(cmd: &str) -> bool {
+    std::process::Command::new("which")
+        .arg(cmd)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Recursively copy a directory tree.
+fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> Result<()> {
+    std::fs::create_dir_all(dst).map_err(SafeAgentError::Io)?;
+    for entry in std::fs::read_dir(src).map_err(SafeAgentError::Io)?.flatten() {
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        if src_path.is_dir() {
+            copy_dir_recursive(&src_path, &dst_path)?;
+        } else {
+            std::fs::copy(&src_path, &dst_path).map_err(SafeAgentError::Io)?;
+        }
+    }
+    Ok(())
 }

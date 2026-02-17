@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Claude Monitor</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #0d1117;
+            color: #c9d1d9;
+            padding: 16px;
+            font-size: 13px;
+        }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+        .card {
+            background: #161b22;
+            border: 1px solid #30363d;
+            border-radius: 8px;
+            padding: 12px;
+        }
+        .card.full { grid-column: 1 / -1; }
+        .card h3 {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #8b949e;
+            margin-bottom: 8px;
+        }
+        .metric {
+            font-size: 28px;
+            font-weight: 700;
+            line-height: 1.2;
+        }
+        .metric-label {
+            font-size: 11px;
+            color: #8b949e;
+            margin-top: 2px;
+        }
+        .ok { color: #3fb950; }
+        .warn { color: #d29922; }
+        .danger { color: #f85149; }
+
+        .bar-bg {
+            width: 100%;
+            height: 8px;
+            background: #21262d;
+            border-radius: 4px;
+            margin-top: 8px;
+            overflow: hidden;
+        }
+        .bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            border-bottom: 1px solid #21262d;
+            font-size: 12px;
+        }
+        .stat-row:last-child { border-bottom: none; }
+        .stat-label { color: #8b949e; }
+        .stat-value { color: #c9d1d9; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .badge-ok { background: rgba(63,185,80,0.15); color: #3fb950; border: 1px solid rgba(63,185,80,0.3); }
+        .badge-warn { background: rgba(210,153,34,0.15); color: #d29922; border: 1px solid rgba(210,153,34,0.3); }
+        .badge-danger { background: rgba(248,81,73,0.15); color: #f85149; border: 1px solid rgba(248,81,73,0.3); }
+
+        .refresh-btn {
+            float: right;
+            background: #21262d;
+            border: 1px solid #30363d;
+            color: #c9d1d9;
+            padding: 4px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        .refresh-btn:hover { background: #30363d; }
+
+        .loading { text-align: center; padding: 24px; color: #8b949e; }
+        .error-msg { color: #f85149; text-align: center; padding: 16px; }
+    </style>
+</head>
+<body>
+    <button class="refresh-btn" id="refreshBtn">&#8635; Refresh</button>
+
+    <div id="loading" class="loading">Loading...</div>
+    <div id="error" class="error-msg" style="display:none"></div>
+
+    <div id="dashboard" style="display:none">
+        <div class="grid">
+            <div class="card">
+                <h3>OAuth Token</h3>
+                <div class="metric" id="tokenTime"></div>
+                <div class="metric-label">
+                    until expiry &nbsp;
+                    <span class="badge" id="tokenBadge"></span>
+                </div>
+            </div>
+            <div class="card">
+                <h3>Daily Usage</h3>
+                <div class="metric" id="usagePct"></div>
+                <div class="metric-label" id="usageDetail"></div>
+                <div class="bar-bg">
+                    <div class="bar-fill" id="usageBar"></div>
+                </div>
+            </div>
+            <div class="card full">
+                <h3>Details</h3>
+                <div class="stat-row"><span class="stat-label">Today Messages</span><span class="stat-value" id="todayMsgs"></span></div>
+                <div class="stat-row"><span class="stat-label">Total Messages (all time)</span><span class="stat-value" id="totalMsgs"></span></div>
+                <div class="stat-row"><span class="stat-label">Total Sessions</span><span class="stat-value" id="totalSessions"></span></div>
+                <div class="stat-row"><span class="stat-label">Token Refreshes</span><span class="stat-value" id="refreshCount"></span></div>
+                <div class="stat-row"><span class="stat-label">Last Refresh</span><span class="stat-value" id="lastRefresh"></span></div>
+                <div class="stat-row"><span class="stat-label">Checked At</span><span class="stat-value" id="checkedAt"></span></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function fmtTime(secs) {
+            if (secs <= 0) return "expired";
+            var h = Math.floor(secs / 3600);
+            var m = Math.floor((secs % 3600) / 60);
+            return h > 0 ? h + "h " + m + "m" : m + "m";
+        }
+
+        function setText(id, text) {
+            document.getElementById(id).textContent = String(text);
+        }
+
+        function setClass(id, cls) {
+            var el = document.getElementById(id);
+            el.className = el.className.replace(/\b(ok|warn|danger|badge-ok|badge-warn|badge-danger)\b/g, "").trim();
+            el.className = el.className + " " + cls;
+        }
+
+        async function load() {
+            try {
+                var resp = await fetch("/api/skills/claude-monitor/ext/status", { credentials: "same-origin" });
+                if (!resp.ok) throw new Error("HTTP " + resp.status);
+                var d = await resp.json();
+                render(d);
+            } catch (err) {
+                document.getElementById("loading").style.display = "none";
+                document.getElementById("dashboard").style.display = "none";
+                var errEl = document.getElementById("error");
+                errEl.style.display = "block";
+                errEl.textContent = "Error: " + err.message;
+            }
+        }
+
+        function render(d) {
+            document.getElementById("loading").style.display = "none";
+            document.getElementById("error").style.display = "none";
+            document.getElementById("dashboard").style.display = "block";
+
+            var pct = d.usage_percent || 0;
+            var tokenSecs = d.token ? d.token.expires_in_secs : 0;
+
+            // Token display
+            setText("tokenTime", fmtTime(tokenSecs));
+            var tokenClass = tokenSecs > 3600 ? "ok" : tokenSecs > 600 ? "warn" : "danger";
+            setClass("tokenTime", "metric " + tokenClass);
+
+            var tokenLabel = tokenSecs > 3600 ? "Healthy" : tokenSecs > 600 ? "Expiring Soon" : "Critical";
+            setText("tokenBadge", tokenLabel);
+            var badgeClass = tokenSecs > 3600 ? "badge-ok" : tokenSecs > 600 ? "badge-warn" : "badge-danger";
+            setClass("tokenBadge", "badge " + badgeClass);
+
+            // Usage display
+            setText("usagePct", pct + "%");
+            var usageClass = pct < 70 ? "ok" : pct < 85 ? "warn" : "danger";
+            setClass("usagePct", "metric " + usageClass);
+
+            var todayTokens = d.usage ? d.usage.today_tokens : 0;
+            var budget = d.daily_budget || 0;
+            setText("usageDetail", todayTokens.toLocaleString() + " / " + budget.toLocaleString() + " tokens");
+
+            var bar = document.getElementById("usageBar");
+            bar.style.width = Math.min(pct, 100) + "%";
+            bar.style.background = pct < 70 ? "#3fb950" : pct < 85 ? "#d29922" : "#f85149";
+
+            // Details
+            setText("todayMsgs", d.usage ? d.usage.today_messages : 0);
+            setText("totalMsgs", d.usage ? d.usage.total_messages.toLocaleString() : 0);
+            setText("totalSessions", d.usage ? d.usage.total_sessions : 0);
+            setText("refreshCount", d.state ? d.state.total_refreshes || 0 : 0);
+            setText("lastRefresh", d.state ? d.state.last_refresh_utc || "never" : "never");
+            setText("checkedAt", d.checked_at || "-");
+        }
+
+        document.getElementById("refreshBtn").addEventListener("click", load);
+        load();
+        setInterval(load, 30000);
+    </script>
+</body>
+</html>

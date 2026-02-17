@@ -109,3 +109,80 @@ export interface ChatResponse {
 }
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+
+// ---------------------------------------------------------------------------
+// Streaming tool progress SSE events
+// ---------------------------------------------------------------------------
+
+export type ToolEventType =
+    | 'thinking'
+    | 'tool_start'
+    | 'tool_result'
+    | 'approval_needed'
+    | 'turn_complete'
+    | 'error';
+
+export interface BaseToolEvent {
+    type: ToolEventType;
+    timestamp: string;
+}
+
+export interface ThinkingEvent extends BaseToolEvent {
+    type: 'thinking';
+    turn: number;
+    max_turns: number;
+    context?: string;
+}
+
+export interface ToolStartEvent extends BaseToolEvent {
+    type: 'tool_start';
+    tool: string;
+    reasoning: string;
+    auto_approved: boolean;
+    approved?: boolean;
+    approval_id?: string;
+    turn?: number;
+}
+
+export interface ToolResultEvent extends BaseToolEvent {
+    type: 'tool_result';
+    tool: string;
+    success: boolean;
+    output_preview: string;
+    approved?: boolean;
+    approval_id?: string;
+    turn?: number;
+}
+
+export interface ApprovalNeededEvent extends BaseToolEvent {
+    type: 'approval_needed';
+    tool: string;
+    id: string;
+    reasoning: string;
+    turn: number;
+}
+
+export interface TurnCompleteEvent extends BaseToolEvent {
+    type: 'turn_complete';
+    turns_used: number;
+    has_reply: boolean;
+    tool_calls_total: number;
+    pending_approvals?: number;
+    exhausted?: boolean;
+    context?: string;
+    turn?: number;
+}
+
+export interface ErrorEvent extends BaseToolEvent {
+    type: 'error';
+    message: string;
+    context?: string;
+}
+
+export type ToolEvent =
+    | ThinkingEvent
+    | ToolStartEvent
+    | ToolResultEvent
+    | ApprovalNeededEvent
+    | TurnCompleteEvent
+    | ErrorEvent;

@@ -1,6 +1,7 @@
 <script lang="ts">
     import { api } from '../lib/api';
     import { dashboard } from '../lib/state.svelte';
+    import { formatRelative } from '../lib/time';
     import type { CoreMemoryData, ConversationMessage, ArchivalEntry } from '../lib/types';
 
     let content = $state('');
@@ -98,7 +99,7 @@
                 {#each messages as m}
                     <div class="py-1.5 border-b border-border-muted text-sm">
                         <strong>{m.role}</strong>
-                        <span class="text-text-muted">{m.created_at}</span><br>
+                        <span class="text-text-muted">{formatRelative(m.created_at)}</span><br>
                         {m.content}
                     </div>
                 {/each}
@@ -110,7 +111,7 @@
                 {#each archivalEntries as e}
                     <div class="py-1.5 border-b border-border-muted text-sm">
                         <span class="text-xs text-primary-500 font-semibold uppercase tracking-wider">{e.category}</span>
-                        <span class="text-text-muted text-[11px]"> {e.created_at}</span><br>
+                        <span class="text-text-muted text-[11px]"> {formatRelative(e.created_at)}</span><br>
                         {e.content}
                     </div>
                 {/each}

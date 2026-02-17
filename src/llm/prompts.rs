@@ -1,10 +1,26 @@
-/// Build the system prompt appended to every Claude CLI invocation.
-pub fn system_prompt(personality: &str, agent_name: &str) -> String {
+use crate::tools::ToolRegistry;
+
+/// Build the system prompt appended to every LLM invocation.
+///
+/// When `tools` is provided, appends the tool-calling protocol and
+/// per-tool JSON schemas so the LLM can propose structured tool calls.
+///
+/// `timezone` is the IANA timezone name for the user (e.g. "America/New_York").
+/// When provided, the current local time in that timezone is injected into the
+/// prompt so the LLM can give time-aware responses.
+pub fn system_prompt(personality: &str, agent_name: &str, tools: Option<&ToolRegistry>, timezone: Option<&str>) -> String {
     let base = if personality.is_empty() {
         format!("You are {agent_name}, a helpful AI assistant.")
     } else {
         personality.to_string()
     };
+
+    let tool_section = match tools {
+        Some(registry) if !registry.is_empty() => build_tool_section(registry),
+        _ => String::new(),
+    };
+
+    let time_section = build_time_section(timezone);
 
     format!(
         r#"{base}
@@ -12,7 +28,8 @@ pub fn system_prompt(personality: &str, agent_name: &str) -> String {
 You are communicating with the user via Telegram.
 Keep replies concise and conversational.
 Do not use markdown formatting unless the user asks for it.
-
+{time_section}
+{tool_section}
 == SKILL SYSTEM ==
 
 You can create persistent services ("skills") that run alongside you.
@@ -79,6 +96,93 @@ def send_message(text):
     )
 ```
 
+== CONNECTED OAUTH ACCOUNTS ==
+
+The user has connected external service accounts through the dashboard's
+OAuth system.  A discovery manifest listing every connected account, its
+provider, scopes, and capabilities lives at:
+
+  /data/safe-agent/oauth/manifest.json
+
+Read that file FIRST whenever the user asks you to interact with an
+external service (calendar, email, files, repos, messaging, etc.).
+It looks like:
+
+```json
+{{
+  "accounts": [
+    {{
+      "provider": "google",
+      "account": "user@gmail.com",
+      "scopes": "...calendar ...gmail.readonly ...",
+      "capabilities": ["calendar", "email", "files"],
+      "token_file": "/data/safe-agent/oauth/google/user@gmail.com.json"
+    }},
+    {{
+      "provider": "microsoft",
+      "account": "user@outlook.com",
+      "scopes": "Calendars.Read Mail.Read ...",
+      "capabilities": ["calendar", "email"],
+      "token_file": "/data/safe-agent/oauth/microsoft/user@outlook.com.json"
+    }}
+  ]
+}}
+```
+
+Each token file contains: provider, account, access_token, refresh_token,
+client_id, client_secret, token_url, and scopes.
+
+IMPORTANT RULES:
+- ALWAYS read the manifest before accessing any external service.
+- NEVER ask the user to create new OAuth credentials or go to a cloud
+  console.  The tokens ALREADY EXIST.  Use them via exec + Python.
+- NEVER create a new skill with its own OAuth flow for a service that
+  is already represented in the manifest.
+- If the manifest is missing or empty, tell the user they need to
+  connect the relevant account in the dashboard Settings > OAuth tab.
+
+== How to use tokens by provider ==
+
+Google (calendar, gmail, drive):
+```python
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
+creds = Credentials.from_authorized_user_file("<token_file>")
+if creds.expired and creds.refresh_token:
+    creds.refresh(Request())
+service = build("calendar", "v3", credentials=creds)
+```
+Note: for Google, legacy authorized_user files also exist at
+/data/safe-agent/skills/google-oauth/data/accounts/ and
+/data/safe-agent/skills/calendar-reminder/data/credentials/.
+
+Microsoft (outlook calendar, mail, onedrive):
+```python
+import json, requests
+token = json.load(open("<token_file>"))
+headers = {{"Authorization": f"Bearer {{token['access_token']}}"}}
+r = requests.get("https://graph.microsoft.com/v1.0/me/calendarview"
+                  "?startDateTime=...&endDateTime=...", headers=headers)
+events = r.json().get("value", [])
+```
+
+GitHub:
+```python
+import json, requests
+token = json.load(open("<token_file>"))
+headers = {{"Authorization": f"token {{token['access_token']}}"}}
+repos = requests.get("https://api.github.com/user/repos", headers=headers).json()
+```
+
+Other providers (Slack, Discord, Spotify, Dropbox, LinkedIn, Notion, Twitter):
+Load token_file, use access_token as a Bearer token with their REST API.
+If a token is expired, refresh it by POSTing to the token_url with the
+refresh_token, client_id, and client_secret from the token file.
+
+A calendar-reminder daemon skill is already running that sends Telegram
+alerts 10 minutes before events for all linked calendar accounts.
+
 == Important guidelines ==
 
 - Skills run as background processes inside a Docker container
@@ -96,6 +200,182 @@ def send_message(text):
 - If the user provides credentials or tokens, add [[credentials]] entries to
   skill.toml so the operator can configure them via the dashboard. Never
   hardcode secrets. The dashboard at /api/skills shows credential status.
+- When the user asks about ANY external service (calendar, email, repos, etc.),
+  read /data/safe-agent/oauth/manifest.json and use the existing OAuth tokens
+  via exec + Python.  Do NOT create a new skill with its own credentials flow.
 "#
     )
+}
+
+/// Build a short section telling the LLM the current date/time in the user's
+/// timezone so it can give time-aware responses (greetings, scheduling, etc.).
+fn build_time_section(timezone: Option<&str>) -> String {
+    use chrono::Utc;
+
+    let tz_name = timezone.unwrap_or("UTC");
+    let tz: chrono_tz::Tz = tz_name.parse().unwrap_or(chrono_tz::UTC);
+    let now = Utc::now().with_timezone(&tz);
+    let formatted = now.format("%A, %B %-d, %Y at %-I:%M %p %Z").to_string();
+
+    format!(
+        "The current date and time for the user is: {formatted} ({tz_name}).\n\
+         Use this when the user asks about the time, scheduling, or when context \
+         requires awareness of the current date or time of day."
+    )
+}
+
+/// Build the tool-calling protocol section with per-tool schemas.
+fn build_tool_section(registry: &ToolRegistry) -> String {
+    let mut tools: Vec<_> = registry.list().iter().map(|(n, _)| n.to_string()).collect();
+    tools.sort();
+
+    let mut schemas = String::new();
+    for name in &tools {
+        if let Some(tool) = registry.get(name) {
+            let schema = tool.parameters_schema();
+            let schema_str = serde_json::to_string(&schema).unwrap_or_default();
+            schemas.push_str(&format!(
+                "### {name}\n{desc}\nParameters: {schema_str}\n\n",
+                name = tool.name(),
+                desc = tool.description(),
+            ));
+        }
+    }
+
+    format!(
+        r#"
+== TOOL CALLING ==
+
+You have tools you can use to take actions. To call a tool, emit a
+fenced code block tagged "tool_call" containing a JSON object:
+
+```tool_call
+{{"tool": "tool_name", "params": {{}}, "reasoning": "brief explanation"}}
+```
+
+Rules:
+- "tool" must be one of the tool names listed below.
+- "params" is an object matching the tool's parameter schema.
+- "reasoning" is a short explanation of why you are calling this tool.
+- You may include MULTIPLE tool_call blocks in one response.
+- You may include natural-language text before, between, and after
+  tool_call blocks to explain your thinking.
+- After the tools execute, you will see the results and should give
+  the user a final natural-language answer.
+- If you do NOT need a tool, just reply with normal text (no blocks).
+- Prefer using tools over telling the user to do something themselves.
+
+== AVAILABLE TOOLS ==
+
+{schemas}"#,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tools::{Tool, ToolOutput, ToolRegistry, ToolContext};
+    use async_trait::async_trait;
+
+    struct MockPromptTool {
+        name: &'static str,
+        description: &'static str,
+    }
+
+    #[async_trait]
+    impl Tool for MockPromptTool {
+        fn name(&self) -> &str {
+            self.name
+        }
+
+        fn description(&self) -> &str {
+            self.description
+        }
+
+        fn parameters_schema(&self) -> serde_json::Value {
+            serde_json::json!({"type": "object"})
+        }
+
+        async fn execute(
+            &self,
+            _params: serde_json::Value,
+            _ctx: &ToolContext,
+        ) -> crate::error::Result<ToolOutput> {
+            Ok(ToolOutput::ok("ok"))
+        }
+    }
+
+    fn registry_with_mock_tool() -> ToolRegistry {
+        let mut reg = ToolRegistry::new();
+        reg.register(Box::new(MockPromptTool {
+            name: "test_tool",
+            description: "A tool for testing",
+        }));
+        reg
+    }
+
+    #[test]
+    fn test_system_prompt_empty_personality() {
+        let prompt = system_prompt("", "TestAgent", None, None);
+        assert!(prompt.contains("You are TestAgent, a helpful AI assistant."));
+        assert!(!prompt.contains("== AVAILABLE TOOLS =="));
+    }
+
+    #[test]
+    fn test_system_prompt_with_personality() {
+        let personality = "You are a specialized coding assistant.";
+        let prompt = system_prompt(personality, "TestAgent", None, None);
+        assert!(prompt.contains("You are a specialized coding assistant."));
+        assert!(!prompt.contains("You are TestAgent, a helpful AI assistant."));
+    }
+
+    #[test]
+    fn test_system_prompt_none_tools() {
+        let prompt = system_prompt("", "Agent", None, None);
+        assert!(!prompt.contains("== AVAILABLE TOOLS =="));
+        assert!(!prompt.contains("== TOOL CALLING =="));
+    }
+
+    #[test]
+    fn test_system_prompt_empty_registry() {
+        let reg = ToolRegistry::new();
+        let prompt = system_prompt("", "Agent", Some(&reg), None);
+        assert!(!prompt.contains("test_tool"));
+        assert!(prompt.contains("== SKILL SYSTEM =="));
+    }
+
+    #[test]
+    fn test_system_prompt_with_registry_containing_tool() {
+        let reg = registry_with_mock_tool();
+        let prompt = system_prompt("", "Agent", Some(&reg), None);
+
+        assert!(prompt.contains("== AVAILABLE TOOLS =="));
+        assert!(prompt.contains("test_tool"));
+        assert!(prompt.contains("A tool for testing"));
+        assert!(prompt.contains("== TOOL CALLING =="));
+        assert!(prompt.contains("Parameters:"));
+    }
+
+    #[test]
+    fn test_build_tool_section_indirect() {
+        let reg = registry_with_mock_tool();
+        let prompt = system_prompt("", "Agent", Some(&reg), None);
+
+        assert!(prompt.contains("### test_tool"));
+        assert!(prompt.contains("A tool for testing"));
+        assert!(prompt.contains("object"));
+    }
+
+    #[test]
+    fn test_system_prompt_includes_timezone() {
+        let prompt = system_prompt("", "Agent", None, Some("America/New_York"));
+        assert!(prompt.contains("America/New_York"));
+        assert!(prompt.contains("current date and time"));
+    }
+
+    #[test]
+    fn test_system_prompt_utc_fallback() {
+        let prompt = system_prompt("", "Agent", None, Some("UTC"));
+        assert!(prompt.contains("UTC"));
+    }
 }

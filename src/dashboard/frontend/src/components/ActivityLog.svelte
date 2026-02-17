@@ -1,6 +1,7 @@
 <script lang="ts">
     import { api } from '../lib/api';
     import { dashboard } from '../lib/state.svelte';
+    import { formatRelative } from '../lib/time';
     import type { ActivityEntry } from '../lib/types';
 
     let entries = $state<ActivityEntry[]>([]);
@@ -42,7 +43,7 @@
                             <br><span class="text-text-muted">{e.detail.slice(0, 200)}</span>
                         {/if}
                     </div>
-                    <div class="text-[11px] text-text-subtle whitespace-nowrap">{e.created_at}</div>
+                    <div class="text-[11px] text-text-subtle whitespace-nowrap">{formatRelative(e.created_at)}</div>
                 </div>
             {/each}
         {/if}

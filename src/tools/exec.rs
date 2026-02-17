@@ -74,13 +74,11 @@ impl Tool for ExecTool {
 
         debug!(command, ?work_dir, timeout, "executing command");
 
+        let mut cmd = build_sandboxed_command(command, &work_dir, &ctx.trash);
+
         let result = tokio::time::timeout(
             std::time::Duration::from_secs(timeout),
-            Command::new("sh")
-                .arg("-c")
-                .arg(command)
-                .current_dir(&work_dir)
-                .output(),
+            cmd.output(),
         )
         .await;
 
@@ -114,10 +112,141 @@ impl Tool for ExecTool {
                     })
                 }
             }
-            Ok(Err(e)) => Ok(ToolOutput::error(format!("failed to execute: {e}"))),
+            Ok(Err(e)) => Ok(ToolOutput::error(format!("failed to run: {e}"))),
             Err(_) => Ok(ToolOutput::error(format!(
                 "command timed out after {timeout}s"
             ))),
         }
+    }
+}
+
+/// Build a Command with platform-appropriate shell, trash-aware PATH, and
+/// resource limits.
+fn build_sandboxed_command(
+    shell_cmd: &str,
+    work_dir: &std::path::Path,
+    trash: &crate::trash::TrashManager,
+) -> Command {
+    // On Unix, prepend the trash bin dir so `rm` / `rmdir` invocations in
+    // shell commands are intercepted by our wrapper scripts.
+    #[cfg(unix)]
+    let mut cmd = {
+        let mut c = Command::new("sh");
+        c.arg("-c").arg(shell_cmd);
+
+        // Prepend trash wrappers to PATH
+        let trash_bin = trash.bin_dir().to_string_lossy().to_string();
+        let current_path = std::env::var("PATH").unwrap_or_default();
+        let new_path = format!("{trash_bin}:{current_path}");
+        c.env("PATH", new_path);
+
+        c
+    };
+
+    #[cfg(windows)]
+    let mut cmd = {
+        let mut c = Command::new("cmd.exe");
+        c.arg("/C").arg(shell_cmd);
+        let _ = trash; // not used on Windows
+        c
+    };
+
+    cmd.current_dir(work_dir);
+
+    // Apply resource limits on Unix via pre_exec
+    #[cfg(unix)]
+    {
+        #[allow(unused_imports)]
+        use std::os::unix::process::CommandExt;
+        let limits = crate::security::ProcessLimits::default();
+        unsafe {
+            cmd.pre_exec(move || crate::security::apply_process_limits(&limits));
+        }
+    }
+
+    cmd
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db;
+    use crate::messaging::MessagingManager;
+    use crate::security::SandboxedFs;
+    use crate::trash::TrashManager;
+    use std::sync::Arc;
+
+    fn test_ctx() -> ToolContext {
+        let base = std::env::temp_dir().join(format!("sa-exectest-{}", std::process::id()));
+        let sandbox_dir = base.join("sandbox");
+        let trash_dir = base.join("trash");
+        std::fs::create_dir_all(&sandbox_dir).unwrap();
+        std::fs::create_dir_all(&trash_dir).unwrap();
+
+        ToolContext {
+            sandbox: SandboxedFs::new(sandbox_dir).unwrap(),
+            db: db::test_db(),
+            http_client: reqwest::Client::new(),
+            messaging: Arc::new(MessagingManager::new()),
+            trash: Arc::new(TrashManager::new(&trash_dir).unwrap()),
+        }
+    }
+
+    #[tokio::test]
+    async fn exec_empty_command() {
+        let ctx = test_ctx();
+        let tool = ExecTool::new(30);
+        let r = tool.execute(serde_json::json!({"command": ""}), &ctx).await.unwrap();
+        assert!(!r.success);
+        assert!(r.output.contains("command is required"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn exec_echo() {
+        let ctx = test_ctx();
+        let tool = ExecTool::new(10);
+        let r = tool.execute(
+            serde_json::json!({"command": "echo hello"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(r.success, "output: {}", r.output);
+        assert!(r.output.contains("hello"));
+        assert_eq!(r.metadata.unwrap()["exit_code"], 0);
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn exec_failing_command() {
+        let ctx = test_ctx();
+        let tool = ExecTool::new(10);
+        let r = tool.execute(
+            serde_json::json!({"command": "false"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(!r.success);
+        assert!(r.output.contains("exit code"));
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn exec_timeout() {
+        let ctx = test_ctx();
+        let tool = ExecTool::new(1);
+        let r = tool.execute(
+            serde_json::json!({"command": "sleep 30", "timeout_secs": 1}),
+            &ctx,
+        ).await.unwrap();
+        assert!(!r.success);
+        assert!(r.output.contains("timed out"));
+    }
+
+    #[test]
+    fn tool_metadata() {
+        let tool = ExecTool::new(30);
+        assert_eq!(tool.name(), "exec");
+        assert!(!tool.description().is_empty());
+        let schema = tool.parameters_schema();
+        assert!(schema["required"].as_array().unwrap().contains(&serde_json::json!("command")));
     }
 }

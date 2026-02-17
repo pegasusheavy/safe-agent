@@ -7,16 +7,22 @@ services:
     container_name: safe-agent
     restart: unless-stopped
     network_mode: host
-    user: "${UID:-1000}:${GID:-1000}"
+    # Entrypoint runs as root to set up chroot jail, then drops to
+    # the safeagent user via su-exec.  Set NO_JAIL=1 to bypass.
+    # SYS_ADMIN is required for mount --bind in the chroot jail setup;
+    # it is dropped when the entrypoint exec's into safeagent via su-exec.
+    cap_add:
+      - SYS_ADMIN
     volumes:
       # Persistent agent data (SQLite, memory, etc.)
       - ${HOME}/.local/share/safe-agent:/data/safe-agent
       # Agent config (read-only)
       - ./config.toml:/config/safe-agent/config.toml:ro
-      # Claude CLI profile directory — must be writable (Claude writes stats/debug)
-      - ${CLAUDE_CONFIG_DIR:-${HOME}/.claude}:/home/agent/.claude
+      # Claude CLI profile directory — mounted at a dedicated path and
+      # bind-mounted into the chroot jail by the entrypoint script.
+      - ${CLAUDE_CONFIG_DIR:-${HOME}/.claude}:/claude-config
     env_file:
       - .env
     environment:
-      - CLAUDE_CONFIG_DIR=/home/agent/.claude
-      - HOME=/home/agent
+      - CLAUDE_CONFIG_DIR=/claude-config
+      - HOME=/home/safeagent

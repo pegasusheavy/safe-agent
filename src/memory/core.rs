@@ -45,3 +45,45 @@ impl CoreMemory {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::test_db;
+
+    #[tokio::test]
+    async fn init_sets_personality() {
+        let db = test_db();
+        let core = CoreMemory::new(db);
+        core.init("You are helpful").await.unwrap();
+        let p = core.get().await.unwrap();
+        assert_eq!(p, "You are helpful");
+    }
+
+    #[tokio::test]
+    async fn init_is_idempotent() {
+        let db = test_db();
+        let core = CoreMemory::new(db);
+        core.init("First").await.unwrap();
+        core.init("Second").await.unwrap();
+        let p = core.get().await.unwrap();
+        assert_eq!(p, "First");
+    }
+
+    #[tokio::test]
+    async fn update_changes_personality() {
+        let db = test_db();
+        let core = CoreMemory::new(db);
+        core.init("Original").await.unwrap();
+        core.update("Updated").await.unwrap();
+        let p = core.get().await.unwrap();
+        assert_eq!(p, "Updated");
+    }
+
+    #[tokio::test]
+    async fn get_before_init_errors() {
+        let db = test_db();
+        let core = CoreMemory::new(db);
+        assert!(core.get().await.is_err());
+    }
+}

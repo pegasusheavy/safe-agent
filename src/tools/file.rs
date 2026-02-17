@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use tracing::debug;
+use tracing::{debug, info};
 
 use super::{Tool, ToolContext, ToolOutput};
 use crate::error::Result;
@@ -168,6 +168,239 @@ impl Tool for EditFileTool {
             ))),
             Err(e) => Ok(ToolOutput::error(format!("failed to write: {e}"))),
         }
+    }
+}
+
+// -- DeleteFile ----------------------------------------------------------
+
+pub struct DeleteFileTool;
+
+#[async_trait]
+impl Tool for DeleteFileTool {
+    fn name(&self) -> &str {
+        "delete_file"
+    }
+
+    fn description(&self) -> &str {
+        "Delete a file or directory from the sandbox. Items are moved to trash and can be recovered from the dashboard."
+    }
+
+    fn parameters_schema(&self) -> serde_json::Value {
+        serde_json::json!({
+            "type": "object",
+            "required": ["path"],
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Relative path within the sandbox"
+                }
+            }
+        })
+    }
+
+    async fn execute(&self, params: serde_json::Value, ctx: &ToolContext) -> Result<ToolOutput> {
+        let path = params
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or_default();
+
+        if path.is_empty() {
+            return Ok(ToolOutput::error("path is required"));
+        }
+
+        let rel = std::path::Path::new(path);
+        let abs = ctx.sandbox.resolve(rel)?;
+
+        if !abs.exists() {
+            return Ok(ToolOutput::error(format!("not found: {path}")));
+        }
+
+        debug!(?abs, "deleting file (moving to trash)");
+
+        match ctx.trash.trash(&abs, "tool:delete_file") {
+            Ok(entry) => {
+                info!(id = %entry.id, path = %path, "file moved to trash");
+                Ok(ToolOutput::ok(format!(
+                    "Moved '{}' to trash (ID: {}). Can be restored from the dashboard.",
+                    path, entry.id
+                )))
+            }
+            Err(e) => Ok(ToolOutput::error(format!("failed to trash: {e}"))),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db;
+    use crate::messaging::MessagingManager;
+    use crate::security::SandboxedFs;
+    use crate::trash::TrashManager;
+    use std::sync::Arc;
+
+    fn test_ctx(base: &std::path::Path) -> ToolContext {
+        let sandbox_dir = base.join("sandbox");
+        let trash_dir = base.join("trash");
+        std::fs::create_dir_all(&sandbox_dir).unwrap();
+        std::fs::create_dir_all(&trash_dir).unwrap();
+
+        ToolContext {
+            sandbox: SandboxedFs::new(sandbox_dir).unwrap(),
+            db: db::test_db(),
+            http_client: reqwest::Client::new(),
+            messaging: Arc::new(MessagingManager::new()),
+            trash: Arc::new(TrashManager::new(&trash_dir).unwrap()),
+        }
+    }
+
+    #[tokio::test]
+    async fn read_file_success() {
+        let base = std::env::temp_dir().join(format!("sa-test-read-{}", std::process::id()));
+        let ctx = test_ctx(&base);
+        ctx.sandbox.write(std::path::Path::new("hello.txt"), b"world").unwrap();
+        let result = ReadFileTool.execute(serde_json::json!({"path": "hello.txt"}), &ctx).await.unwrap();
+        assert!(result.success);
+        assert_eq!(result.output, "world");
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[tokio::test]
+    async fn read_file_not_found() {
+        let base = std::env::temp_dir().join(format!("sa-test-readnf-{}", std::process::id()));
+        let ctx = test_ctx(&base);
+        let result = ReadFileTool.execute(serde_json::json!({"path": "nope.txt"}), &ctx).await.unwrap();
+        assert!(!result.success);
+        assert!(result.output.contains("failed to read"));
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[tokio::test]
+    async fn read_file_empty_path() {
+        let base = std::env::temp_dir().join(format!("sa-test-readep-{}", std::process::id()));
+        let ctx = test_ctx(&base);
+        let result = ReadFileTool.execute(serde_json::json!({"path": ""}), &ctx).await.unwrap();
+        assert!(!result.success);
+        assert!(result.output.contains("path is required"));
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[tokio::test]
+    async fn write_file_success() {
+        let base = std::env::temp_dir().join(format!("sa-test-write-{}", std::process::id()));
+        let ctx = test_ctx(&base);
+        let result = WriteFileTool.execute(
+            serde_json::json!({"path": "out.txt", "content": "hello"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(result.success);
+        assert!(result.output.contains("5 bytes"));
+        let read = ctx.sandbox.read_to_string(std::path::Path::new("out.txt")).unwrap();
+        assert_eq!(read, "hello");
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[tokio::test]
+    async fn write_file_empty_path() {
+        let base = std::env::temp_dir().join(format!("sa-test-writeep-{}", std::process::id()));
+        let ctx = test_ctx(&base);
+        let result = WriteFileTool.execute(
+            serde_json::json!({"path": "", "content": "data"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(!result.success);
+        assert!(result.output.contains("path is required"));
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[tokio::test]
+    async fn edit_file_replaces_string() {
+        let base = std::env::temp_dir().join(format!("sa-test-edit-{}", std::process::id()));
+        let ctx = test_ctx(&base);
+        ctx.sandbox.write(std::path::Path::new("doc.txt"), b"foo bar baz").unwrap();
+        let result = EditFileTool.execute(
+            serde_json::json!({"path": "doc.txt", "old_string": "bar", "new_string": "qux"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(result.success);
+        assert!(result.output.contains("Replaced 1"));
+        let read = ctx.sandbox.read_to_string(std::path::Path::new("doc.txt")).unwrap();
+        assert_eq!(read, "foo qux baz");
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[tokio::test]
+    async fn edit_file_string_not_found() {
+        let base = std::env::temp_dir().join(format!("sa-test-editnf-{}", std::process::id()));
+        let ctx = test_ctx(&base);
+        ctx.sandbox.write(std::path::Path::new("doc.txt"), b"hello").unwrap();
+        let result = EditFileTool.execute(
+            serde_json::json!({"path": "doc.txt", "old_string": "xyz", "new_string": "abc"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(!result.success);
+        assert!(result.output.contains("not found"));
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[tokio::test]
+    async fn edit_file_empty_path_or_old() {
+        let base = std::env::temp_dir().join(format!("sa-test-editep-{}", std::process::id()));
+        let ctx = test_ctx(&base);
+        let r1 = EditFileTool.execute(
+            serde_json::json!({"path": "", "old_string": "x", "new_string": "y"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(!r1.success);
+        let r2 = EditFileTool.execute(
+            serde_json::json!({"path": "x", "old_string": "", "new_string": "y"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(!r2.success);
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[tokio::test]
+    async fn delete_file_moves_to_trash() {
+        let base = std::env::temp_dir().join(format!("sa-test-del-{}", std::process::id()));
+        let ctx = test_ctx(&base);
+        ctx.sandbox.write(std::path::Path::new("delete-me.txt"), b"bye").unwrap();
+        let result = DeleteFileTool.execute(
+            serde_json::json!({"path": "delete-me.txt"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(result.success);
+        assert!(result.output.contains("trash"));
+        assert!(!ctx.sandbox.resolve(std::path::Path::new("delete-me.txt")).unwrap().exists());
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[tokio::test]
+    async fn delete_file_not_found() {
+        let base = std::env::temp_dir().join(format!("sa-test-delnf-{}", std::process::id()));
+        let ctx = test_ctx(&base);
+        let result = DeleteFileTool.execute(
+            serde_json::json!({"path": "nope.txt"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(!result.success);
+        assert!(result.output.contains("not found"));
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[tokio::test]
+    async fn tool_names_and_schemas() {
+        assert_eq!(ReadFileTool.name(), "read_file");
+        assert_eq!(WriteFileTool.name(), "write_file");
+        assert_eq!(EditFileTool.name(), "edit_file");
+        assert_eq!(DeleteFileTool.name(), "delete_file");
+        assert!(!ReadFileTool.description().is_empty());
+        assert!(!WriteFileTool.description().is_empty());
+        assert!(!EditFileTool.description().is_empty());
+        assert!(!DeleteFileTool.description().is_empty());
+        let schema = ReadFileTool.parameters_schema();
+        assert_eq!(schema["type"], "object");
+        assert!(schema["required"].as_array().unwrap().contains(&serde_json::json!("path")));
     }
 }
 

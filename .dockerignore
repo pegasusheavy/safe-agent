@@ -1,9 +1,51 @@
+# === Build artifacts (huge — never send to Docker daemon) ===
 target/
+
+# === VCS / IDE / AI tooling ===
 .git/
 .claude/
 .cursor/
+.vscode/
+.idea/
+
+# === Node dependencies (reinstalled in container if needed) ===
+node_modules/
+.pnpm-store/
+
+# === Documentation (not needed at runtime) ===
 *.md
+!README.md
+
+# === Environment & secrets (injected via env_file / volumes) ===
 .env
 .env.*
 !.env.example
+config.toml
 docker-compose.yml
+docker-compose.override.yml
+
+# === Test / coverage artifacts ===
+coverage/
+*.profraw
+lcov.info
+tarpaulin-report.html
+
+# === OS junk ===
+.DS_Store
+Thumbs.db
+
+# === Python caches ===
+__pycache__/
+*.py[cod]
+
+# === Editor swap files ===
+*.swp
+*.swo
+*~
+
+# === CI config (not needed in image) ===
+.github/
+.gitlab-ci.yml
+
+# === Misc ===
+*.log

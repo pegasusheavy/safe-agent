@@ -2,22 +2,27 @@ mod acme;
 mod agent;
 mod approval;
 mod config;
+mod crypto;
 mod dashboard;
 mod db;
 mod error;
+mod federation;
+mod goals;
 mod llm;
 mod memory;
+mod messaging;
 mod security;
 mod skills;
-mod telegram;
 mod tools;
+mod trash;
 mod tunnel;
+mod users;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::sync::{broadcast, Mutex};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::agent::Agent;
 use crate::config::Config;
@@ -83,6 +88,25 @@ async fn main() {
     };
     info!(root = %sandbox.root().display(), "sandbox initialized");
 
+    // Apply kernel-level Landlock filesystem sandbox (Linux 5.13+)
+    let config_dir = dirs::config_dir()
+        .unwrap_or_else(|| std::path::PathBuf::from(".config"))
+        .join("safe-agent");
+    match crate::security::apply_landlock(&data_dir, &config_dir) {
+        Ok(()) => {}
+        Err(e) => warn!("landlock sandbox not applied: {e}"),
+    }
+
+    // Initialize trash system
+    let trash = match trash::TrashManager::new(&data_dir) {
+        Ok(t) => Arc::new(t),
+        Err(e) => {
+            error!("failed to initialize trash system: {e}");
+            return;
+        }
+    };
+    info!(bin_dir = %trash.bin_dir().display(), "trash system initialized");
+
     // Open database
     let db_path = sandbox.root().join("safe-agent.db");
     let db = match db::open(&db_path) {
@@ -107,28 +131,72 @@ async fn main() {
     // Shutdown signal
     let (shutdown_tx, _) = broadcast::channel::<()>(1);
 
-    // Create Telegram bot handle early so we can share it with the agent's ToolContext
-    let telegram_bot = if config.telegram.enabled {
-        match config::Config::telegram_bot_token() {
-            Ok(token) => Some(teloxide::Bot::new(token)),
-            Err(e) => {
-                error!("TELEGRAM_BOT_TOKEN not set: {e}");
-                None
+    // ----- Build the MessagingManager -----
+    let mut msg_manager = messaging::MessagingManager::new();
+
+    // Register Telegram backend (if enabled)
+    let telegram_backend: Option<Arc<messaging::telegram::TelegramBackend>> =
+        if config.telegram.enabled {
+            match config::Config::telegram_bot_token() {
+                Ok(token) => {
+                    let bot = teloxide::Bot::new(token);
+                    let backend = Arc::new(messaging::telegram::TelegramBackend::new(bot));
+                    let primary_channel = config
+                        .telegram
+                        .allowed_chat_ids
+                        .first()
+                        .map(|id| id.to_string())
+                        .unwrap_or_default();
+                    msg_manager.register(backend.clone(), primary_channel);
+                    Some(backend)
+                }
+                Err(e) => {
+                    error!("TELEGRAM_BOT_TOKEN not set: {e}");
+                    None
+                }
             }
+        } else {
+            None
+        };
+
+    // Register WhatsApp backend (if enabled)
+    let whatsapp_backend: Option<Arc<messaging::whatsapp::WhatsAppBackend>> =
+        if config.whatsapp.enabled {
+            let backend = Arc::new(messaging::whatsapp::WhatsAppBackend::new(
+                config.whatsapp.clone(),
+            ));
+            let primary_channel = config
+                .whatsapp
+                .allowed_numbers
+                .first()
+                .cloned()
+                .unwrap_or_default();
+            msg_manager.register(backend.clone(), primary_channel);
+            Some(backend)
+        } else {
+            None
+        };
+
+    let messaging = Arc::new(msg_manager);
+
+    // Initialize PII encryption key (generated on first launch)
+    let encryptor = match crypto::FieldEncryptor::ensure_key(&data_dir) {
+        Ok(e) => e,
+        Err(e) => {
+            error!("failed to initialize PII encryption: {e}");
+            return;
         }
-    } else {
-        None
     };
 
-    // Build the agent (with telegram bot in ToolContext)
-    let telegram_chat_id = config.telegram.allowed_chat_ids.first().copied();
+    // Build the agent
     let agent = match Agent::new(
         config.clone(),
         db.clone(),
         sandbox,
         tool_registry,
-        telegram_bot.clone(),
-        telegram_chat_id,
+        messaging.clone(),
+        trash.clone(),
+        encryptor,
     )
     .await
     {
@@ -139,10 +207,22 @@ async fn main() {
         }
     };
 
-    // Start Telegram bot (if enabled)
-    let _telegram_shutdown = if config.telegram.enabled {
-        match telegram::start(db.clone(), config.telegram.clone(), agent.clone()).await {
-            Ok((_bot, tx)) => {
+    // Migrate any existing plaintext PII to encrypted form
+    if let Err(e) = agent.user_manager.migrate_encrypt_pii().await {
+        warn!("PII migration warning: {e}");
+    }
+
+    // Start Telegram dispatcher (if enabled)
+    let _telegram_shutdown = if let Some(ref tg_backend) = telegram_backend {
+        match messaging::telegram::start(
+            db.clone(),
+            config.telegram.clone(),
+            agent.clone(),
+            tg_backend.clone(),
+        )
+        .await
+        {
+            Ok(tx) => {
                 info!("telegram bot started");
                 Some(tx)
             }
@@ -154,6 +234,16 @@ async fn main() {
     } else {
         None
     };
+
+    // Start WhatsApp bridge (if enabled)
+    if let Some(ref wa_backend) = whatsapp_backend {
+        let data_dir = config::Config::data_dir();
+        if let Err(e) = wa_backend.start_bridge(data_dir).await {
+            error!("failed to start whatsapp bridge: {e}");
+        } else {
+            info!("whatsapp bridge started");
+        }
+    }
 
     // Start ngrok tunnel (if enabled)
     let tunnel_url = if config.tunnel.enabled
@@ -235,8 +325,10 @@ async fn main() {
         let db = db.clone();
         let shutdown_rx = shutdown_tx.subscribe();
         let tls = tls_config.clone();
+        let messaging_clone = messaging.clone();
+        let trash_clone = trash.clone();
         tokio::spawn(async move {
-            if let Err(e) = dashboard::serve(config, agent, db, shutdown_rx, tls).await {
+            if let Err(e) = dashboard::serve(config, agent, db, shutdown_rx, tls, messaging_clone, trash_clone).await {
                 error!("dashboard error: {e}");
                 // If the dashboard (ACME cert acquisition) fails, kill the
                 // entire process so the container restarts.
@@ -284,6 +376,7 @@ fn build_tool_registry(config: &Config) -> ToolRegistry {
     registry.register(Box::new(file::ReadFileTool));
     registry.register(Box::new(file::WriteFileTool));
     registry.register(Box::new(file::EditFileTool));
+    registry.register(Box::new(file::DeleteFileTool));
     registry.register(Box::new(file::ApplyPatchTool));
 
     if config.tools.web.enabled {
@@ -310,6 +403,7 @@ fn build_tool_registry(config: &Config) -> ToolRegistry {
         registry.register(Box::new(cron::CronTool::new()));
     }
 
+    registry.register(Box::new(goal::GoalTool::new()));
     registry.register(Box::new(image::ImageTool::new()));
     registry.register(Box::new(memory::MemorySearchTool));
     registry.register(Box::new(memory::MemoryGetTool));

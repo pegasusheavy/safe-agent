@@ -8,27 +8,144 @@ mod openrouter;
 #[cfg(feature = "local")]
 mod local;
 
+use std::collections::HashMap;
+use std::sync::Arc;
+
 use tracing::info;
 
 use crate::config::Config;
 use crate::error::{Result, SafeAgentError};
+use crate::tools::ToolRegistry;
 
-/// Unified LLM engine that dispatches to one of six backends:
+// -- Plugin trait -----------------------------------------------------------
+
+/// Trait that all LLM backends implement.  Allows dynamic dispatch so new
+/// backends can be registered at runtime without compile-time feature flags.
+#[async_trait::async_trait]
+pub trait LlmBackend: Send + Sync {
+    /// Human-readable name of this backend (e.g. "Claude CLI", "OpenRouter API").
+    fn name(&self) -> &str;
+
+    /// Generate a response for the given user message.
+    ///
+    /// When `tools` is provided, the system prompt includes tool schemas and
+    /// the tool-calling protocol so the LLM can propose structured tool calls.
+    async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String>;
+}
+
+// -- Plugin registry --------------------------------------------------------
+
+/// Registry of available LLM backends.  Built-in backends are registered
+/// automatically; additional backends can be added via `register()`.
+pub struct LlmPluginRegistry {
+    backends: HashMap<String, Arc<dyn LlmBackend>>,
+}
+
+impl LlmPluginRegistry {
+    /// Create a new empty registry.
+    pub fn new() -> Self {
+        Self {
+            backends: HashMap::new(),
+        }
+    }
+
+    /// Register a new backend plugin.
+    pub fn register(&mut self, key: &str, backend: Arc<dyn LlmBackend>) {
+        info!(backend = key, name = backend.name(), "LLM plugin registered");
+        self.backends.insert(key.to_string(), backend);
+    }
+
+    /// Get a registered backend by key.
+    pub fn get(&self, key: &str) -> Option<Arc<dyn LlmBackend>> {
+        self.backends.get(key).cloned()
+    }
+
+    /// List all registered backend keys.
+    pub fn list(&self) -> Vec<String> {
+        self.backends.keys().cloned().collect()
+    }
+
+    /// Number of registered backends.
+    pub fn len(&self) -> usize {
+        self.backends.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.backends.is_empty()
+    }
+}
+
+// -- Trait implementations for built-in backends ----------------------------
+
+#[async_trait::async_trait]
+impl LlmBackend for claude::ClaudeEngine {
+    fn name(&self) -> &str { "Claude CLI" }
+    async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
+        self.generate(message, tools).await
+    }
+}
+
+#[async_trait::async_trait]
+impl LlmBackend for codex::CodexEngine {
+    fn name(&self) -> &str { "Codex CLI" }
+    async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
+        self.generate(message, tools).await
+    }
+}
+
+#[async_trait::async_trait]
+impl LlmBackend for gemini::GeminiEngine {
+    fn name(&self) -> &str { "Gemini CLI" }
+    async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
+        self.generate(message, tools).await
+    }
+}
+
+#[async_trait::async_trait]
+impl LlmBackend for aider::AiderEngine {
+    fn name(&self) -> &str { "Aider" }
+    async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
+        self.generate(message, tools).await
+    }
+}
+
+#[async_trait::async_trait]
+impl LlmBackend for openrouter::OpenRouterEngine {
+    fn name(&self) -> &str { "OpenRouter API" }
+    async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
+        self.generate(message, tools).await
+    }
+}
+
+#[cfg(feature = "local")]
+#[async_trait::async_trait]
+impl LlmBackend for local::LocalEngine {
+    fn name(&self) -> &str { "local GGUF" }
+    async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
+        self.generate(message, tools).await
+    }
+}
+
+// -- LlmEngine (wraps active backend + plugin registry) ---------------------
+
+/// Unified LLM engine that dispatches to one of the registered backends.
 ///
+/// Built-in backends:
 /// - **Claude**      -- Claude Code CLI (default)
 /// - **Codex**       -- OpenAI Codex CLI
 /// - **Gemini**      -- Google Gemini CLI
 /// - **Aider**       -- Aider multi-provider AI pair-programmer
 /// - **OpenRouter**  -- OpenRouter API (hundreds of models via one API key)
 /// - **Local**       -- local GGUF model via llama-gguf (requires `local` feature)
-pub enum LlmEngine {
-    Claude(claude::ClaudeEngine),
-    Codex(codex::CodexEngine),
-    Gemini(gemini::GeminiEngine),
-    Aider(aider::AiderEngine),
-    OpenRouter(openrouter::OpenRouterEngine),
-    #[cfg(feature = "local")]
-    Local(local::LocalEngine),
+///
+/// Additional backends can be registered at runtime via the plugin registry.
+pub struct LlmEngine {
+    /// The active backend used for generation.
+    active: Arc<dyn LlmBackend>,
+    /// The key identifying the active backend.
+    active_key: String,
+    /// Registry of all available backends (built-in + plugins).
+    pub plugins: LlmPluginRegistry,
 }
 
 impl LlmEngine {
@@ -36,73 +153,123 @@ impl LlmEngine {
     ///
     /// The backend is selected by `config.llm.backend` (overridable with the
     /// `LLM_BACKEND` environment variable).  Valid values: `"claude"`,
-    /// `"codex"`, `"gemini"`, `"aider"`, `"local"`.
+    /// `"codex"`, `"gemini"`, `"aider"`, `"openrouter"`, `"local"`.
     pub fn new(config: &Config) -> Result<Self> {
         let backend = std::env::var("LLM_BACKEND")
             .unwrap_or_else(|_| config.llm.backend.clone());
 
-        match backend.as_str() {
-            "claude" => {
-                info!("LLM backend: Claude CLI");
-                Ok(Self::Claude(claude::ClaudeEngine::new(config)?))
+        let mut plugins = LlmPluginRegistry::new();
+
+        // Register all built-in backends that are configurable
+        if let Ok(engine) = claude::ClaudeEngine::new(config) {
+            plugins.register("claude", Arc::new(engine));
+        }
+        if let Ok(engine) = codex::CodexEngine::new(config) {
+            plugins.register("codex", Arc::new(engine));
+        }
+        if let Ok(engine) = gemini::GeminiEngine::new(config) {
+            plugins.register("gemini", Arc::new(engine));
+        }
+        if let Ok(engine) = aider::AiderEngine::new(config) {
+            plugins.register("aider", Arc::new(engine));
+        }
+        if let Ok(engine) = openrouter::OpenRouterEngine::new(config) {
+            plugins.register("openrouter", Arc::new(engine));
+        }
+        #[cfg(feature = "local")]
+        if let Ok(engine) = local::LocalEngine::new(config) {
+            plugins.register("local", Arc::new(engine));
+        }
+
+        // Select the active backend
+        let active = match plugins.get(&backend) {
+            Some(b) => {
+                info!(backend = %backend, name = b.name(), "LLM backend selected");
+                b
             }
-            "codex" => {
-                info!("LLM backend: Codex CLI");
-                Ok(Self::Codex(codex::CodexEngine::new(config)?))
+            None => {
+                #[cfg(not(feature = "local"))]
+                if backend == "local" {
+                    return Err(SafeAgentError::Config(
+                        "LLM backend \"local\" requested but safe-agent was compiled without \
+                         the `local` feature.  Rebuild with `--features local`."
+                            .into(),
+                    ));
+                }
+
+                return Err(SafeAgentError::Config(format!(
+                    "unknown LLM backend \"{backend}\" — available: [{}]",
+                    plugins.list().join(", "),
+                )));
             }
-            "gemini" => {
-                info!("LLM backend: Gemini CLI");
-                Ok(Self::Gemini(gemini::GeminiEngine::new(config)?))
+        };
+
+        Ok(Self {
+            active,
+            active_key: backend,
+            plugins,
+        })
+    }
+
+    /// Register an additional LLM backend plugin at runtime.
+    pub fn register_plugin(&mut self, key: &str, backend: Arc<dyn LlmBackend>) {
+        self.plugins.register(key, backend);
+    }
+
+    /// Switch the active backend to a different registered plugin.
+    pub fn switch_backend(&mut self, key: &str) -> Result<()> {
+        match self.plugins.get(key) {
+            Some(b) => {
+                info!(from = %self.active_key, to = key, "switching LLM backend");
+                self.active = b;
+                self.active_key = key.to_string();
+                Ok(())
             }
-            "aider" => {
-                info!("LLM backend: Aider");
-                Ok(Self::Aider(aider::AiderEngine::new(config)?))
-            }
-            "openrouter" => {
-                info!("LLM backend: OpenRouter");
-                Ok(Self::OpenRouter(openrouter::OpenRouterEngine::new(config)?))
-            }
-            #[cfg(feature = "local")]
-            "local" => {
-                info!("LLM backend: local GGUF model");
-                Ok(Self::Local(local::LocalEngine::new(config)?))
-            }
-            #[cfg(not(feature = "local"))]
-            "local" => Err(SafeAgentError::Config(
-                "LLM backend \"local\" requested but safe-agent was compiled without \
-                 the `local` feature.  Rebuild with `--features local`."
-                    .into(),
-            )),
-            other => Err(SafeAgentError::Config(format!(
-                "unknown LLM backend \"{other}\" \
-                 (valid: \"claude\", \"codex\", \"gemini\", \"aider\", \"openrouter\", \"local\")"
+            None => Err(SafeAgentError::Config(format!(
+                "LLM backend \"{key}\" not registered — available: [{}]",
+                self.plugins.list().join(", "),
             ))),
         }
     }
 
+    /// List all available backend keys (built-in + plugins).
+    pub fn available_backends(&self) -> Vec<String> {
+        self.plugins.list()
+    }
+
     /// Generate a response for the given user message.
-    pub async fn generate(&self, message: &str) -> Result<String> {
-        match self {
-            Self::Claude(engine) => engine.generate(message).await,
-            Self::Codex(engine) => engine.generate(message).await,
-            Self::Gemini(engine) => engine.generate(message).await,
-            Self::Aider(engine) => engine.generate(message).await,
-            Self::OpenRouter(engine) => engine.generate(message).await,
-            #[cfg(feature = "local")]
-            Self::Local(engine) => engine.generate(message).await,
-        }
+    ///
+    /// When `tools` is provided, the system prompt includes tool schemas and
+    /// the tool-calling protocol so the LLM can propose structured tool calls.
+    pub async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
+        self.active.generate(message, tools).await
     }
 
     /// Return a human-readable description of the active backend.
     pub fn backend_info(&self) -> &str {
-        match self {
-            Self::Claude(_) => "Claude CLI",
-            Self::Codex(_) => "Codex CLI",
-            Self::Gemini(_) => "Gemini CLI",
-            Self::Aider(_) => "Aider",
-            Self::OpenRouter(_) => "OpenRouter API",
-            #[cfg(feature = "local")]
-            Self::Local(_) => "local GGUF",
-        }
+        self.active.name()
+    }
+
+    /// Return the key of the active backend.
+    pub fn active_backend(&self) -> &str {
+        &self.active_key
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_plugin_registry() {
+        let mut registry = LlmPluginRegistry::new();
+        assert!(registry.is_empty());
+        assert_eq!(registry.len(), 0);
+        assert!(registry.get("test").is_none());
+        assert!(registry.list().is_empty());
+
+        // We can't easily create a real backend without config, so just test
+        // the registry interface.
+        assert_eq!(registry.len(), 0);
     }
 }

@@ -1,5 +1,7 @@
 pub mod auth;
+pub mod authn;
 pub mod handlers;
+pub mod messaging_webhook;
 pub mod oauth;
 pub mod routes;
 pub mod skill_ext;
@@ -14,6 +16,8 @@ use tracing::info;
 use crate::agent::Agent;
 use crate::config::{Config, TlsConfig};
 use crate::error::{Result, SafeAgentError};
+use crate::messaging::MessagingManager;
+use crate::trash::TrashManager;
 
 pub async fn serve(
     config: Config,
@@ -21,8 +25,10 @@ pub async fn serve(
     db: Arc<Mutex<Connection>>,
     shutdown: broadcast::Receiver<()>,
     tls: Option<TlsConfig>,
+    messaging: Arc<MessagingManager>,
+    trash: Arc<TrashManager>,
 ) -> Result<()> {
-    let app = routes::build(agent, config.clone(), db)?;
+    let app = routes::build(agent, config.clone(), db, messaging, trash)?;
 
     // If ACME TLS is configured, serve over HTTPS using rustls-acme.
     // Otherwise fall back to plain HTTP on the dashboard_bind address.

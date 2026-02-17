@@ -563,16 +563,16 @@ pub async fn oauth_callback(
         }
     }
 
-    // Write credential files for Google (skill compatibility)
-    if provider.id == "google" {
-        let _ = write_google_credentials(
-            &account_id,
-            &client_id,
-            &client_secret,
-            &token_data.access_token,
-            token_data.refresh_token.as_deref(),
-        );
-    }
+    // Write credential files for skills and regenerate the discovery manifest
+    let _ = write_provider_credentials(
+        provider,
+        &account_id,
+        &client_id,
+        &client_secret,
+        &token_data.access_token,
+        token_data.refresh_token.as_deref(),
+        provider.default_scopes,
+    );
 
     Ok(Html(format!(
         r#"<!DOCTYPE html>
@@ -768,9 +768,15 @@ pub async fn oauth_refresh(
             );
         }
 
-        if provider.id == "google" {
-            let _ = write_google_credentials(account_id, &client_id, &client_secret, access_token, Some(refresh_token));
-        }
+        let _ = write_provider_credentials(
+            provider,
+            account_id,
+            &client_id,
+            &client_secret,
+            access_token,
+            Some(refresh_token),
+            provider.default_scopes,
+        );
 
         refreshed += 1;
         info!(provider = provider.id, account = %account_id, "token refreshed");
@@ -794,12 +800,7 @@ pub async fn oauth_disconnect(
     );
     drop(db);
 
-    if provider_id == "google" {
-        let skills_dir = crate::config::Config::data_dir().join("skills");
-        let filename = format!("{account}.json");
-        let _ = std::fs::remove_file(skills_dir.join("google-oauth/data/accounts").join(&filename));
-        let _ = std::fs::remove_file(skills_dir.join("calendar-reminder/data/credentials").join(&filename));
-    }
+    remove_provider_credentials(&provider_id, &account);
 
     info!(provider = %provider_id, account = %account, "OAuth account disconnected");
     Json(serde_json::json!({"ok": true, "provider": provider_id, "account": account}))
@@ -842,39 +843,204 @@ fn sanitize_account_id(email: &str) -> String {
         .collect()
 }
 
-/// Write Google-specific `authorized_user` JSON files for Python skills.
-fn write_google_credentials(
+/// Write provider-agnostic OAuth credential files and update the discovery manifest.
+///
+/// Stores credentials under `$DATA_DIR/oauth/{provider}/{account}.json` in a
+/// uniform JSON format.  For Google, also writes the `authorized_user` format
+/// to the legacy skill directories for backward compatibility.
+fn write_provider_credentials(
+    provider: &OAuthProvider,
     account_id: &str,
     client_id: &str,
     client_secret: &str,
     access_token: &str,
     refresh_token: Option<&str>,
+    scopes: &str,
 ) -> std::io::Result<()> {
-    let cred_json = serde_json::json!({
-        "type": "authorized_user",
+    let data_dir = crate::config::Config::data_dir();
+    let filename = format!("{account_id}.json");
+
+    // --- 1. Universal format: $DATA_DIR/oauth/{provider}/{account}.json ---
+    let provider_dir = data_dir.join("oauth").join(provider.id);
+    std::fs::create_dir_all(&provider_dir)?;
+
+    let universal_json = serde_json::json!({
+        "provider": provider.id,
+        "account": account_id,
+        "access_token": access_token,
+        "refresh_token": refresh_token.unwrap_or(""),
         "client_id": client_id,
         "client_secret": client_secret,
-        "refresh_token": refresh_token.unwrap_or(""),
-        "token": access_token,
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "account": account_id,
+        "token_url": provider.token_url,
+        "scopes": scopes,
     });
 
-    let json_str = serde_json::to_string_pretty(&cred_json)
+    let json_str = serde_json::to_string_pretty(&universal_json)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    std::fs::write(provider_dir.join(&filename), &json_str)?;
 
+    // --- 2. Google backward-compat: write `authorized_user` format ---
+    if provider.id == "google" {
+        let compat_json = serde_json::json!({
+            "type": "authorized_user",
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "refresh_token": refresh_token.unwrap_or(""),
+            "token": access_token,
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "account": account_id,
+        });
+        let compat_str = serde_json::to_string_pretty(&compat_json)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        let skills_dir = data_dir.join("skills");
+
+        let oauth_accounts = skills_dir.join("google-oauth/data/accounts");
+        std::fs::create_dir_all(&oauth_accounts)?;
+        std::fs::write(oauth_accounts.join(&filename), &compat_str)?;
+
+        let cal_creds = skills_dir.join("calendar-reminder/data/credentials");
+        std::fs::create_dir_all(&cal_creds)?;
+        std::fs::write(cal_creds.join(&filename), &compat_str)?;
+    }
+
+    // --- 3. Regenerate the discovery manifest ---
+    let _ = regenerate_oauth_manifest(&data_dir);
+
+    info!(provider = provider.id, account = %account_id, "wrote OAuth credentials");
+    Ok(())
+}
+
+/// Remove credential files for a disconnected account.
+fn remove_provider_credentials(provider_id: &str, account_id: &str) {
+    let data_dir = crate::config::Config::data_dir();
     let filename = format!("{account_id}.json");
-    let skills_dir = crate::config::Config::data_dir().join("skills");
 
-    let oauth_accounts = skills_dir.join("google-oauth/data/accounts");
-    std::fs::create_dir_all(&oauth_accounts)?;
-    std::fs::write(oauth_accounts.join(&filename), &json_str)?;
+    // Remove universal token file
+    let _ = std::fs::remove_file(data_dir.join("oauth").join(provider_id).join(&filename));
 
-    let cal_creds = skills_dir.join("calendar-reminder/data/credentials");
-    std::fs::create_dir_all(&cal_creds)?;
-    std::fs::write(cal_creds.join(&filename), &json_str)?;
+    // Remove Google legacy files
+    if provider_id == "google" {
+        let skills_dir = data_dir.join("skills");
+        let _ = std::fs::remove_file(skills_dir.join("google-oauth/data/accounts").join(&filename));
+        let _ = std::fs::remove_file(skills_dir.join("calendar-reminder/data/credentials").join(&filename));
+    }
 
-    info!(account = %account_id, "wrote Google credentials for account");
+    // Regenerate manifest
+    let _ = regenerate_oauth_manifest(&data_dir);
+}
+
+/// Map OAuth scopes to human-readable capabilities.
+fn scopes_to_capabilities(provider_id: &str, scopes: &str) -> Vec<String> {
+    let mut caps = Vec::new();
+    let s = scopes.to_lowercase();
+
+    match provider_id {
+        "google" => {
+            if s.contains("calendar") { caps.push("calendar".into()); }
+            if s.contains("gmail") || s.contains("mail") { caps.push("email".into()); }
+            if s.contains("drive") { caps.push("files".into()); }
+            if s.contains("contacts") { caps.push("contacts".into()); }
+        }
+        "microsoft" => {
+            if s.contains("calendars") { caps.push("calendar".into()); }
+            if s.contains("mail") { caps.push("email".into()); }
+            if s.contains("files") { caps.push("files".into()); }
+            if s.contains("contacts") { caps.push("contacts".into()); }
+        }
+        "github" => {
+            if s.contains("repo") { caps.push("repositories".into()); }
+            if s.contains("org") { caps.push("organizations".into()); }
+        }
+        "slack" => {
+            if s.contains("chat") { caps.push("messaging".into()); }
+            if s.contains("channels") { caps.push("channels".into()); }
+        }
+        "discord" => {
+            if s.contains("guilds") { caps.push("servers".into()); }
+        }
+        "spotify" => {
+            if s.contains("playlist") { caps.push("playlists".into()); }
+            if s.contains("user-read") { caps.push("profile".into()); }
+        }
+        "dropbox" => {
+            caps.push("files".into());
+        }
+        "notion" => {
+            caps.push("pages".into());
+            caps.push("databases".into());
+        }
+        _ => {}
+    }
+
+    if caps.is_empty() {
+        caps.push("auth".into());
+    }
+    caps
+}
+
+/// Rebuild `$DATA_DIR/oauth/manifest.json` from the per-provider token files.
+fn regenerate_oauth_manifest(data_dir: &std::path::Path) -> std::io::Result<()> {
+    let oauth_dir = data_dir.join("oauth");
+    if !oauth_dir.exists() {
+        return Ok(());
+    }
+
+    let mut accounts = Vec::new();
+
+    if let Ok(providers) = std::fs::read_dir(&oauth_dir) {
+        for entry in providers.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue; // skip manifest.json itself
+            }
+            let provider_id = path.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("")
+                .to_string();
+
+            if let Ok(files) = std::fs::read_dir(&path) {
+                for file_entry in files.flatten() {
+                    let fp = file_entry.path();
+                    if fp.extension().and_then(|e| e.to_str()) != Some("json") {
+                        continue;
+                    }
+                    if let Ok(content) = std::fs::read_to_string(&fp) {
+                        if let Ok(token) = serde_json::from_str::<serde_json::Value>(&content) {
+                            let account = token.get("account")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("unknown")
+                                .to_string();
+                            let scopes = token.get("scopes")
+                                .and_then(|v| v.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let capabilities = scopes_to_capabilities(&provider_id, &scopes);
+
+                            accounts.push(serde_json::json!({
+                                "provider": provider_id,
+                                "account": account,
+                                "scopes": scopes,
+                                "capabilities": capabilities,
+                                "token_file": fp.to_string_lossy(),
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let manifest = serde_json::json!({
+        "description": "Connected OAuth accounts — read by the agent to discover available services",
+        "accounts": accounts,
+    });
+
+    let manifest_str = serde_json::to_string_pretty(&manifest)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    std::fs::write(oauth_dir.join("manifest.json"), manifest_str)?;
+
+    info!(count = accounts.len(), "regenerated OAuth manifest");
     Ok(())
 }
 
@@ -889,4 +1055,79 @@ fn urlencoding(s: &str) -> String {
         .replace('?', "%3F")
         .replace('#', "%23")
         .replace('@', "%40")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn find_provider_known_ids() {
+        let known = ["google", "microsoft", "github", "slack", "discord",
+                      "spotify", "dropbox", "twitter", "linkedin", "notion"];
+        for id in known {
+            let p = find_provider(id);
+            assert!(p.is_some(), "provider '{}' should exist", id);
+            assert_eq!(p.unwrap().id, id);
+        }
+    }
+
+    #[test]
+    fn find_provider_unknown() {
+        assert!(find_provider("nonexistent").is_none());
+        assert!(find_provider("").is_none());
+    }
+
+    #[test]
+    fn provider_fields_non_empty() {
+        for p in PROVIDERS.iter() {
+            assert!(!p.id.is_empty());
+            assert!(!p.name.is_empty());
+            assert!(!p.auth_url.is_empty());
+            assert!(!p.token_url.is_empty());
+            assert!(!p.client_id_env.is_empty());
+            assert!(!p.client_secret_env.is_empty());
+        }
+    }
+
+    #[test]
+    fn providers_have_unique_ids() {
+        let mut ids: Vec<&str> = PROVIDERS.iter().map(|p| p.id).collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), PROVIDERS.len(), "provider IDs must be unique");
+    }
+
+    #[test]
+    fn urlencoding_special_chars() {
+        assert_eq!(urlencoding("hello world"), "hello%20world");
+        assert_eq!(urlencoding("a&b=c"), "a%26b%3Dc");
+        assert_eq!(urlencoding("https://x.com"), "https%3A%2F%2Fx.com");
+    }
+
+    #[test]
+    fn urlencoding_empty() {
+        assert_eq!(urlencoding(""), "");
+    }
+
+    #[test]
+    fn email_path_field() {
+        let path = EmailPath::Field("email");
+        match path {
+            EmailPath::Field(f) => assert_eq!(f, "email"),
+            _ => panic!("expected Field"),
+        }
+    }
+
+    #[test]
+    fn email_path_field_or_fallback() {
+        let path = EmailPath::FieldOrFallback("email", "mail");
+        match path {
+            EmailPath::FieldOrFallback(a, b) => {
+                assert_eq!(a, "email");
+                assert_eq!(b, "mail");
+            }
+            _ => panic!("expected FieldOrFallback"),
+        }
+    }
 }

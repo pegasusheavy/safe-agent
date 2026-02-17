@@ -1,7 +1,8 @@
 <script lang="ts">
     import { onMount, tick } from 'svelte';
     import { api } from '../lib/api';
-    import { dashboard } from '../lib/state.svelte';
+    import { dashboard, liveFeed, auth } from '../lib/state.svelte';
+    import { formatTime } from '../lib/time';
     import type { ConversationMessage, ChatResponse } from '../lib/types';
 
     let messages = $state<ConversationMessage[]>([]);
@@ -26,15 +27,6 @@
         }
     }
 
-    function formatTime(iso: string): string {
-        try {
-            const d = new Date(iso);
-            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        } catch {
-            return '';
-        }
-    }
-
     async function send() {
         const text = input.trim();
         if (!text || sending) return;
@@ -54,7 +46,9 @@
         scrollToBottom();
 
         try {
-            const res = await api<ChatResponse>('POST', '/api/chat', { message: text });
+            const body: any = { message: text };
+            if (auth.userId) body.user_id = auth.userId;
+            const res = await api<ChatResponse>('POST', '/api/chat', body);
             // Replace optimistic history with real data
             await loadHistory();
         } catch (e: any) {
@@ -137,9 +131,17 @@
 
             {#if sending}
                 <div class="flex justify-start">
-                    <div class="min-w-[120px]">
+                    <div class="min-w-[120px] max-w-[70%]">
                         <div class="bg-surface-elevated border border-border rounded-lg rounded-bl-sm px-3 py-2 text-sm text-text-muted">
-                            <i class="fa-solid fa-circle-notch fa-spin mr-1.5"></i>Thinking...
+                            {#if liveFeed.activeTool}
+                                <i class="fa-solid fa-gear fa-spin mr-1.5 text-primary-500"></i>
+                                <span class="text-primary-400 font-mono">{liveFeed.activeTool}</span>
+                                <span class="text-text-subtle ml-1">running…</span>
+                            {:else if liveFeed.isThinking}
+                                <i class="fa-solid fa-brain mr-1.5 text-info-500 animate-pulse"></i>Thinking…
+                            {:else}
+                                <i class="fa-solid fa-circle-notch fa-spin mr-1.5"></i>Processing…
+                            {/if}
                         </div>
                     </div>
                 </div>

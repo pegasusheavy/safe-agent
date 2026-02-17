@@ -2,6 +2,7 @@ pub mod browser;
 pub mod cron;
 pub mod exec;
 pub mod file;
+pub mod goal;
 pub mod image;
 pub mod knowledge;
 pub mod memory;
@@ -18,7 +19,9 @@ use rusqlite::Connection;
 use tokio::sync::Mutex;
 
 use crate::error::{Result, SafeAgentError};
+use crate::messaging::MessagingManager;
 use crate::security::SandboxedFs;
+use crate::trash::TrashManager;
 
 /// Output from a tool execution.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -68,8 +71,8 @@ pub struct ToolContext {
     pub sandbox: SandboxedFs,
     pub db: Arc<Mutex<Connection>>,
     pub http_client: reqwest::Client,
-    pub telegram_bot: Option<teloxide::Bot>,
-    pub telegram_chat_id: Option<i64>,
+    pub messaging: Arc<MessagingManager>,
+    pub trash: Arc<TrashManager>,
 }
 
 /// The trait all tools implement.
@@ -161,5 +164,207 @@ impl ToolRegistry {
 
     pub fn is_empty(&self) -> bool {
         self.tools.is_empty()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::messaging::MessagingManager;
+    use crate::trash::TrashManager;
+    use std::path::Path;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    struct MockTool {
+        name: &'static str,
+        description: &'static str,
+    }
+
+    #[async_trait::async_trait]
+    impl Tool for MockTool {
+        fn name(&self) -> &str {
+            self.name
+        }
+
+        fn description(&self) -> &str {
+            self.description
+        }
+
+        fn parameters_schema(&self) -> serde_json::Value {
+            serde_json::json!({
+                "type": "object",
+                "properties": { "input": { "type": "string" } }
+            })
+        }
+
+        async fn execute(
+            &self,
+            params: serde_json::Value,
+            _ctx: &ToolContext,
+        ) -> Result<ToolOutput> {
+            let input = params.get("input").and_then(|v| v.as_str()).unwrap_or("default");
+            Ok(ToolOutput::ok(format!("mock: {}", input)))
+        }
+    }
+
+    fn make_test_context() -> ToolContext {
+        let tmp = std::env::temp_dir().join("safe-agent-tools-test");
+        std::fs::create_dir_all(&tmp).unwrap();
+        let sandbox = SandboxedFs::new(tmp.clone()).unwrap();
+        let db = Arc::new(Mutex::new(rusqlite::Connection::open_in_memory().unwrap()));
+        let http_client = reqwest::Client::new();
+        let messaging = Arc::new(MessagingManager::new());
+        let trash = Arc::new(TrashManager::new(Path::new(&tmp)).unwrap());
+
+        ToolContext {
+            sandbox,
+            db,
+            http_client,
+            messaging,
+            trash,
+        }
+    }
+
+    #[test]
+    fn test_tool_output_ok() {
+        let out = ToolOutput::ok("success");
+        assert!(out.success);
+        assert_eq!(out.output, "success");
+        assert!(out.metadata.is_none());
+    }
+
+    #[test]
+    fn test_tool_output_error() {
+        let out = ToolOutput::error("failed");
+        assert!(!out.success);
+        assert_eq!(out.output, "failed");
+        assert!(out.metadata.is_none());
+    }
+
+    #[test]
+    fn test_tool_output_ok_with_meta() {
+        let meta = serde_json::json!({"count": 42});
+        let out = ToolOutput::ok_with_meta("done", meta.clone());
+        assert!(out.success);
+        assert_eq!(out.output, "done");
+        assert_eq!(out.metadata, Some(meta));
+    }
+
+    #[test]
+    fn test_tool_registry_new() {
+        let reg = ToolRegistry::new();
+        assert!(reg.is_empty());
+        assert_eq!(reg.len(), 0);
+    }
+
+    #[test]
+    fn test_tool_registry_register_get_list_len() {
+        let mut reg = ToolRegistry::new();
+        reg.register(Box::new(MockTool {
+            name: "mock_a",
+            description: "First mock",
+        }));
+        reg.register(Box::new(MockTool {
+            name: "mock_b",
+            description: "Second mock",
+        }));
+
+        assert!(!reg.is_empty());
+        assert_eq!(reg.len(), 2);
+
+        let tool = reg.get("mock_a").unwrap();
+        assert_eq!(tool.name(), "mock_a");
+        assert_eq!(tool.description(), "First mock");
+
+        assert!(reg.get("nonexistent").is_none());
+
+        let list = reg.list();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].0, "mock_a");
+        assert_eq!(list[1].0, "mock_b");
+    }
+
+    #[test]
+    fn test_tool_registry_schema_for_prompt() {
+        let mut reg = ToolRegistry::new();
+        reg.register(Box::new(MockTool {
+            name: "foo",
+            description: "Does foo things",
+        }));
+
+        let schema = reg.schema_for_prompt();
+        assert!(schema.contains("foo"));
+        assert!(schema.contains("Does foo things"));
+    }
+
+    #[tokio::test]
+    async fn test_tool_registry_execute_unknown_tool() {
+        let reg = ToolRegistry::new();
+        let ctx = make_test_context();
+
+        let result = reg
+            .execute("unknown_tool", serde_json::json!({}), &ctx)
+            .await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.to_string().contains("tool not found"));
+        assert!(err.to_string().contains("unknown_tool"));
+    }
+
+    #[test]
+    fn test_tool_output_serde_roundtrip() {
+        let o = ToolOutput::ok("hello");
+        let json = serde_json::to_string(&o).unwrap();
+        let deser: ToolOutput = serde_json::from_str(&json).unwrap();
+        assert!(deser.success);
+        assert_eq!(deser.output, "hello");
+    }
+
+    #[test]
+    fn test_tool_output_metadata_skip_when_none() {
+        let o = ToolOutput::ok("hi");
+        let json = serde_json::to_string(&o).unwrap();
+        assert!(!json.contains("metadata"));
+    }
+
+    #[test]
+    fn test_tool_call_serde() {
+        let call = ToolCall {
+            tool: "exec".into(),
+            params: serde_json::json!({"cmd": "ls"}),
+            reasoning: "list".into(),
+        };
+        let json = serde_json::to_string(&call).unwrap();
+        let deser: ToolCall = serde_json::from_str(&json).unwrap();
+        assert_eq!(deser.tool, "exec");
+        assert_eq!(deser.reasoning, "list");
+    }
+
+    #[test]
+    #[should_panic(expected = "duplicate tool name")]
+    fn test_tool_registry_duplicate_panics() {
+        let mut reg = ToolRegistry::new();
+        reg.register(Box::new(MockTool { name: "dup", description: "a" }));
+        reg.register(Box::new(MockTool { name: "dup", description: "b" }));
+    }
+
+    #[tokio::test]
+    async fn test_tool_registry_execute_mock_tool() {
+        let mut reg = ToolRegistry::new();
+        reg.register(Box::new(MockTool {
+            name: "mock",
+            description: "Mock tool",
+        }));
+        let ctx = make_test_context();
+
+        let result = reg
+            .execute("mock", serde_json::json!({"input": "hello"}), &ctx)
+            .await
+            .unwrap();
+
+        assert!(result.success);
+        assert_eq!(result.output, "mock: hello");
     }
 }

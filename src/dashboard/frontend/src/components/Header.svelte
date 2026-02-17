@@ -98,6 +98,16 @@
             <i class="fa-solid fa-bolt mr-1"></i> Force Tick
         </button>
 
+        {#if auth.subject}
+            <span class="text-xs text-text-muted border border-border rounded px-2 py-1">
+                <i class="fa-solid fa-user mr-1"></i>
+                {auth.subject}
+                {#if auth.role}
+                    <span class="text-text-muted/60 ml-1">({auth.role})</span>
+                {/if}
+            </span>
+        {/if}
+
         <button
             onclick={logout}
             class="px-4 py-2 border border-border rounded-md bg-surface text-sm hover:bg-surface-elevated transition-colors text-text-muted"

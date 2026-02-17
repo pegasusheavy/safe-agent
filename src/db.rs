@@ -16,7 +16,8 @@ pub fn open(path: &Path) -> Result<Connection> {
     Ok(conn)
 }
 
-fn migrate(conn: &Connection) -> Result<()> {
+/// Run database migrations. Exposed for tests that use in-memory DBs.
+pub(crate) fn migrate(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "
         -- Conversation history
@@ -189,6 +190,154 @@ fn migrate(conn: &Connection) -> Result<()> {
             content     TEXT NOT NULL,
             created_at  TEXT NOT NULL DEFAULT (datetime('now'))
         );
+
+        -- Goals (background objectives the agent works on autonomously)
+        CREATE TABLE IF NOT EXISTS goals (
+            id             TEXT PRIMARY KEY,
+            title          TEXT NOT NULL,
+            description    TEXT NOT NULL DEFAULT '',
+            status         TEXT NOT NULL DEFAULT 'active',   -- active, paused, completed, failed, cancelled
+            priority       INTEGER NOT NULL DEFAULT 0,        -- higher = more important
+            parent_goal_id TEXT REFERENCES goals(id) ON DELETE SET NULL,
+            reflection     TEXT,                              -- self-reflection after completion
+            created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
+            completed_at   TEXT
+        );
+
+        -- Goal tasks (subtasks within a goal)
+        CREATE TABLE IF NOT EXISTS goal_tasks (
+            id           TEXT PRIMARY KEY,
+            goal_id      TEXT NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+            title        TEXT NOT NULL,
+            description  TEXT NOT NULL DEFAULT '',
+            status       TEXT NOT NULL DEFAULT 'pending',     -- pending, in_progress, completed, failed, skipped
+            tool_call    TEXT,                                 -- JSON: { tool, params, reasoning }
+            depends_on   TEXT,                                 -- comma-separated task IDs
+            result       TEXT,                                 -- output from execution
+            sort_order   INTEGER NOT NULL DEFAULT 0,
+            created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+            completed_at TEXT
+        );
+
+        -- Audit trail (structured log of every tool call, approval decision, LLM call)
+        CREATE TABLE IF NOT EXISTS audit_log (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type   TEXT NOT NULL,          -- tool_call, approval, llm_call, rate_limit, pii_detected, 2fa
+            tool         TEXT,                    -- tool name (if applicable)
+            action       TEXT,                    -- approve/reject/execute/block/redact
+            user_context TEXT,                    -- what triggered this (user message, cron, goal, etc.)
+            reasoning    TEXT,                    -- LLM reasoning for the action
+            params_json  TEXT,                    -- tool params (JSON)
+            result       TEXT,                    -- output or result summary
+            success      INTEGER,                 -- 1 = success, 0 = failure
+            source       TEXT NOT NULL DEFAULT 'agent',  -- agent, dashboard, telegram, whatsapp, cron, goal
+            created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_audit_log_type ON audit_log(event_type);
+        CREATE INDEX IF NOT EXISTS idx_audit_log_tool ON audit_log(tool);
+        CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
+
+        -- LLM usage tracking (token counts and estimated costs)
+        CREATE TABLE IF NOT EXISTS llm_usage (
+            id                INTEGER PRIMARY KEY AUTOINCREMENT,
+            backend           TEXT NOT NULL,       -- claude, openrouter, gemini, etc.
+            model             TEXT NOT NULL DEFAULT '',
+            prompt_tokens     INTEGER NOT NULL DEFAULT 0,
+            completion_tokens INTEGER NOT NULL DEFAULT 0,
+            total_tokens      INTEGER NOT NULL DEFAULT 0,
+            estimated_cost    REAL NOT NULL DEFAULT 0.0,  -- USD
+            context           TEXT NOT NULL DEFAULT '',     -- message, goal_task, cron, follow_up
+            created_at        TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_llm_usage_created ON llm_usage(created_at);
+        CREATE INDEX IF NOT EXISTS idx_llm_usage_backend ON llm_usage(backend);
+
+        -- Users (multi-user support)
+        CREATE TABLE IF NOT EXISTS users (
+            id              TEXT PRIMARY KEY,                   -- UUID
+            username        TEXT NOT NULL UNIQUE,               -- login name
+            display_name    TEXT NOT NULL DEFAULT '',
+            role            TEXT NOT NULL DEFAULT 'user',       -- admin, user, viewer
+            email           TEXT NOT NULL DEFAULT '',
+            password_hash   TEXT NOT NULL DEFAULT '',           -- plaintext for now; bcrypt later
+            telegram_id     INTEGER,                            -- Telegram user ID mapping
+            whatsapp_id     TEXT,                               -- WhatsApp JID/number mapping
+            enabled         INTEGER NOT NULL DEFAULT 1,
+            last_seen_at    TEXT,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_users_telegram ON users(telegram_id) WHERE telegram_id IS NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_users_whatsapp ON users(whatsapp_id) WHERE whatsapp_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email != '';
+        ",
+    )?;
+
+    // --- Add user_id columns to existing tables if missing ---
+    add_column_if_missing(conn, "conversation_history", "user_id", "TEXT DEFAULT NULL");
+    add_column_if_missing(conn, "activity_log", "user_id", "TEXT DEFAULT NULL");
+    add_column_if_missing(conn, "audit_log", "user_id", "TEXT DEFAULT NULL");
+    add_column_if_missing(conn, "goals", "user_id", "TEXT DEFAULT NULL");
+    add_column_if_missing(conn, "pending_actions", "user_id", "TEXT DEFAULT NULL");
+
+    // --- Add 2FA columns to users table if missing ---
+    add_column_if_missing(conn, "users", "totp_secret", "TEXT DEFAULT NULL");
+    add_column_if_missing(conn, "users", "totp_enabled", "INTEGER NOT NULL DEFAULT 0");
+    add_column_if_missing(conn, "users", "recovery_codes", "TEXT DEFAULT NULL");
+
+    // --- Timezone & locale per-user columns ---
+    add_column_if_missing(conn, "users", "timezone", "TEXT NOT NULL DEFAULT ''");
+    add_column_if_missing(conn, "users", "locale", "TEXT NOT NULL DEFAULT ''");
+
+    // --- PII encryption: blind index columns for encrypted lookup fields ---
+    add_column_if_missing(conn, "users", "email_blind", "TEXT NOT NULL DEFAULT ''");
+    add_column_if_missing(conn, "users", "telegram_id_blind", "TEXT NOT NULL DEFAULT ''");
+    add_column_if_missing(conn, "users", "whatsapp_id_blind", "TEXT NOT NULL DEFAULT ''");
+    conn.execute_batch(
+        "
+        CREATE INDEX IF NOT EXISTS idx_users_email_blind ON users(email_blind) WHERE email_blind != '';
+        CREATE INDEX IF NOT EXISTS idx_users_telegram_blind ON users(telegram_id_blind) WHERE telegram_id_blind != '';
+        CREATE INDEX IF NOT EXISTS idx_users_whatsapp_blind ON users(whatsapp_id_blind) WHERE whatsapp_id_blind != '';
+        ",
+    )?;
+
+    // --- Passkeys table (WebAuthn credentials) ---
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS passkeys (
+            id              TEXT PRIMARY KEY,          -- credential ID (base64url)
+            user_id         TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name            TEXT NOT NULL DEFAULT '',   -- friendly name
+            credential_json TEXT NOT NULL,              -- serialized Passkey
+            created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_passkeys_user ON passkeys(user_id);
+        ",
+    )?;
+
+    // Create indexes on user_id columns
+    conn.execute_batch(
+        "
+        CREATE INDEX IF NOT EXISTS idx_conversation_user ON conversation_history(user_id) WHERE user_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_log(user_id) WHERE user_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log(user_id) WHERE user_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_goals_user ON goals(user_id) WHERE user_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS idx_pending_user ON pending_actions(user_id) WHERE user_id IS NOT NULL;
+        ",
+    )?;
+
+    // --- Metadata key-value store (onboarding state, app-level flags) ---
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS metadata (
+            key   TEXT PRIMARY KEY,
+            value TEXT NOT NULL DEFAULT ''
+        );
         ",
     )?;
 
@@ -229,4 +378,94 @@ fn migrate(conn: &Connection) -> Result<()> {
 
     info!("database migrations complete");
     Ok(())
+}
+
+/// Add a column to a table if it doesn't already exist.
+fn add_column_if_missing(conn: &Connection, table: &str, column: &str, col_type: &str) {
+    let has_col = conn
+        .prepare(&format!("SELECT {column} FROM {table} LIMIT 0"))
+        .is_ok();
+    if !has_col {
+        let sql = format!("ALTER TABLE {table} ADD COLUMN {column} {col_type}");
+        if let Err(e) = conn.execute_batch(&sql) {
+            tracing::warn!(table, column, err = %e, "failed to add column (may already exist)");
+        } else {
+            info!(table, column, "added column via migration");
+        }
+    }
+}
+
+/// Creates an in-memory database with migrations applied. Use in tests.
+#[cfg(test)]
+pub(crate) fn test_db() -> std::sync::Arc<tokio::sync::Mutex<Connection>> {
+    use std::sync::Arc;
+
+    let conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+    migrate(&conn).unwrap();
+    Arc::new(tokio::sync::Mutex::new(conn))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_open_with_temp_file() {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("safe-agent-test-{}.db", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        let conn = open(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        drop(conn);
+    }
+
+    #[test]
+    fn test_all_tables_exist_after_migration() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        migrate(&conn).unwrap();
+
+        let tables = [
+            "conversation_history",
+            "core_memory",
+            "archival_memory",
+            "archival_memory_fts",
+            "activity_log",
+            "pending_actions",
+            "agent_stats",
+            "knowledge_nodes",
+            "knowledge_edges",
+            "knowledge_nodes_fts",
+            "oauth_tokens",
+            "cron_jobs",
+            "sessions",
+            "session_messages",
+            "goals",
+            "goal_tasks",
+            "audit_log",
+            "llm_usage",
+            "users",
+            "passkeys",
+            "metadata",
+        ];
+
+        for table in tables {
+            let exists: bool = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                    [table],
+                    |row| row.get(0),
+                )
+                .unwrap();
+            assert!(exists, "table {} should exist", table);
+        }
+    }
+
+    #[test]
+    fn test_migrate_is_idempotent() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("PRAGMA foreign_keys = ON;").unwrap();
+        migrate(&conn).unwrap();
+        migrate(&conn).unwrap();
+    }
 }

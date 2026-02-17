@@ -221,3 +221,122 @@ impl Tool for SessionsSpawnTool {
         ))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db;
+    use crate::messaging::MessagingManager;
+    use crate::security::SandboxedFs;
+    use crate::trash::TrashManager;
+    use std::sync::Arc;
+
+    fn test_ctx() -> ToolContext {
+        let base = std::env::temp_dir().join(format!("sa-sesstest-{}", std::process::id()));
+        let sandbox_dir = base.join("sandbox");
+        let trash_dir = base.join("trash");
+        std::fs::create_dir_all(&sandbox_dir).unwrap();
+        std::fs::create_dir_all(&trash_dir).unwrap();
+
+        ToolContext {
+            sandbox: SandboxedFs::new(sandbox_dir).unwrap(),
+            db: db::test_db(),
+            http_client: reqwest::Client::new(),
+            messaging: Arc::new(MessagingManager::new()),
+            trash: Arc::new(TrashManager::new(&trash_dir).unwrap()),
+        }
+    }
+
+    #[tokio::test]
+    async fn sessions_list_empty() {
+        let ctx = test_ctx();
+        let result = SessionsListTool.execute(serde_json::json!({}), &ctx).await.unwrap();
+        assert!(result.success);
+        assert!(result.output.contains("No active sessions"));
+    }
+
+    #[tokio::test]
+    async fn spawn_and_list() {
+        let ctx = test_ctx();
+        let spawn_r = SessionsSpawnTool.execute(
+            serde_json::json!({"task": "Do research", "label": "research-task"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(spawn_r.success);
+        assert!(spawn_r.output.contains("Spawned session"));
+        let sid = spawn_r.metadata.as_ref().unwrap()["session_id"].as_str().unwrap().to_string();
+        assert!(!sid.is_empty());
+
+        let list = SessionsListTool.execute(serde_json::json!({}), &ctx).await.unwrap();
+        assert!(list.success);
+        assert!(list.output.contains("research-task"));
+    }
+
+    #[tokio::test]
+    async fn spawn_missing_task() {
+        let ctx = test_ctx();
+        let r = SessionsSpawnTool.execute(serde_json::json!({}), &ctx).await.unwrap();
+        assert!(!r.success);
+        assert!(r.output.contains("task is required"));
+    }
+
+    #[tokio::test]
+    async fn send_and_history() {
+        let ctx = test_ctx();
+        let spawn_r = SessionsSpawnTool.execute(
+            serde_json::json!({"task": "Init", "label": "test"}),
+            &ctx,
+        ).await.unwrap();
+        let sid = spawn_r.metadata.as_ref().unwrap()["session_id"].as_str().unwrap().to_string();
+
+        let send_r = SessionsSendTool.execute(
+            serde_json::json!({"session_id": &sid, "message": "Hello session!"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(send_r.success);
+
+        let hist = SessionsHistoryTool.execute(
+            serde_json::json!({"session_id": &sid}),
+            &ctx,
+        ).await.unwrap();
+        assert!(hist.success);
+        assert!(hist.output.contains("Init"));
+        assert!(hist.output.contains("Hello session!"));
+    }
+
+    #[tokio::test]
+    async fn history_empty_session_id() {
+        let ctx = test_ctx();
+        let r = SessionsHistoryTool.execute(serde_json::json!({}), &ctx).await.unwrap();
+        assert!(!r.success);
+        assert!(r.output.contains("session_id is required"));
+    }
+
+    #[tokio::test]
+    async fn history_no_messages() {
+        let ctx = test_ctx();
+        let r = SessionsHistoryTool.execute(
+            serde_json::json!({"session_id": "nonexistent-session"}),
+            &ctx,
+        ).await.unwrap();
+        assert!(r.success);
+        assert!(r.output.contains("No messages"));
+    }
+
+    #[tokio::test]
+    async fn send_missing_fields() {
+        let ctx = test_ctx();
+        let r1 = SessionsSendTool.execute(serde_json::json!({"session_id": "abc"}), &ctx).await.unwrap();
+        assert!(!r1.success);
+        let r2 = SessionsSendTool.execute(serde_json::json!({"message": "hi"}), &ctx).await.unwrap();
+        assert!(!r2.success);
+    }
+
+    #[tokio::test]
+    async fn tool_names() {
+        assert_eq!(SessionsListTool.name(), "sessions_list");
+        assert_eq!(SessionsHistoryTool.name(), "sessions_history");
+        assert_eq!(SessionsSendTool.name(), "sessions_send");
+        assert_eq!(SessionsSpawnTool.name(), "sessions_spawn");
+    }
+}

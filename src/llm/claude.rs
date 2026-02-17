@@ -7,6 +7,7 @@ use tracing::{debug, info, warn};
 use crate::config::Config;
 use crate::error::{Result, SafeAgentError};
 use crate::llm::prompts;
+use crate::tools::ToolRegistry;
 
 /// LLM engine backed by the Claude Code CLI.
 ///
@@ -17,7 +18,9 @@ pub struct ClaudeEngine {
     claude_bin: String,
     model: String,
     config_dir: Option<String>,
-    system_prompt: String,
+    personality: String,
+    agent_name: String,
+    timezone: String,
     max_turns: u32,
     timeout_secs: u64,
 }
@@ -40,11 +43,6 @@ impl ClaudeEngine {
         let model = std::env::var("CLAUDE_MODEL")
             .unwrap_or_else(|_| config.llm.model.clone());
 
-        let system_prompt = prompts::system_prompt(
-            &config.core_personality,
-            &config.agent_name,
-        );
-
         let max_turns = config.llm.max_turns;
         let timeout_secs = config.llm.timeout_secs;
 
@@ -61,14 +59,17 @@ impl ClaudeEngine {
             claude_bin,
             model,
             config_dir,
-            system_prompt,
+            personality: config.core_personality.clone(),
+            agent_name: config.agent_name.clone(),
+            timezone: config.timezone.clone(),
             max_turns,
             timeout_secs,
         })
     }
 
     /// Send a message to Claude and return the plain-text response.
-    pub async fn generate(&self, message: &str) -> Result<String> {
+    pub async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
+        let system_prompt = prompts::system_prompt(&self.personality, &self.agent_name, tools, Some(&self.timezone));
         let mut cmd = Command::new(&self.claude_bin);
 
         cmd.arg("-p")
@@ -76,7 +77,7 @@ impl ClaudeEngine {
             .arg("--model").arg(&self.model)
             .arg("--max-turns").arg(self.max_turns.to_string())
             .arg("--dangerously-skip-permissions")
-            .arg("--append-system-prompt").arg(&self.system_prompt);
+            .arg("--append-system-prompt").arg(&system_prompt);
 
         if let Some(dir) = &self.config_dir {
             cmd.env("CLAUDE_CONFIG_DIR", dir);

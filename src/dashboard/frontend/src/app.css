@@ -150,3 +150,13 @@
     background: transparent;
     color: var(--color-text);
 }
+
+/* Pulse animation for active tool indicator */
+@keyframes subtle-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.animate-subtle-pulse {
+    animation: subtle-pulse 2s ease-in-out infinite;
+}

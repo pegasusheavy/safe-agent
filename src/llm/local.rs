@@ -6,6 +6,7 @@ use tracing::info;
 use crate::config::Config;
 use crate::error::{Result, SafeAgentError};
 use crate::llm::prompts;
+use crate::tools::ToolRegistry;
 
 /// LLM engine backed by a local GGUF model via llama-gguf.
 ///
@@ -15,6 +16,9 @@ use crate::llm::prompts;
 pub struct LocalEngine {
     chat: Arc<Mutex<ChatEngine>>,
     model_path: String,
+    personality: String,
+    agent_name: String,
+    timezone: String,
 }
 
 impl LocalEngine {
@@ -63,9 +67,11 @@ impl LocalEngine {
             SafeAgentError::Llm(format!("failed to load GGUF model: {e}"))
         })?;
 
-        let system_prompt = prompts::system_prompt(
+        let base_system_prompt = prompts::system_prompt(
             &config.core_personality,
             &config.agent_name,
+            None,
+            Some(&config.timezone),
         );
 
         info!(
@@ -75,16 +81,23 @@ impl LocalEngine {
             "local model loaded"
         );
 
-        let chat = ChatEngine::new(engine, Some(system_prompt));
+        let chat = ChatEngine::new(engine, Some(base_system_prompt));
 
         Ok(Self {
             chat: Arc::new(Mutex::new(chat)),
             model_path,
+            personality: config.core_personality.clone(),
+            agent_name: config.agent_name.clone(),
+            timezone: config.timezone.clone(),
         })
     }
 
     /// Generate a response by running inference on the blocking thread pool.
-    pub async fn generate(&self, message: &str) -> Result<String> {
+    ///
+    /// NOTE: The local engine's ChatEngine is initialized with the base system
+    /// prompt (without tools).  Tool schemas are not dynamically injected into
+    /// the KV cache — the local backend is primarily for simple chat.
+    pub async fn generate(&self, message: &str, _tools: Option<&ToolRegistry>) -> Result<String> {
         let chat = Arc::clone(&self.chat);
         let msg = message.to_string();
 

@@ -8,11 +8,15 @@ use tokio::sync::Mutex;
 
 use crate::agent::Agent;
 use crate::config::Config;
+use crate::dashboard::authn::PasskeyManager;
 use crate::error::{Result, SafeAgentError};
+use crate::messaging::MessagingManager;
 use crate::skills::ExtensionManager;
+use crate::trash::TrashManager;
 
 use super::auth;
 use super::handlers;
+use super::messaging_webhook;
 use super::oauth;
 use super::skill_ext;
 use super::sse;
@@ -29,12 +33,35 @@ pub struct DashState {
     pub jwt_secret: Vec<u8>,
     /// Extension manager for Rhai-based skill routes and UI.
     pub extension_manager: Arc<Mutex<ExtensionManager>>,
+    /// Messaging manager for WhatsApp QR code / status.
+    pub messaging: Arc<MessagingManager>,
+    /// Trash manager for recoverable file deletion.
+    pub trash: Arc<TrashManager>,
+    /// WebAuthn/passkey manager (None if origin not configured).
+    pub passkey_manager: Option<Arc<PasskeyManager>>,
 }
 
-pub fn build(agent: Arc<Agent>, config: Config, db: Arc<Mutex<Connection>>) -> Result<Router> {
+pub fn build(
+    agent: Arc<Agent>,
+    config: Config,
+    db: Arc<Mutex<Connection>>,
+    messaging: Arc<MessagingManager>,
+    trash: Arc<TrashManager>,
+) -> Result<Router> {
+    let password_required = config.dashboard.password_enabled
+        && config.dashboard.sso_providers.is_empty();
+
     let dashboard_password = std::env::var("DASHBOARD_PASSWORD")
         .ok()
         .filter(|s| !s.is_empty())
+        .or_else(|| {
+            if password_required {
+                None
+            } else {
+                // Password not required — use empty string as placeholder
+                Some(String::new())
+            }
+        })
         .ok_or_else(|| {
             SafeAgentError::Config(
                 "DASHBOARD_PASSWORD environment variable is required but not set".to_string(),
@@ -60,6 +87,37 @@ pub fn build(agent: Arc<Agent>, config: Config, db: Arc<Mutex<Connection>>) -> R
     let mut ext_mgr = ExtensionManager::new(skills_dir, db_path);
     ext_mgr.discover();
 
+    // Attempt to build a PasskeyManager for WebAuthn support.
+    // Requires WEBAUTHN_ORIGIN + WEBAUTHN_RP_ID (or TUNNEL_URL for origin).
+    let passkey_manager = {
+        let origin = std::env::var("WEBAUTHN_ORIGIN")
+            .ok()
+            .or_else(|| std::env::var("TUNNEL_URL").ok())
+            .unwrap_or_else(|| {
+                let bind = config.dashboard_bind.clone();
+                if bind.starts_with("http") { bind } else { format!("http://{bind}") }
+            });
+        let rp_id = std::env::var("WEBAUTHN_RP_ID")
+            .ok()
+            .unwrap_or_else(|| {
+                webauthn_rs::prelude::Url::parse(&origin)
+                    .ok()
+                    .and_then(|u| u.host_str().map(|s| s.to_string()))
+                    .unwrap_or_else(|| "localhost".to_string())
+            });
+
+        match PasskeyManager::new(db.clone(), &origin, &rp_id) {
+            Ok(mgr) => {
+                tracing::info!(origin, rp_id, "WebAuthn passkey support enabled");
+                Some(Arc::new(mgr))
+            }
+            Err(e) => {
+                tracing::warn!(err = %e, "WebAuthn passkey support disabled");
+                None
+            }
+        }
+    };
+
     let state = DashState {
         agent,
         config,
@@ -67,6 +125,9 @@ pub fn build(agent: Arc<Agent>, config: Config, db: Arc<Mutex<Connection>>) -> R
         dashboard_password,
         jwt_secret,
         extension_manager: Arc::new(Mutex::new(ext_mgr)),
+        messaging,
+        trash,
+        passkey_manager,
     };
 
     Ok(Router::new()
@@ -76,8 +137,23 @@ pub fn build(agent: Arc<Agent>, config: Config, db: Arc<Mutex<Connection>>) -> R
         .route("/app.js", get(serve_js))
         // Auth
         .route("/api/auth/check", get(auth::check))
+        .route("/api/auth/info", get(auth::login_info))
         .route("/api/auth/login", post(auth::login))
         .route("/api/auth/logout", post(auth::logout))
+        .route("/api/auth/sso/{provider}/start", get(auth::sso_start))
+        .route("/api/auth/sso/{provider}/callback", get(auth::sso_callback))
+        // 2FA / Passkey authentication endpoints
+        .route("/api/auth/2fa/verify", post(auth::verify_2fa))
+        .route("/api/auth/2fa/setup", post(auth::setup_totp))
+        .route("/api/auth/2fa/enable", post(auth::enable_totp))
+        .route("/api/auth/2fa/disable", post(auth::disable_totp))
+        .route("/api/auth/2fa/status", get(auth::totp_status))
+        .route("/api/auth/passkey/register/start", post(auth::passkey_register_start))
+        .route("/api/auth/passkey/register/finish", post(auth::passkey_register_finish))
+        .route("/api/auth/passkey/authenticate/start", post(auth::passkey_auth_start))
+        .route("/api/auth/passkey/authenticate/finish", post(auth::passkey_auth_finish))
+        .route("/api/auth/passkeys", get(auth::list_passkeys))
+        .route("/api/auth/passkeys/{id}", delete(auth::delete_passkey))
         // API — Status & Control
         .route("/api/status", get(handlers::get_status))
         .route("/api/stats", get(handlers::get_stats))
@@ -108,9 +184,13 @@ pub fn build(agent: Arc<Agent>, config: Config, db: Arc<Mutex<Connection>>) -> R
         .route("/api/chat", post(handlers::send_chat_message))
         // API — Skills & Credentials
         .route("/api/skills", get(handlers::list_skills))
+        .route("/api/skills/import", post(handlers::import_skill))
+        .route("/api/skills/{name}", delete(handlers::delete_skill))
         .route("/api/skills/{name}/credentials", get(handlers::get_skill_credentials))
         .route("/api/skills/{name}/credentials", put(handlers::set_skill_credential))
         .route("/api/skills/{name}/credentials/{key}", delete(handlers::delete_skill_credential))
+        .route("/api/skills/{name}/stop", post(handlers::stop_skill))
+        .route("/api/skills/{name}/start", post(handlers::start_skill))
         .route("/api/skills/{name}/restart", post(handlers::restart_skill))
         .route("/api/skills/{name}/detail", get(handlers::get_skill_detail))
         .route("/api/skills/{name}/log", get(handlers::get_skill_log))
@@ -130,12 +210,80 @@ pub fn build(agent: Arc<Agent>, config: Config, db: Arc<Mutex<Connection>>) -> R
         .route("/api/skills/{name}/ext/{*path}", any(skill_ext::skill_ext_handler))
         .route("/skills/{name}/ui/{*path}", get(skill_ext::skill_static_file))
         .route("/skills/{name}/page", get(skill_ext::skill_page))
+        // API — Messaging (webhook + WhatsApp QR + config)
+        .route("/api/messaging/incoming", post(messaging_webhook::incoming))
+        .route("/api/messaging/config", get(messaging_webhook::messaging_config))
+        .route("/api/messaging/whatsapp/status", get(messaging_webhook::whatsapp_status))
+        .route("/api/messaging/whatsapp/qr", get(messaging_webhook::whatsapp_qr))
+        .route("/api/messaging/platforms", get(messaging_webhook::list_platforms))
+        // API — Goals
+        .route("/api/goals", get(handlers::list_goals))
+        .route("/api/goals/{id}", get(handlers::get_goal))
+        .route("/api/goals/{id}/status", put(handlers::update_goal_status))
+        // API — Trash
+        .route("/api/trash", get(handlers::list_trash))
+        .route("/api/trash/stats", get(handlers::trash_stats))
+        .route("/api/trash/empty", post(handlers::empty_trash))
+        .route("/api/trash/{id}/restore", post(handlers::restore_trash))
+        .route("/api/trash/{id}", delete(handlers::permanent_delete_trash))
+        // API — Security: Audit Trail
+        .route("/api/security/audit", get(handlers::get_audit_log))
+        .route("/api/security/audit/summary", get(handlers::get_audit_summary))
+        .route("/api/security/audit/{id}/explain", get(handlers::explain_action))
+        // API — Security: Cost Tracking
+        .route("/api/security/cost", get(handlers::get_cost_summary))
+        .route("/api/security/cost/recent", get(handlers::get_cost_recent))
+        // API — Security: Rate Limiting
+        .route("/api/security/rate-limit", get(handlers::get_rate_limit_status))
+        // API — Security: 2FA
+        .route("/api/security/2fa", get(handlers::get_2fa_challenges))
+        .route("/api/security/2fa/{id}/confirm", post(handlers::confirm_2fa))
+        .route("/api/security/2fa/{id}/reject", post(handlers::reject_2fa))
+        // API — Security: Overview
+        .route("/api/security/overview", get(handlers::get_security_overview))
+        // API — Tool Events (streaming progress)
+        .route("/api/tool-events", get(handlers::get_tool_events))
         // API — Tunnel
         .route("/api/tunnel/status", get(handlers::tunnel_status))
+        // API — Backup & Restore
+        .route("/api/backup", get(handlers::create_backup))
+        .route("/api/restore", post(handlers::restore_backup))
+        // API — Updates
+        .route("/api/update/check", get(handlers::check_update))
+        .route("/api/update/apply", post(handlers::trigger_update))
+        // API — Users (multi-user management)
+        .route("/api/users", get(handlers::list_users))
+        .route("/api/users", post(handlers::create_user))
+        .route("/api/users/{id}", get(handlers::get_user))
+        .route("/api/users/{id}", put(handlers::update_user))
+        .route("/api/users/{id}", delete(handlers::delete_user))
+        // API — Timezone & Locale
+        .route("/api/timezone", get(handlers::get_timezone))
+        .route("/api/timezone", post(handlers::set_timezone))
+        .route("/api/timezones", get(handlers::list_timezones))
+        .route("/api/timezone/convert", get(handlers::convert_time))
+        // API — LLM Backends (plugin architecture)
+        .route("/api/llm/backends", get(handlers::llm_backends))
+        // API — Federation
+        .route("/api/federation/status", get(handlers::federation_status))
+        .route("/api/federation/peers", get(handlers::federation_peers))
+        .route("/api/federation/peers", post(handlers::federation_add_peer))
+        .route("/api/federation/peers/{id}", delete(handlers::federation_remove_peer))
         // SSE
         .route("/api/events", get(sse::events))
         // Auth middleware — applied to all routes above
         .layer(middleware::from_fn_with_state(state.clone(), auth::require_auth))
+        // Unauthenticated endpoints (health check, metrics, federation sync, onboarding) — below auth layer
+        .route("/healthz", get(handlers::healthz))
+        // Onboarding wizard — exempt from auth so the wizard works before any user exists
+        .route("/api/onboarding/status", get(handlers::onboarding_status))
+        .route("/api/onboarding/complete", post(handlers::onboarding_complete))
+        .route("/api/onboarding/test-llm", post(handlers::onboarding_test_llm))
+        .route("/api/onboarding/save-config", post(handlers::onboarding_save_config))
+        .route("/metrics", get(handlers::metrics))
+        .route("/api/federation/sync", post(handlers::federation_receive_sync))
+        .route("/api/federation/heartbeat", post(handlers::federation_receive_heartbeat))
+        .route("/api/federation/claim", post(handlers::federation_receive_claim))
         .with_state(state))
 }
 

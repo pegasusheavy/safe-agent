@@ -237,6 +237,101 @@ impl KnowledgeGraph {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::db::test_db;
+
+    #[tokio::test]
+    async fn add_and_get_node() {
+        let db = test_db();
+        let kg = KnowledgeGraph::new(db);
+        let id = kg.add_node("Rust", "language", "Systems programming lang", 0.9).await.unwrap();
+        assert!(id > 0);
+        let node = kg.get_node(id).await.unwrap();
+        assert_eq!(node.label, "Rust");
+        assert_eq!(node.node_type, "language");
+        assert_eq!(node.content, "Systems programming lang");
+        assert!((node.confidence - 0.9).abs() < 0.001);
+    }
+
+    #[tokio::test]
+    async fn add_edge_and_neighbors() {
+        let db = test_db();
+        let kg = KnowledgeGraph::new(db);
+        let n1 = kg.add_node("Rust", "lang", "", 1.0).await.unwrap();
+        let n2 = kg.add_node("Cargo", "tool", "", 1.0).await.unwrap();
+        let eid = kg.add_edge(n1, n2, "uses", 1.0).await.unwrap();
+        assert!(eid > 0);
+        let neighbors = kg.neighbors(n1, None).await.unwrap();
+        assert_eq!(neighbors.len(), 1);
+        assert_eq!(neighbors[0].0.relation, "uses");
+        assert_eq!(neighbors[0].1.label, "Cargo");
+    }
+
+    #[tokio::test]
+    async fn neighbors_with_relation_filter() {
+        let db = test_db();
+        let kg = KnowledgeGraph::new(db);
+        let n1 = kg.add_node("A", "t", "", 1.0).await.unwrap();
+        let n2 = kg.add_node("B", "t", "", 1.0).await.unwrap();
+        let n3 = kg.add_node("C", "t", "", 1.0).await.unwrap();
+        kg.add_edge(n1, n2, "likes", 1.0).await.unwrap();
+        kg.add_edge(n1, n3, "hates", 1.0).await.unwrap();
+        let likes = kg.neighbors(n1, Some("likes")).await.unwrap();
+        assert_eq!(likes.len(), 1);
+        assert_eq!(likes[0].1.label, "B");
+    }
+
+    #[tokio::test]
+    async fn search_finds_by_label() {
+        let db = test_db();
+        let kg = KnowledgeGraph::new(db);
+        kg.add_node("Tokio runtime", "library", "Async runtime for Rust", 1.0).await.unwrap();
+        kg.add_node("Axum web", "library", "Web framework", 1.0).await.unwrap();
+        let results = kg.search("Tokio", 10).await.unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].label, "Tokio runtime");
+    }
+
+    #[tokio::test]
+    async fn stats_counts() {
+        let db = test_db();
+        let kg = KnowledgeGraph::new(db);
+        let (n0, e0) = kg.stats().await.unwrap();
+        assert_eq!(n0, 0);
+        assert_eq!(e0, 0);
+        let a = kg.add_node("A", "t", "", 1.0).await.unwrap();
+        let b = kg.add_node("B", "t", "", 1.0).await.unwrap();
+        kg.add_edge(a, b, "rel", 1.0).await.unwrap();
+        let (n1, e1) = kg.stats().await.unwrap();
+        assert_eq!(n1, 2);
+        assert_eq!(e1, 1);
+    }
+
+    #[tokio::test]
+    async fn get_node_nonexistent_errors() {
+        let db = test_db();
+        let kg = KnowledgeGraph::new(db);
+        assert!(kg.get_node(9999).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn duplicate_edge_is_ignored() {
+        let db = test_db();
+        let kg = KnowledgeGraph::new(db);
+        let a = kg.add_node("A", "t", "", 1.0).await.unwrap();
+        let b = kg.add_node("B", "t", "", 1.0).await.unwrap();
+        kg.add_edge(a, b, "rel", 1.0).await.unwrap();
+        // INSERT OR IGNORE means duplicate edges don't error
+        let r = kg.add_edge(a, b, "rel", 1.0).await;
+        assert!(r.is_ok());
+        // But only one edge should exist
+        let (_, edge_count) = kg.stats().await.unwrap();
+        assert_eq!(edge_count, 1);
+    }
+}
+
 fn map_edge_node(row: &rusqlite::Row) -> rusqlite::Result<(KnowledgeEdge, KnowledgeNode)> {
     let metadata_str: String = row.get(5)?;
     let metadata = serde_json::from_str(&metadata_str).unwrap_or(serde_json::Value::Object(Default::default()));
