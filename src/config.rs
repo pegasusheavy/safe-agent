@@ -50,7 +50,8 @@ pub struct Config {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct LlmConfig {
-    /// Backend to use: "claude" (default), "codex", "gemini", "aider", or "local".
+    /// Backend to use: "claude" (default), "codex", "gemini", "aider",
+    /// "openrouter", or "local".
     /// Can be overridden with the `LLM_BACKEND` env var.
     #[serde(default = "default_backend")]
     pub backend: String,
@@ -120,6 +121,38 @@ pub struct LlmConfig {
     /// Can be overridden with the `AIDER_MODEL` env var.
     #[serde(default)]
     pub aider_model: String,
+
+    // -- OpenRouter settings (backend = "openrouter") --
+
+    /// OpenRouter API key.
+    /// Can be overridden with `OPENROUTER_API_KEY` env var.
+    #[serde(default)]
+    pub openrouter_api_key: String,
+
+    /// OpenRouter model identifier (e.g. "anthropic/claude-sonnet-4",
+    /// "openai/gpt-4o", "google/gemini-2.5-pro", "meta-llama/llama-4-maverick").
+    /// Can be overridden with `OPENROUTER_MODEL` env var.
+    #[serde(default)]
+    pub openrouter_model: String,
+
+    /// OpenRouter API base URL (default: "https://openrouter.ai/api/v1").
+    /// Can be overridden with `OPENROUTER_BASE_URL` env var.
+    #[serde(default)]
+    pub openrouter_base_url: String,
+
+    /// Max tokens for OpenRouter completions (0 = use general max_tokens).
+    #[serde(default)]
+    pub openrouter_max_tokens: usize,
+
+    /// Site URL sent as HTTP-Referer for OpenRouter analytics.
+    /// Can be overridden with `OPENROUTER_SITE_URL` env var.
+    #[serde(default)]
+    pub openrouter_site_url: String,
+
+    /// App name sent as X-Title for OpenRouter dashboard identification.
+    /// Can be overridden with `OPENROUTER_APP_NAME` env var.
+    #[serde(default)]
+    pub openrouter_app_name: String,
 
     // -- Local model settings (backend = "local") --
 
@@ -432,6 +465,12 @@ impl Default for LlmConfig {
             gemini_model: String::new(),
             aider_bin: default_aider_bin(),
             aider_model: String::new(),
+            openrouter_api_key: String::new(),
+            openrouter_model: String::new(),
+            openrouter_base_url: String::new(),
+            openrouter_max_tokens: 0,
+            openrouter_site_url: String::new(),
+            openrouter_app_name: String::new(),
             model_path: String::new(),
             temperature: default_temperature(),
             top_k: default_top_k(),

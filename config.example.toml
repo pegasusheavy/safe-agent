@@ -22,6 +22,7 @@
 [llm]
 # Backend: "claude" (Claude Code CLI), "codex" (OpenAI Codex CLI),
 #          "gemini" (Google Gemini CLI), "aider" (Aider multi-provider),
+#          "openrouter" (OpenRouter API - hundreds of models, one key),
 #          or "local" (GGUF via llama-gguf, requires --features local)
 # Override with LLM_BACKEND env var.
 # backend = "claude"
@@ -76,6 +77,37 @@
 # Aider supports many providers; set the corresponding API key env var.
 # Override with AIDER_MODEL env var.
 # aider_model = ""
+
+# -- OpenRouter settings (backend = "openrouter") --
+# OpenRouter provides access to hundreds of models (Claude, GPT, Gemini,
+# Llama, Mistral, DeepSeek, etc.) through one API key and one endpoint.
+# Sign up at https://openrouter.ai/ to get a key.
+
+# API key.  Prefer OPENROUTER_API_KEY env var instead of storing in config.
+# openrouter_api_key = ""
+
+# Model identifier.  Browse models at https://openrouter.ai/models
+# Examples: "anthropic/claude-sonnet-4", "openai/gpt-4o",
+#           "google/gemini-2.5-pro", "meta-llama/llama-4-maverick",
+#           "deepseek/deepseek-r1", "mistralai/mistral-large"
+# Override with OPENROUTER_MODEL env var.
+# openrouter_model = "anthropic/claude-sonnet-4"
+
+# Base URL (default: "https://openrouter.ai/api/v1").
+# Change for self-hosted OpenRouter-compatible endpoints.
+# Override with OPENROUTER_BASE_URL env var.
+# openrouter_base_url = ""
+
+# Max tokens for completions (0 = use general max_tokens setting above)
+# openrouter_max_tokens = 0
+
+# Optional: your site URL (sent as HTTP-Referer for OpenRouter analytics)
+# Override with OPENROUTER_SITE_URL env var.
+# openrouter_site_url = ""
+
+# Optional: your app name (shown in OpenRouter dashboard)
+# Override with OPENROUTER_APP_NAME env var.
+# openrouter_app_name = "safe-agent"
 
 # -- Local model settings (backend = "local") --
 

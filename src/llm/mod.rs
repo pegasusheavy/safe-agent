@@ -4,6 +4,7 @@ mod aider;
 mod claude;
 mod codex;
 mod gemini;
+mod openrouter;
 #[cfg(feature = "local")]
 mod local;
 
@@ -12,18 +13,20 @@ use tracing::info;
 use crate::config::Config;
 use crate::error::{Result, SafeAgentError};
 
-/// Unified LLM engine that dispatches to one of five backends:
+/// Unified LLM engine that dispatches to one of six backends:
 ///
-/// - **Claude**  -- Claude Code CLI (default)
-/// - **Codex**   -- OpenAI Codex CLI
-/// - **Gemini**  -- Google Gemini CLI
-/// - **Aider**   -- Aider multi-provider AI pair-programmer
-/// - **Local**   -- local GGUF model via llama-gguf (requires `local` feature)
+/// - **Claude**      -- Claude Code CLI (default)
+/// - **Codex**       -- OpenAI Codex CLI
+/// - **Gemini**      -- Google Gemini CLI
+/// - **Aider**       -- Aider multi-provider AI pair-programmer
+/// - **OpenRouter**  -- OpenRouter API (hundreds of models via one API key)
+/// - **Local**       -- local GGUF model via llama-gguf (requires `local` feature)
 pub enum LlmEngine {
     Claude(claude::ClaudeEngine),
     Codex(codex::CodexEngine),
     Gemini(gemini::GeminiEngine),
     Aider(aider::AiderEngine),
+    OpenRouter(openrouter::OpenRouterEngine),
     #[cfg(feature = "local")]
     Local(local::LocalEngine),
 }
@@ -55,6 +58,10 @@ impl LlmEngine {
                 info!("LLM backend: Aider");
                 Ok(Self::Aider(aider::AiderEngine::new(config)?))
             }
+            "openrouter" => {
+                info!("LLM backend: OpenRouter");
+                Ok(Self::OpenRouter(openrouter::OpenRouterEngine::new(config)?))
+            }
             #[cfg(feature = "local")]
             "local" => {
                 info!("LLM backend: local GGUF model");
@@ -68,7 +75,7 @@ impl LlmEngine {
             )),
             other => Err(SafeAgentError::Config(format!(
                 "unknown LLM backend \"{other}\" \
-                 (valid: \"claude\", \"codex\", \"gemini\", \"aider\", \"local\")"
+                 (valid: \"claude\", \"codex\", \"gemini\", \"aider\", \"openrouter\", \"local\")"
             ))),
         }
     }
@@ -80,6 +87,7 @@ impl LlmEngine {
             Self::Codex(engine) => engine.generate(message).await,
             Self::Gemini(engine) => engine.generate(message).await,
             Self::Aider(engine) => engine.generate(message).await,
+            Self::OpenRouter(engine) => engine.generate(message).await,
             #[cfg(feature = "local")]
             Self::Local(engine) => engine.generate(message).await,
         }
@@ -92,6 +100,7 @@ impl LlmEngine {
             Self::Codex(_) => "Codex CLI",
             Self::Gemini(_) => "Gemini CLI",
             Self::Aider(_) => "Aider",
+            Self::OpenRouter(_) => "OpenRouter API",
             #[cfg(feature = "local")]
             Self::Local(_) => "local GGUF",
         }
