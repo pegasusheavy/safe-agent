@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use axum::middleware;
-use axum::routing::{delete, get, post, put};
+use axum::routing::{any, delete, get, post, put};
 use axum::Router;
 use rusqlite::Connection;
 use tokio::sync::Mutex;
@@ -9,9 +9,12 @@ use tokio::sync::Mutex;
 use crate::agent::Agent;
 use crate::config::Config;
 use crate::error::{Result, SafeAgentError};
+use crate::skills::ExtensionManager;
 
 use super::auth;
 use super::handlers;
+use super::oauth;
+use super::skill_ext;
 use super::sse;
 
 /// State shared across all routes.
@@ -24,6 +27,8 @@ pub struct DashState {
     pub dashboard_password: String,
     /// Secret bytes used to sign/verify HS256 JWT cookies.
     pub jwt_secret: Vec<u8>,
+    /// Extension manager for Rhai-based skill routes and UI.
+    pub extension_manager: Arc<Mutex<ExtensionManager>>,
 }
 
 pub fn build(agent: Arc<Agent>, config: Config, db: Arc<Mutex<Connection>>) -> Result<Router> {
@@ -49,12 +54,19 @@ pub fn build(agent: Arc<Agent>, config: Config, db: Arc<Mutex<Connection>>) -> R
 
     tracing::info!("dashboard password protection enabled (JWT auth)");
 
+    // Initialize skill extension manager
+    let skills_dir = Config::data_dir().join("skills");
+    let db_path = Config::data_dir().join("safe-agent.db");
+    let mut ext_mgr = ExtensionManager::new(skills_dir, db_path);
+    ext_mgr.discover();
+
     let state = DashState {
         agent,
         config,
         db,
         dashboard_password,
         jwt_secret,
+        extension_manager: Arc::new(Mutex::new(ext_mgr)),
     };
 
     Ok(Router::new()
@@ -100,6 +112,24 @@ pub fn build(agent: Arc<Agent>, config: Config, db: Arc<Mutex<Connection>>) -> R
         .route("/api/skills/{name}/credentials", put(handlers::set_skill_credential))
         .route("/api/skills/{name}/credentials/{key}", delete(handlers::delete_skill_credential))
         .route("/api/skills/{name}/restart", post(handlers::restart_skill))
+        .route("/api/skills/{name}/detail", get(handlers::get_skill_detail))
+        .route("/api/skills/{name}/log", get(handlers::get_skill_log))
+        .route("/api/skills/{name}/manifest", put(handlers::update_skill_manifest))
+        .route("/api/skills/{name}/enabled", put(handlers::set_skill_enabled))
+        .route("/api/skills/{name}/env", put(handlers::set_skill_env_var))
+        .route("/api/skills/{name}/env/{key}", delete(handlers::delete_skill_env_var))
+        // OAuth — generic multi-provider (start/callback exempt from auth in auth.rs)
+        .route("/oauth/{provider}/start", get(oauth::oauth_start))
+        .route("/oauth/{provider}/callback", get(oauth::oauth_callback))
+        .route("/api/oauth/status", get(oauth::all_oauth_status))
+        .route("/api/oauth/providers", get(oauth::list_providers))
+        .route("/api/oauth/{provider}/refresh", post(oauth::oauth_refresh))
+        .route("/api/oauth/{provider}/disconnect/{account}", post(oauth::oauth_disconnect))
+        // API — Skill Extensions (Rhai routes + static files)
+        .route("/api/skills/extensions", get(skill_ext::list_extensions))
+        .route("/api/skills/{name}/ext/{*path}", any(skill_ext::skill_ext_handler))
+        .route("/skills/{name}/ui/{*path}", get(skill_ext::skill_static_file))
+        .route("/skills/{name}/page", get(skill_ext::skill_page))
         // API — Tunnel
         .route("/api/tunnel/status", get(handlers::tunnel_status))
         // SSE

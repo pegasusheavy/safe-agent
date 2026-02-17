@@ -1,6 +1,8 @@
 pub mod auth;
 pub mod handlers;
+pub mod oauth;
 pub mod routes;
+pub mod skill_ext;
 pub mod sse;
 
 use std::sync::Arc;

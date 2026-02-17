@@ -85,6 +85,8 @@ pub async fn require_auth(
         || path == "/style.css"
         || path == "/app.js"
         || path.starts_with("/api/auth/")
+        || path.starts_with("/oauth/")
+        || path.starts_with("/skills/")
     {
         return next.run(req).await;
     }

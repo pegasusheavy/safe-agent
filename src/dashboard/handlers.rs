@@ -518,6 +518,146 @@ pub async fn restart_skill(
     }))
 }
 
+/// Get detailed information about a skill (manifest, env, logs).
+pub async fn get_skill_detail(
+    State(state): State<DashState>,
+    Path(skill_name): Path<String>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let sm = state.agent.skill_manager.lock().await;
+    sm.detail(&skill_name)
+        .map(|d| Json(serde_json::to_value(d).unwrap()))
+        .map_err(|e| {
+            error!("skill detail: {e}");
+            StatusCode::NOT_FOUND
+        })
+}
+
+/// Get skill log tail.
+#[derive(Deserialize)]
+pub struct LogQuery {
+    pub lines: Option<usize>,
+}
+
+pub async fn get_skill_log(
+    State(state): State<DashState>,
+    Path(skill_name): Path<String>,
+    Query(params): Query<LogQuery>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let sm = state.agent.skill_manager.lock().await;
+    let max_lines = params.lines.unwrap_or(200);
+    sm.read_log(&skill_name, max_lines)
+        .map(|log| Json(serde_json::json!({ "log": log })))
+        .map_err(|e| {
+            error!("skill log: {e}");
+            StatusCode::NOT_FOUND
+        })
+}
+
+/// Update the skill manifest (raw TOML).
+#[derive(Deserialize)]
+pub struct UpdateManifestBody {
+    pub toml: String,
+}
+
+pub async fn update_skill_manifest(
+    State(state): State<DashState>,
+    Path(skill_name): Path<String>,
+    Json(body): Json<UpdateManifestBody>,
+) -> Result<Json<ActionResponse>, StatusCode> {
+    let sm = state.agent.skill_manager.lock().await;
+    sm.update_manifest(&skill_name, &body.toml)
+        .map_err(|e| {
+            error!("update manifest: {e}");
+            StatusCode::BAD_REQUEST
+        })?;
+    Ok(Json(ActionResponse {
+        ok: true,
+        message: Some(format!("manifest for '{}' updated", skill_name)),
+        count: None,
+    }))
+}
+
+/// Toggle skill enabled/disabled.
+#[derive(Deserialize)]
+pub struct SetEnabledBody {
+    pub enabled: bool,
+}
+
+pub async fn set_skill_enabled(
+    State(state): State<DashState>,
+    Path(skill_name): Path<String>,
+    Json(body): Json<SetEnabledBody>,
+) -> Result<Json<ActionResponse>, StatusCode> {
+    {
+        let sm = state.agent.skill_manager.lock().await;
+        sm.set_enabled(&skill_name, body.enabled).map_err(|e| {
+            error!("set enabled: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    }
+
+    // If disabling, stop the skill immediately; if enabling, reconcile to start it
+    let mut sm = state.agent.skill_manager.lock().await;
+    if !body.enabled {
+        sm.stop_skill(&skill_name).await;
+    } else {
+        let _ = sm.reconcile().await;
+    }
+
+    Ok(Json(ActionResponse {
+        ok: true,
+        message: Some(format!(
+            "skill '{}' {}",
+            skill_name,
+            if body.enabled { "enabled" } else { "disabled" }
+        )),
+        count: None,
+    }))
+}
+
+/// Set an env var on a skill's manifest.
+#[derive(Deserialize)]
+pub struct SetEnvVarBody {
+    pub key: String,
+    pub value: String,
+}
+
+pub async fn set_skill_env_var(
+    State(state): State<DashState>,
+    Path(skill_name): Path<String>,
+    Json(body): Json<SetEnvVarBody>,
+) -> Result<Json<ActionResponse>, StatusCode> {
+    let sm = state.agent.skill_manager.lock().await;
+    sm.set_env_var(&skill_name, &body.key, &body.value)
+        .map_err(|e| {
+            error!("set env var: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    Ok(Json(ActionResponse {
+        ok: true,
+        message: Some(format!("env var '{}' set for '{}'", body.key, skill_name)),
+        count: None,
+    }))
+}
+
+/// Delete an env var from a skill's manifest.
+pub async fn delete_skill_env_var(
+    State(state): State<DashState>,
+    Path((skill_name, key)): Path<(String, String)>,
+) -> Result<Json<ActionResponse>, StatusCode> {
+    let sm = state.agent.skill_manager.lock().await;
+    sm.delete_env_var(&skill_name, &key)
+        .map_err(|e| {
+            error!("delete env var: {e}");
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
+    Ok(Json(ActionResponse {
+        ok: true,
+        message: Some(format!("env var '{}' removed from '{}'", key, skill_name)),
+        count: None,
+    }))
+}
+
 // -- Chat ----------------------------------------------------------------
 
 #[derive(Deserialize)]

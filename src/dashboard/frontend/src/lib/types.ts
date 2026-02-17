@@ -83,9 +83,18 @@ export interface SkillStatus {
     name: string;
     description?: string;
     skill_type: 'daemon' | 'oneshot';
+    enabled: boolean;
     running: boolean;
     pid?: number;
     credentials: CredentialStatus[];
+}
+
+export interface SkillDetail extends SkillStatus {
+    manifest_raw: string;
+    env: Record<string, string>;
+    log_tail: string;
+    dir: string;
+    entrypoint: string;
 }
 
 export interface ActionResponse {

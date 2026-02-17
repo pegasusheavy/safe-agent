@@ -147,15 +147,18 @@ fn migrate(conn: &Connection) -> Result<()> {
             VALUES (new.id, new.label, new.content, new.node_type);
         END;
 
-        -- OAuth tokens (provider-generic)
+        -- OAuth tokens (multi-account per provider)
         CREATE TABLE IF NOT EXISTS oauth_tokens (
-            provider      TEXT PRIMARY KEY,
+            provider      TEXT NOT NULL,
+            account       TEXT NOT NULL DEFAULT '',
+            email         TEXT NOT NULL DEFAULT '',
             access_token  TEXT NOT NULL,
             refresh_token TEXT,
             expires_at    TEXT,
             scopes        TEXT NOT NULL DEFAULT '',
             created_at    TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at    TEXT NOT NULL DEFAULT (datetime('now'))
+            updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
+            PRIMARY KEY (provider, account)
         );
 
         -- Cron jobs
@@ -188,6 +191,41 @@ fn migrate(conn: &Connection) -> Result<()> {
         );
         ",
     )?;
+
+    // Migrate oauth_tokens from single-account to multi-account schema.
+    // Check if the 'account' column exists; if not, recreate the table.
+    let has_account_col: bool = conn
+        .prepare("SELECT account FROM oauth_tokens LIMIT 0")
+        .is_ok();
+
+    if !has_account_col {
+        info!("migrating oauth_tokens to multi-account schema");
+        conn.execute_batch(
+            "
+            ALTER TABLE oauth_tokens RENAME TO oauth_tokens_old;
+
+            CREATE TABLE oauth_tokens (
+                provider      TEXT NOT NULL,
+                account       TEXT NOT NULL DEFAULT '',
+                email         TEXT NOT NULL DEFAULT '',
+                access_token  TEXT NOT NULL,
+                refresh_token TEXT,
+                expires_at    TEXT,
+                scopes        TEXT NOT NULL DEFAULT '',
+                created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+                updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (provider, account)
+            );
+
+            INSERT INTO oauth_tokens (provider, account, email, access_token, refresh_token, expires_at, scopes, created_at, updated_at)
+                SELECT provider, 'default', '', access_token, refresh_token, expires_at, scopes, created_at, updated_at
+                FROM oauth_tokens_old;
+
+            DROP TABLE oauth_tokens_old;
+            ",
+        )?;
+        info!("oauth_tokens migration complete");
+    }
 
     info!("database migrations complete");
     Ok(())
