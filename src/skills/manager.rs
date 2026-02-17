@@ -500,6 +500,206 @@ impl SkillManager {
         result
     }
 
+    /// Get the directory path for a skill by name, scanning the skills directory.
+    fn find_skill_dir(&self, name: &str) -> Option<PathBuf> {
+        let entries = std::fs::read_dir(&self.skills_dir).ok()?;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let manifest_path = path.join("skill.toml");
+            if manifest_path.exists() {
+                if let Ok(manifest) = self.read_manifest(&manifest_path) {
+                    if manifest.name == name {
+                        return Some(path);
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    /// Get detailed information about a skill.
+    pub fn detail(&self, name: &str) -> Result<SkillDetail> {
+        let dir = self.find_skill_dir(name).ok_or_else(|| {
+            SafeAgentError::Config(format!("skill '{name}' not found"))
+        })?;
+
+        let manifest_path = dir.join("skill.toml");
+        let manifest_raw = std::fs::read_to_string(&manifest_path)
+            .map_err(|e| SafeAgentError::Io(e))?;
+        let manifest = self.read_manifest(&manifest_path)?;
+
+        let log_path = dir.join("skill.log");
+        let log_tail = Self::tail_file(&log_path, 100);
+
+        let running = self.running.contains_key(name);
+        let pid = self.running.get(name).and_then(|s| s.child.id());
+
+        let stored = self.get_credentials(name);
+        let credential_status: Vec<CredentialStatus> = manifest
+            .credentials
+            .iter()
+            .map(|spec| {
+                let configured = stored.contains_key(&spec.name);
+                CredentialStatus {
+                    name: spec.name.clone(),
+                    label: if spec.label.is_empty() {
+                        spec.name.clone()
+                    } else {
+                        spec.label.clone()
+                    },
+                    description: spec.description.clone(),
+                    required: spec.required,
+                    configured,
+                }
+            })
+            .collect();
+
+        Ok(SkillDetail {
+            status: SkillStatus {
+                name: manifest.name.clone(),
+                description: manifest.description.clone(),
+                skill_type: manifest.skill_type.clone(),
+                enabled: manifest.enabled,
+                running,
+                pid,
+                credentials: credential_status,
+            },
+            manifest_raw,
+            env: manifest.env.clone(),
+            log_tail,
+            dir: dir.to_string_lossy().to_string(),
+            entrypoint: manifest.entrypoint.clone(),
+        })
+    }
+
+    /// Read the last N lines of a file, returning an empty string if the file doesn't exist.
+    fn tail_file(path: &Path, max_lines: usize) -> String {
+        let contents = match std::fs::read_to_string(path) {
+            Ok(c) => c,
+            Err(_) => return String::new(),
+        };
+        let lines: Vec<&str> = contents.lines().collect();
+        let start = lines.len().saturating_sub(max_lines);
+        lines[start..].join("\n")
+    }
+
+    /// Read skill log (last N lines).
+    pub fn read_log(&self, name: &str, max_lines: usize) -> Result<String> {
+        let dir = self.find_skill_dir(name).ok_or_else(|| {
+            SafeAgentError::Config(format!("skill '{name}' not found"))
+        })?;
+        Ok(Self::tail_file(&dir.join("skill.log"), max_lines))
+    }
+
+    /// Update a skill's manifest with new TOML contents. Validates before writing.
+    pub fn update_manifest(&self, name: &str, new_toml: &str) -> Result<()> {
+        // Parse the new TOML to validate it
+        let _parsed: SkillManifest = toml::from_str(new_toml)
+            .map_err(|e| SafeAgentError::Config(format!("invalid skill manifest TOML: {e}")))?;
+
+        let dir = self.find_skill_dir(name).ok_or_else(|| {
+            SafeAgentError::Config(format!("skill '{name}' not found"))
+        })?;
+
+        std::fs::write(dir.join("skill.toml"), new_toml)
+            .map_err(|e| SafeAgentError::Io(e))?;
+
+        info!(skill = %name, "manifest updated from dashboard");
+        Ok(())
+    }
+
+    /// Toggle a skill's enabled state. Returns the new enabled value.
+    pub fn set_enabled(&self, name: &str, enabled: bool) -> Result<bool> {
+        let dir = self.find_skill_dir(name).ok_or_else(|| {
+            SafeAgentError::Config(format!("skill '{name}' not found"))
+        })?;
+
+        let manifest_path = dir.join("skill.toml");
+        let contents = std::fs::read_to_string(&manifest_path)
+            .map_err(|e| SafeAgentError::Io(e))?;
+
+        // Parse, update, serialize
+        let mut doc: toml::Value = toml::from_str(&contents)
+            .map_err(|e| SafeAgentError::Config(format!("parse manifest: {e}")))?;
+
+        if let Some(table) = doc.as_table_mut() {
+            table.insert("enabled".to_string(), toml::Value::Boolean(enabled));
+        }
+
+        let new_contents = toml::to_string_pretty(&doc)
+            .map_err(|e| SafeAgentError::Config(format!("serialize manifest: {e}")))?;
+
+        std::fs::write(&manifest_path, new_contents)
+            .map_err(|e| SafeAgentError::Io(e))?;
+
+        info!(skill = %name, enabled, "skill enabled state changed");
+        Ok(enabled)
+    }
+
+    /// Update a single environment variable in the skill manifest.
+    pub fn set_env_var(&self, name: &str, key: &str, value: &str) -> Result<()> {
+        let dir = self.find_skill_dir(name).ok_or_else(|| {
+            SafeAgentError::Config(format!("skill '{name}' not found"))
+        })?;
+
+        let manifest_path = dir.join("skill.toml");
+        let contents = std::fs::read_to_string(&manifest_path)
+            .map_err(|e| SafeAgentError::Io(e))?;
+
+        let mut doc: toml::Value = toml::from_str(&contents)
+            .map_err(|e| SafeAgentError::Config(format!("parse manifest: {e}")))?;
+
+        if let Some(table) = doc.as_table_mut() {
+            let env = table
+                .entry("env")
+                .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+            if let Some(env_table) = env.as_table_mut() {
+                env_table.insert(key.to_string(), toml::Value::String(value.to_string()));
+            }
+        }
+
+        let new_contents = toml::to_string_pretty(&doc)
+            .map_err(|e| SafeAgentError::Config(format!("serialize manifest: {e}")))?;
+
+        std::fs::write(&manifest_path, new_contents)
+            .map_err(|e| SafeAgentError::Io(e))?;
+
+        info!(skill = %name, key, "env var updated from dashboard");
+        Ok(())
+    }
+
+    /// Delete an environment variable from the skill manifest.
+    pub fn delete_env_var(&self, name: &str, key: &str) -> Result<()> {
+        let dir = self.find_skill_dir(name).ok_or_else(|| {
+            SafeAgentError::Config(format!("skill '{name}' not found"))
+        })?;
+
+        let manifest_path = dir.join("skill.toml");
+        let contents = std::fs::read_to_string(&manifest_path)
+            .map_err(|e| SafeAgentError::Io(e))?;
+
+        let mut doc: toml::Value = toml::from_str(&contents)
+            .map_err(|e| SafeAgentError::Config(format!("parse manifest: {e}")))?;
+
+        if let Some(table) = doc.as_table_mut() {
+            if let Some(env) = table.get_mut("env").and_then(|v| v.as_table_mut()) {
+                env.remove(key);
+            }
+        }
+
+        let new_contents = toml::to_string_pretty(&doc)
+            .map_err(|e| SafeAgentError::Config(format!("serialize manifest: {e}")))?;
+
+        std::fs::write(&manifest_path, new_contents)
+            .map_err(|e| SafeAgentError::Io(e))?;
+
+        info!(skill = %name, key, "env var deleted from dashboard");
+        Ok(())
+    }
+
     /// Stop all running skills (called on shutdown).
     pub async fn shutdown(&mut self) {
         let names: Vec<String> = self.running.keys().cloned().collect();
@@ -528,4 +728,21 @@ pub struct CredentialStatus {
     pub description: String,
     pub required: bool,
     pub configured: bool,
+}
+
+/// Detailed view of a skill, including manifest contents and log tail.
+#[derive(Debug, serde::Serialize)]
+pub struct SkillDetail {
+    #[serde(flatten)]
+    pub status: SkillStatus,
+    /// Raw contents of skill.toml
+    pub manifest_raw: String,
+    /// The env map from the manifest
+    pub env: HashMap<String, String>,
+    /// Last N lines of skill.log
+    pub log_tail: String,
+    /// Absolute path to the skill directory
+    pub dir: String,
+    /// Entrypoint file name
+    pub entrypoint: String,
 }
