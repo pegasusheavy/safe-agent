@@ -113,6 +113,11 @@ async fn main() {
     };
     info!(bin_dir = %trash.bin_dir().display(), "trash system initialized");
 
+    // Ensure CLAUDE.md exists in the data directory for the Claude CLI backend.
+    // This writes/updates the system-managed rules section while preserving any
+    // user-added rules below the end marker.
+    ensure_claude_md(&data_dir);
+
     // Open database
     let db_path = sandbox.root().join("safe-agent.db");
     let db = match db::open(&db_path) {
@@ -600,6 +605,65 @@ async fn run_checks(config: &Config, _sandbox: &SandboxedFs) {
         info!("ACME TLS: disabled");
     }
 
+}
+
+// ---------------------------------------------------------------------------
+// CLAUDE.md management
+// ---------------------------------------------------------------------------
+
+/// Default system rules embedded from the repo's config/CLAUDE.md.
+const CLAUDE_MD_SYSTEM_RULES: &str = include_str!("../config/CLAUDE.md");
+
+const CLAUDE_MD_BEGIN: &str = "<!-- SAFE-AGENT SYSTEM RULES - DO NOT EDIT BELOW THIS LINE -->";
+const CLAUDE_MD_END: &str = "<!-- END SAFE-AGENT SYSTEM RULES -->";
+
+/// Write or update the CLAUDE.md in `data_dir`.
+///
+/// The file is split into two sections separated by markers:
+///   1. **System rules** (between the markers) — always overwritten from the
+///      embedded template so that new releases can add rules.
+///   2. **User rules** (everything after the end marker) — preserved across
+///      updates so operators can append custom instructions.
+///
+/// If the file does not exist yet, it is created with the system section only.
+fn ensure_claude_md(data_dir: &std::path::Path) {
+    let path = data_dir.join("CLAUDE.md");
+
+    // Preserve any user-added content after the end marker.
+    let user_section = if path.exists() {
+        match std::fs::read_to_string(&path) {
+            Ok(existing) => {
+                if let Some(pos) = existing.find(CLAUDE_MD_END) {
+                    let after = &existing[pos + CLAUDE_MD_END.len()..];
+                    let trimmed = after.trim_start_matches('\n');
+                    if trimmed.is_empty() {
+                        String::new()
+                    } else {
+                        format!("\n{trimmed}")
+                    }
+                } else {
+                    // No markers found — treat the entire existing file as user rules
+                    // so we don't destroy manually written content.
+                    format!("\n{}", existing.trim())
+                }
+            }
+            Err(e) => {
+                warn!("failed to read existing CLAUDE.md: {e}");
+                String::new()
+            }
+        }
+    } else {
+        String::new()
+    };
+
+    let content = format!(
+        "{CLAUDE_MD_BEGIN}\n{CLAUDE_MD_SYSTEM_RULES}\n{CLAUDE_MD_END}\n{user_section}"
+    );
+
+    match std::fs::write(&path, content.trim_end().to_owned() + "\n") {
+        Ok(()) => info!(path = %path.display(), "CLAUDE.md updated"),
+        Err(e) => warn!("failed to write CLAUDE.md: {e}"),
+    }
 }
 
 fn print_usage() {

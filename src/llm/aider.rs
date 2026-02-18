@@ -27,6 +27,8 @@ pub struct AiderEngine {
     agent_name: String,
     timezone: String,
     timeout_secs: u64,
+    /// Working directory for the CLI process.
+    work_dir: std::path::PathBuf,
 }
 
 impl AiderEngine {
@@ -60,6 +62,7 @@ impl AiderEngine {
             agent_name: config.agent_name.clone(),
             timezone: config.timezone.clone(),
             timeout_secs,
+            work_dir: Config::data_dir(),
         })
     }
 
@@ -83,7 +86,8 @@ impl AiderEngine {
             cmd.arg("--model").arg(model);
         }
 
-        cmd.stdin(Stdio::null())
+        cmd.current_dir(&self.work_dir)
+            .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 

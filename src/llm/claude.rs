@@ -23,6 +23,9 @@ pub struct ClaudeEngine {
     timezone: String,
     max_turns: u32,
     timeout_secs: u64,
+    /// Working directory for the CLI process.  Set to the data directory so
+    /// that the CLI picks up the managed CLAUDE.md file.
+    work_dir: std::path::PathBuf,
 }
 
 impl ClaudeEngine {
@@ -64,6 +67,7 @@ impl ClaudeEngine {
             timezone: config.timezone.clone(),
             max_turns,
             timeout_secs,
+            work_dir: Config::data_dir(),
         })
     }
 
@@ -83,7 +87,8 @@ impl ClaudeEngine {
             cmd.env("CLAUDE_CONFIG_DIR", dir);
         }
 
-        cmd.stdin(Stdio::piped())
+        cmd.current_dir(&self.work_dir)
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 

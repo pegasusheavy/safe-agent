@@ -27,6 +27,8 @@ pub struct CodexEngine {
     agent_name: String,
     timezone: String,
     timeout_secs: u64,
+    /// Working directory for the CLI process.
+    work_dir: std::path::PathBuf,
 }
 
 impl CodexEngine {
@@ -72,6 +74,7 @@ impl CodexEngine {
             agent_name: config.agent_name.clone(),
             timezone: config.timezone.clone(),
             timeout_secs,
+            work_dir: Config::data_dir(),
         })
     }
 
@@ -97,7 +100,8 @@ impl CodexEngine {
         // command-line length limits on large system prompts.
         cmd.arg("-");
 
-        cmd.stdin(Stdio::piped())
+        cmd.current_dir(&self.work_dir)
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 

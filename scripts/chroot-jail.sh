@@ -38,6 +38,7 @@ SA_PATH="${NVM_NODE_BIN:+$NVM_NODE_BIN:}$PYENV_ROOT/shims:$PYENV_ROOT/bin:/usr/l
 if [ "${NO_JAIL:-}" = "1" ] || [ "${1:-}" = "--no-jail" ]; then
     [ "${1:-}" = "--no-jail" ] && shift
     echo "[entrypoint] chroot jail bypassed (NO_JAIL=1)"
+    chmod 1777 /tmp
     chown -R "$RUN_USER:$RUN_GROUP" /data/safe-agent /config/safe-agent /home/safeagent 2>/dev/null || true
     export NVM_DIR PYENV_ROOT PATH="$SA_PATH"
     exec su-exec "$RUN_USER:$RUN_GROUP" /usr/local/bin/safe-agent "$@"

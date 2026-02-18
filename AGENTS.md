@@ -506,10 +506,32 @@ Each OAuth provider requires a client ID and secret, set via environment variabl
 | LinkedIn | `LINKEDIN_CLIENT_ID` | `LINKEDIN_CLIENT_SECRET` |
 | Notion | `NOTION_CLIENT_ID` | `NOTION_CLIENT_SECRET` |
 
+### CLAUDE.md (LLM Backend Project Rules)
+
+All CLI-based LLM backends (Claude, Codex, Gemini, Aider) run with `current_dir` set to the data directory (`$XDG_DATA_HOME/safe-agent/`). This means the CLI picks up the `CLAUDE.md` file located there as project-level instructions.
+
+**System-managed rules** are maintained automatically at startup from an embedded template (`config/CLAUDE.md` in the repo). The file uses marker comments to separate system rules from user-added rules:
+
+```
+<!-- SAFE-AGENT SYSTEM RULES - DO NOT EDIT BELOW THIS LINE -->
+... system rules (overwritten on every startup) ...
+<!-- END SAFE-AGENT SYSTEM RULES -->
+
+... user rules (preserved across restarts) ...
+```
+
+**Adding a new system rule:** Edit `config/CLAUDE.md` in the repo. The content is embedded in the binary at compile time via `include_str!` and written to `$DATA_DIR/CLAUDE.md` on every startup, replacing the system section while preserving anything the operator appended after the end marker.
+
+**Adding a user/operator rule at runtime:** Append text after the `<!-- END SAFE-AGENT SYSTEM RULES -->` line in `$DATA_DIR/CLAUDE.md`. It will be preserved across agent restarts and binary upgrades.
+
+**Default system rules:**
+- **Trash policy:** Never use `rm`/`rmdir`/`unlink` for deletions; use the trash system at `$DATA_DIR/trash/` instead.
+
 ## Data Storage
 
 All data is stored under `$XDG_DATA_HOME/safe-agent/` (typically `~/.local/share/safe-agent/`):
 - `safe-agent.db` — SQLite database (conversation, memory, knowledge graph, approvals, stats, OAuth tokens)
+- `CLAUDE.md` — System + user rules for CLI LLM backends (managed at startup, see above)
 - `skills/` — Skill directories (each with `skill.toml`, entrypoint, `skill.log`, `data/`, optional `routes.rhai`, optional `ui/`)
 - `skills/credentials.json` — Stored skill credentials
 
