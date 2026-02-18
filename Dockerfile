@@ -24,16 +24,21 @@ RUN apk add --no-cache \
 # Install Claude Code CLI globally
 RUN npm install -g @anthropic-ai/claude-code
 
-# Install ngrok for tunnel support
-RUN ARCH="$(uname -m)" && \
+# Install ngrok for tunnel support.
+# The equinox.io tgz endpoint is defunct; pull the .deb from the ngrok S3
+# apt repo and extract the static binary (works fine on Alpine/musl).
+RUN apk add --no-cache --virtual .ngrok-deps binutils xz && \
+    ARCH="$(uname -m)" && \
     if [ "$ARCH" = "x86_64" ]; then NGROK_ARCH="amd64"; \
     elif [ "$ARCH" = "aarch64" ]; then NGROK_ARCH="arm64"; \
     else NGROK_ARCH="amd64"; fi && \
-    curl -fsSL "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-${NGROK_ARCH}.tgz" \
-    -o /tmp/ngrok.tgz \
-    && tar -xzf /tmp/ngrok.tgz -C /usr/local/bin \
-    && rm /tmp/ngrok.tgz \
-    && chmod +x /usr/local/bin/ngrok
+    curl -fsSL "https://ngrok-agent.s3.amazonaws.com/pool/main/n/ngrok/ngrok_3.36.1-0_${NGROK_ARCH}.deb" \
+    -o /tmp/ngrok.deb && \
+    cd /tmp && ar x ngrok.deb && tar -xf data.tar.xz && \
+    mv /tmp/usr/local/bin/ngrok /usr/local/bin/ngrok && \
+    chmod +x /usr/local/bin/ngrok && \
+    rm -rf /tmp/ngrok.deb /tmp/data.tar.xz /tmp/control.tar.* /tmp/debian-binary /tmp/usr && \
+    apk del .ngrok-deps
 
 # Install common Python packages that skills are likely to need
 RUN pip install --no-cache-dir --break-system-packages \

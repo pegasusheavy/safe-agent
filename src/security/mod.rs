@@ -560,13 +560,24 @@ pub fn apply_landlock(data_dir: &Path, config_dir: &Path) -> std::result::Result
         ))
         .map_err(|e| format!("landlock rule /tmp: {e}"))?;
 
-    // Read-only system paths
-    let ro_paths = [
-        "/usr", "/lib", "/lib64", "/etc", "/bin", "/sbin",
-        "/proc/self", "/dev/null", "/dev/zero", "/dev/urandom",
-    ];
-
+    // Read-only + execute for system paths containing binaries.
+    let exec_paths = ["/usr", "/bin", "/sbin", "/lib", "/lib64"];
     let mut status = status;
+    for p in &exec_paths {
+        if Path::new(p).exists() {
+            status = status
+                .add_rule(PathBeneath::new(
+                    PathFd::new(p).map_err(|e| format!("landlock pathfd {p}: {e}"))?,
+                    read_only | AccessFs::Execute,
+                ))
+                .map_err(|e| format!("landlock rule {p}: {e}"))?;
+        }
+    }
+
+    // Read-only system paths (no execute needed).
+    let ro_paths = [
+        "/etc", "/proc/self", "/dev/null", "/dev/zero", "/dev/urandom",
+    ];
     for p in &ro_paths {
         if Path::new(p).exists() {
             status = status

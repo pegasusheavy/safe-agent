@@ -21,6 +21,7 @@ venv/
 config.toml
 
 # === IDE / editor ===
+.cursor/
 .vscode/
 .idea/
 *.swp
