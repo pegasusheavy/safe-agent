@@ -8,6 +8,7 @@ description = "Sandboxed autonomous AI agent with tool execution, knowledge grap
 default = []
 local = ["dep:llama-gguf"]
 local-cuda = ["local", "llama-gguf/cuda"]
+local-embeddings = ["dep:fastembed"]
 
 [dependencies]
 
@@ -27,6 +28,13 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 
 # Database
 rusqlite = { version = "0.31", features = ["bundled"] }
+
+# Vector store & embeddings
+lancedb = "0.26"
+fastembed = { version = "5", optional = true }
+arrow-array = "54"
+arrow-schema = "54"
+oxidize-pdf = "1"
 
 # Serialization
 serde = { version = "1", features = ["derive"] }
