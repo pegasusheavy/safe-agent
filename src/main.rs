@@ -16,6 +16,7 @@ mod skills;
 mod tools;
 mod trash;
 mod tunnel;
+mod vector;
 mod users;
 
 use std::path::PathBuf;
