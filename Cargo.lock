@@ -7018,6 +7018,7 @@ dependencies = [
  "sha2",
  "tar",
  "teloxide",
+ "tempfile",
  "thiserror 1.0.69",
  "tokio",
  "tokio-stream",
