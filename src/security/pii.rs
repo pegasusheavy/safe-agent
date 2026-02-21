@@ -25,12 +25,9 @@ pub struct PiiDetection {
 pub enum PiiCategory {
     Ssn,
     CreditCard,
-    Email,
-    PhoneNumber,
     ApiKey,
     PrivateKey,
     Password,
-    IpAddress,
     JwtToken,
     AwsKey,
 }
@@ -40,12 +37,9 @@ impl std::fmt::Display for PiiCategory {
         match self {
             PiiCategory::Ssn => write!(f, "SSN"),
             PiiCategory::CreditCard => write!(f, "credit card"),
-            PiiCategory::Email => write!(f, "email address"),
-            PiiCategory::PhoneNumber => write!(f, "phone number"),
             PiiCategory::ApiKey => write!(f, "API key"),
             PiiCategory::PrivateKey => write!(f, "private key"),
             PiiCategory::Password => write!(f, "password"),
-            PiiCategory::IpAddress => write!(f, "IP address"),
             PiiCategory::JwtToken => write!(f, "JWT token"),
             PiiCategory::AwsKey => write!(f, "AWS access key"),
         }
@@ -97,38 +91,6 @@ impl PiiScanner {
         detections
     }
 
-    /// Scan and return a redacted version of the text.
-    pub fn redact(&self, text: &str) -> (String, Vec<PiiDetection>) {
-        let detections = self.scan(text);
-        if detections.is_empty() {
-            return (text.to_string(), detections);
-        }
-
-        let mut redacted = text.to_string();
-        // Process detections in reverse order (by offset) to preserve positions
-        let mut sorted = detections.clone();
-        sorted.sort_by(|a, b| b.offset.cmp(&a.offset));
-
-        for det in &sorted {
-            if det.offset < redacted.len() {
-                let match_len = det.redacted_match.len().min(redacted.len() - det.offset);
-                if match_len > 0 {
-                    let replacement = format!("[REDACTED:{}]", det.category);
-                    let end = det.offset + match_len;
-                    if end <= redacted.len() {
-                        redacted.replace_range(det.offset..end, &replacement);
-                    }
-                }
-            }
-        }
-
-        (redacted, detections)
-    }
-
-    /// Return true if any PII was detected.
-    pub fn has_pii(&self, text: &str) -> bool {
-        !self.scan(text).is_empty()
-    }
 }
 
 /// Scan text for a specific pattern type and add detections.
@@ -399,22 +361,6 @@ mod tests {
     }
 
     #[test]
-    fn test_redact() {
-        let scanner = PiiScanner::new(true);
-        let (redacted, detections) = scanner.redact("My SSN is 123-45-6789 end");
-        assert!(!detections.is_empty());
-        assert!(redacted.contains("[REDACTED:SSN]"));
-        assert!(!redacted.contains("123-45-6789"));
-    }
-
-    #[test]
-    fn test_has_pii() {
-        let scanner = PiiScanner::new(true);
-        assert!(scanner.has_pii("SSN: 123-45-6789"));
-        assert!(!scanner.has_pii("Hello world"));
-    }
-
-    #[test]
     fn test_empty_text() {
         let scanner = PiiScanner::new(true);
         assert!(scanner.scan("").is_empty());
@@ -424,6 +370,5 @@ mod tests {
     fn test_pii_category_display() {
         assert_eq!(PiiCategory::Ssn.to_string(), "SSN");
         assert_eq!(PiiCategory::CreditCard.to_string(), "credit card");
-        assert_eq!(PiiCategory::ApiKey.to_string(), "API key");
     }
 }

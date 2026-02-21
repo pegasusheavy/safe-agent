@@ -183,68 +183,6 @@ impl PathJail {
 }
 
 // ===========================================================================
-// AllowlistedHttpClient — network access control
-// ===========================================================================
-
-/// HTTP client that only allows requests to allowlisted hosts.
-#[derive(Debug, Clone)]
-pub struct AllowlistedHttpClient {
-    client: reqwest::Client,
-    allowed_hosts: Vec<String>,
-}
-
-impl AllowlistedHttpClient {
-    pub fn new(allowed_hosts: Vec<String>) -> Result<Self> {
-        let client = reqwest::Client::builder()
-            .https_only(true)
-            .user_agent("safe-agent/0.1.0")
-            .build()?;
-        Ok(Self {
-            client,
-            allowed_hosts,
-        })
-    }
-
-    fn check_url(&self, url: &str) -> Result<Url> {
-        let parsed: Url = url
-            .parse()
-            .map_err(|e| SafeAgentError::NetworkNotAllowed(format!("invalid URL: {e}")))?;
-
-        let host = parsed
-            .host_str()
-            .ok_or_else(|| SafeAgentError::NetworkNotAllowed("URL has no host".into()))?;
-
-        if !self.allowed_hosts.iter().any(|h| h == host) {
-            return Err(SafeAgentError::NetworkNotAllowed(format!(
-                "host not in allowlist: {host}"
-            )));
-        }
-
-        Ok(parsed)
-    }
-
-    pub fn get(&self, url: &str) -> Result<reqwest::RequestBuilder> {
-        let parsed = self.check_url(url)?;
-        Ok(self.client.get(parsed))
-    }
-
-    pub fn post(&self, url: &str) -> Result<reqwest::RequestBuilder> {
-        let parsed = self.check_url(url)?;
-        Ok(self.client.post(parsed))
-    }
-
-    pub fn put(&self, url: &str) -> Result<reqwest::RequestBuilder> {
-        let parsed = self.check_url(url)?;
-        Ok(self.client.put(parsed))
-    }
-
-    pub fn delete(&self, url: &str) -> Result<reqwest::RequestBuilder> {
-        let parsed = self.check_url(url)?;
-        Ok(self.client.delete(parsed))
-    }
-}
-
-// ===========================================================================
 // URL validation for Rhai extensions
 // ===========================================================================
 
@@ -476,18 +414,7 @@ impl Default for ProcessLimits {
     }
 }
 
-/// More permissive limits for LLM backends and trusted subprocesses.
 impl ProcessLimits {
-    pub fn permissive() -> Self {
-        Self {
-            max_memory_bytes: 8 * 1024 * 1024 * 1024,   // 8 GiB
-            max_file_size_bytes: 1024 * 1024 * 1024,     // 1 GiB
-            max_open_files: 1024,
-            max_cpu_secs: 3600,
-            max_processes: 256,
-        }
-    }
-
     /// Restrictive limits for skill processes.
     pub fn skill() -> Self {
         Self {
@@ -806,16 +733,6 @@ mod tests {
         assert_eq!(limits.max_open_files, 256);
         assert_eq!(limits.max_cpu_secs, 300);
         assert_eq!(limits.max_processes, 64);
-    }
-
-    #[test]
-    fn test_process_limits_permissive() {
-        let limits = ProcessLimits::permissive();
-        assert_eq!(limits.max_memory_bytes, 8 * 1024 * 1024 * 1024);   // 8 GiB
-        assert_eq!(limits.max_file_size_bytes, 1024 * 1024 * 1024);    // 1 GiB
-        assert_eq!(limits.max_open_files, 1024);
-        assert_eq!(limits.max_cpu_secs, 3600);
-        assert_eq!(limits.max_processes, 256);
     }
 
     #[test]
