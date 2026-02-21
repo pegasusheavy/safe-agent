@@ -202,11 +202,13 @@ pub fn validate_url(url: &str) -> std::result::Result<Url, String> {
 
         // Parse as IP address to catch IPv4, IPv6 loopback, and
         // IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1).
-        if let Ok(ipv4) = host_lower.parse::<Ipv4Addr>() {
+        // Strip brackets that some URL parsers leave on IPv6 literals.
+        let bare_host = host_lower.trim_start_matches('[').trim_end_matches(']');
+        if let Ok(ipv4) = bare_host.parse::<Ipv4Addr>() {
             if is_private_ipv4(ipv4) {
                 return Err(format!("blocked internal/private host: {host}"));
             }
-        } else if let Ok(ipv6) = host_lower.parse::<std::net::Ipv6Addr>() {
+        } else if let Ok(ipv6) = bare_host.parse::<std::net::Ipv6Addr>() {
             if ipv6.is_loopback() {
                 return Err(format!("blocked internal/private host: {host}"));
             }
