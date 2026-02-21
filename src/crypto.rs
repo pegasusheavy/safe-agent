@@ -236,7 +236,6 @@ fn hex_nibble(c: u8) -> Result<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     fn test_encryptor() -> FieldEncryptor {
         let key_bytes = [0x42u8; 32];
