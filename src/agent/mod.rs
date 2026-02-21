@@ -23,7 +23,7 @@ use crate::security::cost_tracker::CostTracker;
 use crate::security::pii::PiiScanner;
 use crate::security::rate_limiter::RateLimiter;
 use crate::security::twofa::TwoFactorManager;
-use crate::skills::SkillManager;
+use crate::skills::{PluginRegistry, PromptSkill, SkillManager};
 use crate::tools::{ToolContext, ToolRegistry};
 use crate::trash::TrashManager;
 use crate::tunnel::TunnelUrl;
@@ -40,6 +40,13 @@ pub struct Agent {
     pub llm: LlmEngine,
     pub ctx: ToolContext,
     pub skill_manager: Mutex<SkillManager>,
+    /// Prompt skills loaded from all plugins at startup.  Read-only after
+    /// construction — trigger matching borrows a filtered slice per message.
+    pub prompt_skills: Vec<PromptSkill>,
+    /// Pre-filtered subset of `prompt_skills` with no triggers (always-on).
+    /// Used by background LLM calls (goals, self-reflection, approved actions)
+    /// to avoid re-filtering and cloning every tick.
+    always_on_skills: Vec<PromptSkill>,
     pub audit: AuditLogger,
     pub cost_tracker: CostTracker,
     pub rate_limiter: RateLimiter,
@@ -97,7 +104,66 @@ impl Agent {
         let telegram_chat_id = messaging
             .primary_channel("telegram")
             .and_then(|s| s.parse::<i64>().ok());
-        let skill_manager = SkillManager::new(skills_dir, bot_token, telegram_chat_id);
+        let mut skill_manager = SkillManager::new(skills_dir, bot_token, telegram_chat_id);
+
+        // Initialize plugin registry and load prompt skills + subprocess dirs
+        let prompt_skills = {
+            let mut registry = PluginRegistry::new(config.plugins.disabled.clone());
+
+            let global_plugins_dir = if config.plugins.global_dir.is_empty() {
+                dirs::config_dir()
+                    .unwrap_or_else(|| std::path::PathBuf::from(".config"))
+                    .join("safe-agent")
+                    .join("plugins")
+            } else {
+                std::path::PathBuf::from(&config.plugins.global_dir)
+            };
+
+            let project_plugins_dir = if config.plugins.project_dir.is_empty() {
+                std::env::current_dir()
+                    .unwrap_or_else(|_| std::path::PathBuf::from("."))
+                    .join(".safe-agent")
+                    .join("plugins")
+            } else {
+                std::path::PathBuf::from(&config.plugins.project_dir)
+            };
+
+            let loaded_global = registry.scan_dir(&global_plugins_dir).unwrap_or_else(|e| {
+                warn!("failed to scan global plugin dir: {e}");
+                0
+            });
+            let loaded_project = registry.scan_dir(&project_plugins_dir).unwrap_or_else(|e| {
+                warn!("failed to scan project plugin dir: {e}");
+                0
+            });
+
+            info!(
+                global = loaded_global,
+                project = loaded_project,
+                total = registry.len(),
+                prompt_skills = registry.all_prompt_skills().len(),
+                subprocess_dirs = registry.all_subprocess_skill_dirs().len(),
+                "plugins loaded"
+            );
+
+            // Wire subprocess skill dirs into SkillManager
+            for dir in registry.all_subprocess_skill_dirs() {
+                skill_manager.add_skill_dir(dir.to_path_buf());
+            }
+
+            // Extract prompt skills as owned values (registry is consumed)
+            registry
+                .all_prompt_skills()
+                .into_iter()
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+
+        // Pre-compute always-on skills once to avoid per-tick cloning
+        let always_on_skills: Vec<PromptSkill> = crate::skills::always_on_skills(&prompt_skills)
+            .into_iter()
+            .cloned()
+            .collect();
 
         // Security subsystems
         let audit = AuditLogger::new(db.clone());
@@ -137,6 +203,8 @@ impl Agent {
             llm,
             ctx,
             skill_manager: Mutex::new(skill_manager),
+            prompt_skills,
+            always_on_skills,
             audit,
             cost_tracker,
             rate_limiter,
@@ -266,6 +334,13 @@ impl Agent {
         let mut context = self.build_llm_context(user_message).await;
         let mut final_text = String::new();
 
+        // Resolve which prompt skills to inject for this user message.
+        // Skills without triggers are always-on; others match by phrase.
+        let active_skills: Vec<PromptSkill> = crate::skills::resolve_skills(&self.prompt_skills, user_message)
+            .into_iter()
+            .cloned()
+            .collect();
+
         for turn in 0..max_turns {
             debug!(turn, "tool-call loop iteration");
 
@@ -279,8 +354,13 @@ impl Agent {
             // Send typing indicators to messaging platforms
             self.ctx.messaging.typing_all().await;
 
-            // Call the LLM with tool schemas
-            let raw_response = self.llm.generate(&context, Some(&self.tools)).await?;
+            // Call the LLM with tool schemas and active prompt skills
+            let gen_ctx = crate::llm::GenerateContext {
+                message: &context,
+                tools: Some(&self.tools),
+                prompt_skills: &active_skills,
+            };
+            let raw_response = self.llm.generate(&gen_ctx).await?;
 
             // Parse tool_call blocks from the response
             let parsed = tool_parse::parse_llm_response(&raw_response);

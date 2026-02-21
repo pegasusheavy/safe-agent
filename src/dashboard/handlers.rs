@@ -1990,7 +1990,12 @@ pub async fn onboarding_complete(
 pub async fn onboarding_test_llm(
     State(state): State<DashState>,
 ) -> Json<serde_json::Value> {
-    match state.agent.llm.generate("Say hello in one sentence.", None).await {
+    let gen_ctx = crate::llm::GenerateContext {
+        message: "Say hello in one sentence.",
+        tools: None,
+        prompt_skills: &[],
+    };
+    match state.agent.llm.generate(&gen_ctx).await {
         Ok(response) => Json(serde_json::json!({
             "ok": true,
             "response": response.trim(),
