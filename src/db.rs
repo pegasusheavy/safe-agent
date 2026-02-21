@@ -305,6 +305,21 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
         ",
     )?;
 
+    // --- SMS/iMessage identity columns ---
+    add_column_if_missing(conn, "users", "imessage_id", "TEXT");
+    add_column_if_missing(conn, "users", "imessage_id_blind", "TEXT NOT NULL DEFAULT ''");
+    add_column_if_missing(conn, "users", "twilio_number", "TEXT");
+    add_column_if_missing(conn, "users", "twilio_number_blind", "TEXT NOT NULL DEFAULT ''");
+    add_column_if_missing(conn, "users", "android_sms_id", "TEXT");
+    add_column_if_missing(conn, "users", "android_sms_id_blind", "TEXT NOT NULL DEFAULT ''");
+    conn.execute_batch(
+        "
+        CREATE INDEX IF NOT EXISTS idx_users_imessage_blind ON users(imessage_id_blind) WHERE imessage_id_blind != '';
+        CREATE INDEX IF NOT EXISTS idx_users_twilio_blind ON users(twilio_number_blind) WHERE twilio_number_blind != '';
+        CREATE INDEX IF NOT EXISTS idx_users_android_sms_blind ON users(android_sms_id_blind) WHERE android_sms_id_blind != '';
+        ",
+    )?;
+
     // --- Passkeys table (WebAuthn credentials) ---
     conn.execute_batch(
         "
