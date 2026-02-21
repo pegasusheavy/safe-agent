@@ -216,6 +216,7 @@ pub fn build(
         .route("/api/messaging/whatsapp/status", get(messaging_webhook::whatsapp_status))
         .route("/api/messaging/whatsapp/qr", get(messaging_webhook::whatsapp_qr))
         .route("/api/messaging/platforms", get(messaging_webhook::list_platforms))
+        .route("/api/messaging/twilio/incoming", post(messaging_webhook::twilio_incoming))
         // API — Goals
         .route("/api/goals", get(handlers::list_goals))
         .route("/api/goals/{id}", get(handlers::get_goal))

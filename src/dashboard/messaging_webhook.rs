@@ -50,6 +50,14 @@ pub async fn incoming(
                 })
                 .map(|u| crate::users::UserContext::from_user(&u, "telegram"))
         }
+        "imessage" => {
+            state.agent.user_manager.get_by_imessage_id(&body.sender).await
+                .map(|u| crate::users::UserContext::from_user(&u, "imessage"))
+        }
+        "android_sms" => {
+            state.agent.user_manager.get_by_android_sms_id(&body.sender).await
+                .map(|u| crate::users::UserContext::from_user(&u, "android_sms"))
+        }
         _ => None,
     };
 
@@ -222,6 +230,27 @@ pub async fn list_platforms(
         });
     }
 
+    if state.config.imessage.enabled {
+        platforms.push(PlatformInfo {
+            name: "imessage".to_string(),
+            connected: state.messaging.get("imessage").is_some(),
+        });
+    }
+
+    if state.config.twilio.enabled {
+        platforms.push(PlatformInfo {
+            name: "twilio".to_string(),
+            connected: state.messaging.get("twilio").is_some(),
+        });
+    }
+
+    if state.config.android_sms.enabled {
+        platforms.push(PlatformInfo {
+            name: "android_sms".to_string(),
+            connected: state.messaging.get("android_sms").is_some(),
+        });
+    }
+
     Json(platforms)
 }
 
@@ -313,4 +342,62 @@ pub async fn messaging_config(
         },
         active_platforms: state.messaging.platforms().into_iter().map(|s| s.to_string()).collect(),
     })
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/messaging/twilio/incoming
+// ---------------------------------------------------------------------------
+
+/// Twilio sends incoming SMS as application/x-www-form-urlencoded with
+/// fields: From, To, Body, MessageSid, etc.
+#[derive(Deserialize)]
+pub struct TwilioIncoming {
+    #[serde(rename = "From")]
+    pub from: String,
+    #[serde(rename = "To")]
+    pub to: String,
+    #[serde(rename = "Body")]
+    pub body: String,
+}
+
+pub async fn twilio_incoming(
+    State(state): State<DashState>,
+    axum::extract::Form(form): axum::extract::Form<TwilioIncoming>,
+) -> (StatusCode, String) {
+    info!(from = %form.from, to = %form.to, "incoming Twilio SMS");
+
+    let user_ctx = state
+        .agent
+        .user_manager
+        .get_by_twilio_number(&form.from)
+        .await
+        .map(|u| crate::users::UserContext::from_user(&u, "twilio"));
+
+    match state
+        .agent
+        .handle_message_as(&form.body, user_ctx.as_ref())
+        .await
+    {
+        Ok(reply) => {
+            // Send reply back via Twilio backend
+            if let Some(backend) = state.messaging.get("twilio") {
+                if let Err(e) = backend.send_message(&form.from, &reply).await {
+                    error!(err = %e, "failed to relay Twilio reply");
+                }
+            }
+
+            // Return TwiML empty response (Twilio expects XML)
+            (
+                StatusCode::OK,
+                "<Response></Response>".to_string(),
+            )
+        }
+        Err(e) => {
+            error!("agent handle_message failed: {e}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "<Response></Response>".to_string(),
+            )
+        }
+    }
 }

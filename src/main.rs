@@ -188,6 +188,64 @@ async fn main() {
             None
         };
 
+    // Register iMessage bridge backend (if enabled)
+    if config.imessage.enabled {
+        let backend = Arc::new(messaging::bridge::BridgeBackend::new(
+            "imessage".to_string(),
+            config.imessage.bridge_url.clone(),
+            20_000, // iMessage supports long messages
+        ));
+        let primary_channel = config
+            .imessage
+            .allowed_ids
+            .first()
+            .cloned()
+            .unwrap_or_default();
+        msg_manager.register(backend, primary_channel);
+        info!("iMessage bridge backend registered");
+    }
+
+    // Register Twilio SMS backend (if enabled)
+    if config.twilio.enabled {
+        match config::Config::twilio_credentials() {
+            Ok((sid, token)) => {
+                let backend = Arc::new(messaging::twilio::TwilioBackend::new(
+                    sid,
+                    token,
+                    config.twilio.from_number.clone(),
+                ));
+                let primary_channel = config
+                    .twilio
+                    .allowed_numbers
+                    .first()
+                    .cloned()
+                    .unwrap_or_default();
+                msg_manager.register(backend, primary_channel);
+                info!("Twilio SMS backend registered");
+            }
+            Err(e) => {
+                error!("Twilio credentials not set: {e}");
+            }
+        }
+    }
+
+    // Register Android SMS bridge backend (if enabled)
+    if config.android_sms.enabled {
+        let backend = Arc::new(messaging::bridge::BridgeBackend::new(
+            "android_sms".to_string(),
+            config.android_sms.bridge_url.clone(),
+            160, // Standard SMS length
+        ));
+        let primary_channel = config
+            .android_sms
+            .allowed_ids
+            .first()
+            .cloned()
+            .unwrap_or_default();
+        msg_manager.register(backend, primary_channel);
+        info!("Android SMS bridge backend registered");
+    }
+
     let messaging = Arc::new(msg_manager);
 
     // Initialize PII encryption key (generated on first launch)
