@@ -577,37 +577,75 @@ pub struct TlsConfig {
     pub acme_port: u16,
 }
 
-// -- Tunnel (ngrok) ------------------------------------------------------
+// -- Tunnel (multi-provider) ------------------------------------------------
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct TunnelConfig {
-    /// Enable the ngrok tunnel on startup.
     #[serde(default)]
     pub enabled: bool,
 
-    /// Path to the `ngrok` binary.
-    /// Can be overridden with `NGROK_BIN`.
-    #[serde(default = "default_ngrok_bin")]
-    pub ngrok_bin: String,
+    #[serde(default = "default_tunnel_provider")]
+    pub provider: String,
 
-    /// Ngrok auth token.
-    /// Can be overridden with `NGROK_AUTHTOKEN` (preferred).
+    #[serde(default)]
+    pub ngrok: NgrokConfig,
+
+    #[serde(default)]
+    pub cloudflare: CloudflareConfig,
+
+    #[serde(default)]
+    pub tailscale: TailscaleConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NgrokConfig {
     #[serde(default)]
     pub authtoken: String,
 
-    /// Ngrok static/reserved domain (e.g. "myapp.ngrok-free.app").
-    /// Empty = use random subdomain.
-    /// Can be overridden with `NGROK_DOMAIN`.
     #[serde(default)]
     pub domain: String,
 
-    /// Local port for ngrok's inspection API (default 4040).
+    #[serde(default = "default_ngrok_bin")]
+    pub bin: String,
+
     #[serde(default = "default_ngrok_inspect_port")]
     pub inspect_port: u16,
 
-    /// How often to poll the ngrok API for the tunnel URL (seconds).
     #[serde(default = "default_ngrok_poll_interval")]
     pub poll_interval_secs: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct CloudflareConfig {
+    #[serde(default)]
+    pub tunnel_id: String,
+
+    #[serde(default)]
+    pub credentials_file: String,
+
+    #[serde(default = "default_cloudflared_bin")]
+    pub bin: String,
+
+    #[serde(default)]
+    pub hostname: String,
+
+    #[serde(default)]
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TailscaleConfig {
+    #[serde(default = "default_tailscale_mode")]
+    pub mode: String,
+
+    #[serde(default = "default_tailscale_bin")]
+    pub bin: String,
+
+    #[serde(default)]
+    pub hostname: String,
+
+    #[serde(default)]
+    pub url: String,
 }
 
 // -- Defaults ------------------------------------------------------------
@@ -697,6 +735,18 @@ fn default_ngrok_inspect_port() -> u16 {
 }
 fn default_ngrok_poll_interval() -> u64 {
     15
+}
+fn default_tunnel_provider() -> String {
+    "ngrok".to_string()
+}
+fn default_cloudflared_bin() -> String {
+    "cloudflared".to_string()
+}
+fn default_tailscale_bin() -> String {
+    "tailscale".to_string()
+}
+fn default_tailscale_mode() -> String {
+    "funnel".to_string()
 }
 fn default_2fa_tools() -> Vec<String> {
     vec![
@@ -817,11 +867,45 @@ impl Default for TunnelConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            ngrok_bin: default_ngrok_bin(),
+            provider: default_tunnel_provider(),
+            ngrok: NgrokConfig::default(),
+            cloudflare: CloudflareConfig::default(),
+            tailscale: TailscaleConfig::default(),
+        }
+    }
+}
+
+impl Default for NgrokConfig {
+    fn default() -> Self {
+        Self {
             authtoken: String::new(),
             domain: String::new(),
+            bin: default_ngrok_bin(),
             inspect_port: default_ngrok_inspect_port(),
             poll_interval_secs: default_ngrok_poll_interval(),
+        }
+    }
+}
+
+impl Default for CloudflareConfig {
+    fn default() -> Self {
+        Self {
+            tunnel_id: String::new(),
+            credentials_file: String::new(),
+            bin: default_cloudflared_bin(),
+            hostname: String::new(),
+            url: String::new(),
+        }
+    }
+}
+
+impl Default for TailscaleConfig {
+    fn default() -> Self {
+        Self {
+            mode: default_tailscale_mode(),
+            bin: default_tailscale_bin(),
+            hostname: String::new(),
+            url: String::new(),
         }
     }
 }
@@ -1026,11 +1110,21 @@ mod tests {
     fn default_tunnel_config() {
         let t = TunnelConfig::default();
         assert!(!t.enabled);
-        assert_eq!(t.ngrok_bin, "ngrok");
-        assert!(t.authtoken.is_empty());
-        assert!(t.domain.is_empty());
-        assert_eq!(t.inspect_port, 4040);
-        assert_eq!(t.poll_interval_secs, 15);
+        assert_eq!(t.provider, "ngrok");
+        // NgrokConfig defaults
+        assert_eq!(t.ngrok.bin, "ngrok");
+        assert!(t.ngrok.authtoken.is_empty());
+        assert!(t.ngrok.domain.is_empty());
+        assert_eq!(t.ngrok.inspect_port, 4040);
+        assert_eq!(t.ngrok.poll_interval_secs, 15);
+        // CloudflareConfig defaults
+        assert_eq!(t.cloudflare.bin, "cloudflared");
+        assert!(t.cloudflare.tunnel_id.is_empty());
+        assert!(t.cloudflare.hostname.is_empty());
+        // TailscaleConfig defaults
+        assert_eq!(t.tailscale.bin, "tailscale");
+        assert_eq!(t.tailscale.mode, "funnel");
+        assert!(t.tailscale.hostname.is_empty());
     }
 
     #[test]
