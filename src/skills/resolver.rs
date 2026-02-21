@@ -38,19 +38,15 @@ pub fn always_on_skills(all_skills: &[PromptSkill]) -> Vec<&PromptSkill> {
 mod tests {
     use super::*;
     use std::collections::HashMap;
-    use std::path::PathBuf;
 
     fn make_skill(name: &str, enabled: bool, triggers: Vec<&str>) -> PromptSkill {
         PromptSkill {
             name: name.to_string(),
             description: String::new(),
-            version: None,
             enabled,
-            tools: vec![],
             triggers: triggers.into_iter().map(str::to_string).collect(),
             body: String::new(),
             references: HashMap::new(),
-            source_dir: PathBuf::new(),
         }
     }
 

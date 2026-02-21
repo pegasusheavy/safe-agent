@@ -430,13 +430,10 @@ mod tests {
         let skills = vec![PromptSkill {
             name: "test-skill".into(),
             description: "A test skill".into(),
-            version: None,
             enabled: true,
-            tools: vec![],
             triggers: vec![],
             body: "Always be helpful and concise.".into(),
             references: HashMap::new(),
-            source_dir: std::path::PathBuf::new(),
         }];
 
         let prompt = system_prompt("", "Agent", None, None, &skills);
@@ -463,13 +460,10 @@ mod tests {
         let skills = vec![PromptSkill {
             name: "ref-skill".into(),
             description: "Skill with references".into(),
-            version: None,
             enabled: true,
-            tools: vec![],
             triggers: vec![],
             body: "Follow the attached references.".into(),
             references: refs,
-            source_dir: std::path::PathBuf::new(),
         }];
 
         let prompt = system_prompt("", "Agent", None, None, &skills);

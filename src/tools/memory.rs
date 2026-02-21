@@ -127,7 +127,6 @@ impl Tool for MemoryGetTool {
 mod tests {
     use super::*;
     use crate::db;
-    use crate::memory::archival::ArchivalMemory;
     use crate::messaging::MessagingManager;
     use crate::security::SandboxedFs;
     use crate::trash::TrashManager;
@@ -171,8 +170,13 @@ mod tests {
     #[tokio::test]
     async fn memory_search_with_results() {
         let ctx = test_ctx();
-        let arch = ArchivalMemory::new(ctx.db.clone());
-        arch.archive("The quick brown fox jumps", "test").await.unwrap();
+        {
+            let db = ctx.db.lock().await;
+            db.execute(
+                "INSERT INTO archival_memory (content, category) VALUES (?1, ?2)",
+                rusqlite::params!["The quick brown fox jumps", "test"],
+            ).unwrap();
+        }
         let result = MemorySearchTool.execute(
             serde_json::json!({"query": "quick brown fox"}),
             &ctx,
@@ -200,8 +204,15 @@ mod tests {
     #[tokio::test]
     async fn memory_get_existing() {
         let ctx = test_ctx();
-        let arch = ArchivalMemory::new(ctx.db.clone());
-        let id = arch.archive("stored info", "notes").await.unwrap();
+        let id: i64;
+        {
+            let db = ctx.db.lock().await;
+            db.execute(
+                "INSERT INTO archival_memory (content, category) VALUES (?1, ?2)",
+                rusqlite::params!["stored info", "notes"],
+            ).unwrap();
+            id = db.last_insert_rowid();
+        }
         let result = MemoryGetTool.execute(serde_json::json!({"id": id}), &ctx).await.unwrap();
         assert!(result.success);
         assert!(result.output.contains("stored info"));
