@@ -6,8 +6,8 @@ use tracing::{debug, info, warn};
 
 use crate::config::Config;
 use crate::error::{Result, SafeAgentError};
+use crate::llm::context::GenerateContext;
 use crate::llm::prompts;
-use crate::tools::ToolRegistry;
 
 const DEFAULT_BASE_URL: &str = "https://openrouter.ai/api/v1";
 
@@ -193,8 +193,8 @@ impl OpenRouterEngine {
     }
 
     /// Send a message to OpenRouter and return the plain-text response.
-    pub async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
-        let system_prompt = prompts::system_prompt(&self.personality, &self.agent_name, tools, Some(&self.timezone));
+    pub async fn generate(&self, ctx: &GenerateContext<'_>) -> Result<String> {
+        let system_prompt = prompts::system_prompt(&self.personality, &self.agent_name, ctx.tools, Some(&self.timezone), ctx.prompt_skills);
         let url = format!("{}/chat/completions", self.base_url);
 
         let body = ChatRequest {
@@ -206,7 +206,7 @@ impl OpenRouterEngine {
                 },
                 ChatMessage {
                     role: "user".to_string(),
-                    content: message.to_string(),
+                    content: ctx.message.to_string(),
                 },
             ],
             max_tokens: Some(self.max_tokens),
@@ -216,7 +216,7 @@ impl OpenRouterEngine {
 
         debug!(
             model = %self.model,
-            prompt_len = message.len(),
+            prompt_len = ctx.message.len(),
             max_tokens = self.max_tokens,
             "invoking OpenRouter API"
         );

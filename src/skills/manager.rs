@@ -94,6 +94,9 @@ struct RunningSkill {
 /// Manages skill lifecycle: discovery, start, stop, restart, credentials.
 pub struct SkillManager {
     skills_dir: PathBuf,
+    /// Additional skill directories contributed by plugins.  Scanned
+    /// alongside `skills_dir` during `reconcile()`.
+    extra_skill_dirs: Vec<PathBuf>,
     running: HashMap<String, RunningSkill>,
     telegram_bot_token: Option<String>,
     telegram_chat_id: Option<i64>,
@@ -128,6 +131,7 @@ impl SkillManager {
 
         Self {
             skills_dir,
+            extra_skill_dirs: Vec::new(),
             running: HashMap::new(),
             telegram_bot_token,
             telegram_chat_id,
@@ -142,6 +146,17 @@ impl SkillManager {
     /// receive `TUNNEL_URL` / `PUBLIC_URL` in their environment.
     pub fn set_tunnel_url(&mut self, url: TunnelUrl) {
         self.tunnel_url = Some(url);
+    }
+
+    /// Register an additional directory to scan for subprocess skills.
+    ///
+    /// Called during startup after the plugin registry discovers subprocess
+    /// skill directories from loaded plugins.  Duplicates are ignored.
+    pub fn add_skill_dir(&mut self, dir: PathBuf) {
+        if !self.extra_skill_dirs.contains(&dir) {
+            info!(path = %dir.display(), "registered plugin subprocess skill dir");
+            self.extra_skill_dirs.push(dir);
+        }
     }
 
     fn load_credentials(path: &Path) -> HashMap<String, HashMap<String, String>> {
@@ -184,27 +199,83 @@ impl SkillManager {
         self.save_credentials()
     }
 
-    /// Scan the skills directory, start new enabled skills, restart crashed ones,
-    /// and stop skills whose directories have been deleted.
+    /// Scan the skills directory (and any plugin-contributed directories),
+    /// start new enabled skills, restart crashed ones, and stop skills whose
+    /// directories have been deleted.
     ///
     /// Called every tick from the agent loop.
     pub async fn reconcile(&mut self) -> Result<()> {
         // Reap finished processes first
         self.reap_finished().await;
 
-        // Scan for skill directories
-        let entries = match std::fs::read_dir(&self.skills_dir) {
-            Ok(e) => e,
-            Err(e) => {
-                warn!(err = %e, "failed to read skills directory");
-                return Ok(());
-            }
-        };
-
         // Collect the names of skills that still exist on disk so we can
         // detect deletions after the scan.
         let mut on_disk: std::collections::HashSet<String> =
             std::collections::HashSet::new();
+
+        // Scan the primary user-managed skills directory
+        self.scan_skill_dir(&self.skills_dir.clone(), &mut on_disk).await;
+
+        // Scan plugin-contributed subprocess skill directories.
+        // Each entry is a single skill directory (not a parent of many),
+        // so we scan the directory itself rather than iterating children.
+        for dir in self.extra_skill_dirs.clone() {
+            let manifest_path = dir.join("skill.toml");
+            if !manifest_path.exists() {
+                continue;
+            }
+            let manifest = match self.read_manifest(&manifest_path) {
+                Ok(m) => m,
+                Err(e) => {
+                    warn!(path = %manifest_path.display(), err = %e, "bad plugin skill manifest");
+                    continue;
+                }
+            };
+            on_disk.insert(manifest.name.clone());
+            if !manifest.enabled {
+                if self.running.contains_key(&manifest.name) {
+                    info!(skill = %manifest.name, "stopping disabled plugin skill");
+                    self.stop_skill(&manifest.name).await;
+                }
+                continue;
+            }
+            if !self.running.contains_key(&manifest.name)
+                && !self.manually_stopped.contains(&manifest.name)
+            {
+                self.start_skill(manifest, dir).await;
+            }
+        }
+
+        // Stop any running skills whose directories were deleted
+        let orphaned: Vec<String> = self
+            .running
+            .keys()
+            .filter(|name| !on_disk.contains(name.as_str()))
+            .cloned()
+            .collect();
+
+        for name in orphaned {
+            info!(skill = %name, "skill directory removed, stopping orphaned process");
+            self.stop_skill(&name).await;
+        }
+
+        Ok(())
+    }
+
+    /// Scan a parent directory for skill subdirectories (each containing
+    /// `skill.toml`) and start/stop them as appropriate.
+    async fn scan_skill_dir(
+        &mut self,
+        dir: &Path,
+        on_disk: &mut std::collections::HashSet<String>,
+    ) {
+        let entries = match std::fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(e) => {
+                warn!(dir = %dir.display(), err = %e, "failed to read skills directory");
+                return;
+            }
+        };
 
         for entry in entries.flatten() {
             let path = entry.path();
@@ -228,7 +299,6 @@ impl SkillManager {
             on_disk.insert(manifest.name.clone());
 
             if !manifest.enabled {
-                // If it's running but now disabled, stop it
                 if self.running.contains_key(&manifest.name) {
                     info!(skill = %manifest.name, "stopping disabled skill");
                     self.stop_skill(&manifest.name).await;
@@ -236,28 +306,12 @@ impl SkillManager {
                 continue;
             }
 
-            // If not already running (and not manually stopped), start it
             if !self.running.contains_key(&manifest.name)
                 && !self.manually_stopped.contains(&manifest.name)
             {
                 self.start_skill(manifest, path).await;
             }
         }
-
-        // Stop any running skills whose directories were deleted
-        let orphaned: Vec<String> = self
-            .running
-            .keys()
-            .filter(|name| !on_disk.contains(name.as_str()))
-            .cloned()
-            .collect();
-
-        for name in orphaned {
-            info!(skill = %name, "skill directory removed, stopping orphaned process");
-            self.stop_skill(&name).await;
-        }
-
-        Ok(())
     }
 
     /// Start a skill — either as an external process (Python, Node.js, shell)

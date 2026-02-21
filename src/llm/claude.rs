@@ -6,8 +6,8 @@ use tracing::{debug, info, warn};
 
 use crate::config::Config;
 use crate::error::{Result, SafeAgentError};
+use crate::llm::context::GenerateContext;
 use crate::llm::prompts;
-use crate::tools::ToolRegistry;
 
 /// LLM engine backed by the Claude Code CLI.
 ///
@@ -72,8 +72,8 @@ impl ClaudeEngine {
     }
 
     /// Send a message to Claude and return the plain-text response.
-    pub async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
-        let system_prompt = prompts::system_prompt(&self.personality, &self.agent_name, tools, Some(&self.timezone));
+    pub async fn generate(&self, ctx: &GenerateContext<'_>) -> Result<String> {
+        let system_prompt = prompts::system_prompt(&self.personality, &self.agent_name, ctx.tools, Some(&self.timezone), ctx.prompt_skills);
         let mut cmd = Command::new(&self.claude_bin);
 
         cmd.arg("-p")
@@ -92,6 +92,7 @@ impl ClaudeEngine {
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
 
+        let message = ctx.message;
         debug!(model = %self.model, prompt_len = message.len(), max_turns = self.max_turns, "invoking claude CLI");
 
         let mut child = cmd.spawn().map_err(|e| {

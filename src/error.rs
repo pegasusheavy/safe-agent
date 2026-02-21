@@ -61,6 +61,9 @@ pub enum SafeAgentError {
 
     #[error("PII detected: {0}")]
     PiiDetected(String),
+
+    #[error("plugin error: {0}")]
+    Plugin(String),
 }
 
 pub type Result<T> = std::result::Result<T, SafeAgentError>;
@@ -88,6 +91,7 @@ mod tests {
             (SafeAgentError::TwoFactorRequired("exec rm".into()), "2FA required: exec rm"),
             (SafeAgentError::CostLimitExceeded("$5.00".into()), "cost limit exceeded: $5.00"),
             (SafeAgentError::PiiDetected("SSN".into()), "PII detected: SSN"),
+            (SafeAgentError::Plugin("bad manifest".into()), "plugin error: bad manifest"),
         ];
         for (err, expected) in cases {
             assert_eq!(err.to_string(), expected);

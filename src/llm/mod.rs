@@ -1,3 +1,4 @@
+pub mod context;
 pub mod prompts;
 
 mod aider;
@@ -15,7 +16,8 @@ use tracing::info;
 
 use crate::config::Config;
 use crate::error::{Result, SafeAgentError};
-use crate::tools::ToolRegistry;
+
+pub use context::GenerateContext;
 
 // -- Plugin trait -----------------------------------------------------------
 
@@ -26,11 +28,11 @@ pub trait LlmBackend: Send + Sync {
     /// Human-readable name of this backend (e.g. "Claude CLI", "OpenRouter API").
     fn name(&self) -> &str;
 
-    /// Generate a response for the given user message.
+    /// Generate a response for the given generation context.
     ///
-    /// When `tools` is provided, the system prompt includes tool schemas and
-    /// the tool-calling protocol so the LLM can propose structured tool calls.
-    async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String>;
+    /// The context bundles the message, optional tool registry, and any
+    /// prompt skills that should be injected into the system prompt.
+    async fn generate(&self, ctx: &GenerateContext<'_>) -> Result<String>;
 }
 
 // -- Plugin registry --------------------------------------------------------
@@ -80,40 +82,40 @@ impl LlmPluginRegistry {
 #[async_trait::async_trait]
 impl LlmBackend for claude::ClaudeEngine {
     fn name(&self) -> &str { "Claude CLI" }
-    async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
-        self.generate(message, tools).await
+    async fn generate(&self, ctx: &GenerateContext<'_>) -> Result<String> {
+        self.generate(ctx).await
     }
 }
 
 #[async_trait::async_trait]
 impl LlmBackend for codex::CodexEngine {
     fn name(&self) -> &str { "Codex CLI" }
-    async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
-        self.generate(message, tools).await
+    async fn generate(&self, ctx: &GenerateContext<'_>) -> Result<String> {
+        self.generate(ctx).await
     }
 }
 
 #[async_trait::async_trait]
 impl LlmBackend for gemini::GeminiEngine {
     fn name(&self) -> &str { "Gemini CLI" }
-    async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
-        self.generate(message, tools).await
+    async fn generate(&self, ctx: &GenerateContext<'_>) -> Result<String> {
+        self.generate(ctx).await
     }
 }
 
 #[async_trait::async_trait]
 impl LlmBackend for aider::AiderEngine {
     fn name(&self) -> &str { "Aider" }
-    async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
-        self.generate(message, tools).await
+    async fn generate(&self, ctx: &GenerateContext<'_>) -> Result<String> {
+        self.generate(ctx).await
     }
 }
 
 #[async_trait::async_trait]
 impl LlmBackend for openrouter::OpenRouterEngine {
     fn name(&self) -> &str { "OpenRouter API" }
-    async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
-        self.generate(message, tools).await
+    async fn generate(&self, ctx: &GenerateContext<'_>) -> Result<String> {
+        self.generate(ctx).await
     }
 }
 
@@ -121,8 +123,8 @@ impl LlmBackend for openrouter::OpenRouterEngine {
 #[async_trait::async_trait]
 impl LlmBackend for local::LocalEngine {
     fn name(&self) -> &str { "local GGUF" }
-    async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
-        self.generate(message, tools).await
+    async fn generate(&self, ctx: &GenerateContext<'_>) -> Result<String> {
+        self.generate(ctx).await
     }
 }
 
@@ -237,12 +239,12 @@ impl LlmEngine {
         self.plugins.list()
     }
 
-    /// Generate a response for the given user message.
+    /// Generate a response for the given generation context.
     ///
-    /// When `tools` is provided, the system prompt includes tool schemas and
-    /// the tool-calling protocol so the LLM can propose structured tool calls.
-    pub async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
-        self.active.generate(message, tools).await
+    /// Delegates to the active backend.  The context bundles the message,
+    /// optional tool registry, and any prompt skills for this request.
+    pub async fn generate(&self, ctx: &GenerateContext<'_>) -> Result<String> {
+        self.active.generate(ctx).await
     }
 
     /// Return a human-readable description of the active backend.

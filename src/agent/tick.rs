@@ -2,6 +2,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::error::Result;
 use crate::goals::{GoalManager, GoalStatus, TaskStatus};
+use crate::llm::GenerateContext;
 use crate::tools::ToolCall;
 
 use super::{truncate_preview, Agent};
@@ -199,7 +200,13 @@ impl Agent {
         // Send typing indicators
         self.ctx.messaging.typing_all().await;
 
-        match self.llm.generate(&prompt, Some(&self.tools)).await {
+        let gen_ctx = GenerateContext {
+            message: &prompt,
+            tools: Some(&self.tools),
+            prompt_skills: &self.always_on_skills,
+        };
+
+        match self.llm.generate(&gen_ctx).await {
             Ok(reply) => {
                 // Parse for tool calls and execute them
                 let parsed = super::tool_parse::parse_llm_response(&reply);
@@ -289,7 +296,13 @@ impl Agent {
             task_summary.join("\n"),
         );
 
-        match self.llm.generate(&prompt, None).await {
+        let gen_ctx = GenerateContext {
+            message: &prompt,
+            tools: None,
+            prompt_skills: &self.always_on_skills,
+        };
+
+        match self.llm.generate(&gen_ctx).await {
             Ok(reflection) => {
                 info!(
                     goal_id = %goal.id,
@@ -468,7 +481,13 @@ impl Agent {
                 result_summaries.join("\n\n")
             );
 
-            match self.llm.generate(&context, Some(&self.tools)).await {
+            let gen_ctx = GenerateContext {
+                message: &context,
+                tools: Some(&self.tools),
+                prompt_skills: &self.always_on_skills,
+            };
+
+            match self.llm.generate(&gen_ctx).await {
                 Ok(reply) => {
                     self.memory
                         .conversation

@@ -6,8 +6,8 @@ use tracing::{debug, info, warn};
 
 use crate::config::Config;
 use crate::error::{Result, SafeAgentError};
+use crate::llm::context::GenerateContext;
 use crate::llm::prompts;
-use crate::tools::ToolRegistry;
 
 /// LLM engine backed by Aider, the open-source AI pair-programming tool.
 ///
@@ -67,11 +67,11 @@ impl AiderEngine {
     }
 
     /// Send a message to Aider and return the response text.
-    pub async fn generate(&self, message: &str, tools: Option<&ToolRegistry>) -> Result<String> {
-        let system_prompt = prompts::system_prompt(&self.personality, &self.agent_name, tools, Some(&self.timezone));
+    pub async fn generate(&self, ctx: &GenerateContext<'_>) -> Result<String> {
+        let system_prompt = prompts::system_prompt(&self.personality, &self.agent_name, ctx.tools, Some(&self.timezone), ctx.prompt_skills);
         let prompt = format!(
             "{}\n\n---\n\nThe user says: {}",
-            system_prompt, message
+            system_prompt, ctx.message
         );
 
         let mut cmd = Command::new(&self.aider_bin);

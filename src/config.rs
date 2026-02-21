@@ -71,6 +71,9 @@ pub struct Config {
 
     #[serde(default)]
     pub federation: FederationConfig,
+
+    #[serde(default)]
+    pub plugins: PluginsConfig,
 }
 
 // -- Federation --------------------------------------------------------------
@@ -469,6 +472,35 @@ pub struct SessionsConfig {
     pub max_agents: usize,
 }
 
+// -- Plugins -------------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct PluginsConfig {
+    /// Global plugin directory (default: ~/.config/safe-agent/plugins).
+    /// Empty string means use the default path.
+    #[serde(default)]
+    pub global_dir: String,
+
+    /// Project-local plugin directory (default: .safe-agent/plugins).
+    /// Relative to the working directory. Empty means use default.
+    #[serde(default)]
+    pub project_dir: String,
+
+    /// Plugin names to explicitly disable.
+    #[serde(default)]
+    pub disabled: Vec<String>,
+}
+
+impl Default for PluginsConfig {
+    fn default() -> Self {
+        Self {
+            global_dir: String::new(),
+            project_dir: String::new(),
+            disabled: Vec::new(),
+        }
+    }
+}
+
 // -- TLS / ACME ----------------------------------------------------------
 
 #[derive(Debug, Clone, Deserialize)]
@@ -817,6 +849,7 @@ impl Default for Config {
             tls: TlsConfig::default(),
             security: SecurityConfig::default(),
             federation: FederationConfig::default(),
+            plugins: PluginsConfig::default(),
         }
     }
 }
@@ -1072,5 +1105,27 @@ mod tests {
     fn default_config_contents_is_non_empty() {
         let contents = Config::default_config_contents();
         assert!(!contents.is_empty());
+    }
+
+    #[test]
+    fn default_plugins_config() {
+        let c = Config::default();
+        assert!(c.plugins.global_dir.is_empty());
+        assert!(c.plugins.project_dir.is_empty());
+        assert!(c.plugins.disabled.is_empty());
+    }
+
+    #[test]
+    fn parse_plugins_section() {
+        let toml_str = r#"
+        [plugins]
+        global_dir = "/home/user/.config/safe-agent/plugins"
+        project_dir = ".safe-agent/plugins"
+        disabled = ["broken-plugin"]
+        "#;
+        let c: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(c.plugins.global_dir, "/home/user/.config/safe-agent/plugins");
+        assert_eq!(c.plugins.project_dir, ".safe-agent/plugins");
+        assert_eq!(c.plugins.disabled, vec!["broken-plugin"]);
     }
 }

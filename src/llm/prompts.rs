@@ -8,7 +8,13 @@ use crate::tools::ToolRegistry;
 /// `timezone` is the IANA timezone name for the user (e.g. "America/New_York").
 /// When provided, the current local time in that timezone is injected into the
 /// prompt so the LLM can give time-aware responses.
-pub fn system_prompt(personality: &str, agent_name: &str, tools: Option<&ToolRegistry>, timezone: Option<&str>) -> String {
+pub fn system_prompt(
+    personality: &str,
+    agent_name: &str,
+    tools: Option<&ToolRegistry>,
+    timezone: Option<&str>,
+    prompt_skills: &[crate::skills::PromptSkill],
+) -> String {
     let base = if personality.is_empty() {
         format!("You are {agent_name}, a helpful AI assistant.")
     } else {
@@ -21,6 +27,7 @@ pub fn system_prompt(personality: &str, agent_name: &str, tools: Option<&ToolReg
     };
 
     let time_section = build_time_section(timezone);
+    let skills_section = build_prompt_skills_section(prompt_skills);
 
     format!(
         r#"{base}
@@ -30,7 +37,7 @@ Keep replies concise and conversational.
 Do not use markdown formatting unless the user asks for it.
 {time_section}
 {tool_section}
-== SKILL SYSTEM ==
+{skills_section}== SKILL SYSTEM ==
 
 You can create persistent services ("skills") that run alongside you.
 Skills are Python scripts managed by the agent's skill manager.
@@ -224,6 +231,42 @@ fn build_time_section(timezone: Option<&str>) -> String {
     )
 }
 
+/// Build the section that injects loaded prompt-skill bodies into the system
+/// prompt.  Returns an empty string when no skills are loaded so the prompt
+/// stays clean for the default (no-plugin) case.
+///
+/// When a skill has reference files (loaded from `references/*.md`), they
+/// are appended after the skill body under sorted sub-headings for
+/// deterministic output.
+fn build_prompt_skills_section(skills: &[crate::skills::PromptSkill]) -> String {
+    if skills.is_empty() {
+        return String::new();
+    }
+    let mut section = String::from("\n== LOADED SKILLS ==\n\n");
+    for skill in skills {
+        section.push_str(&format!("### {}\n", skill.name));
+        if !skill.description.is_empty() {
+            section.push_str(&format!("{}\n\n", skill.description));
+        }
+        section.push_str(&skill.body);
+        section.push('\n');
+
+        if !skill.references.is_empty() {
+            let mut refs: Vec<(&String, &String)> = skill.references.iter().collect();
+            refs.sort_by_key(|(name, _)| *name);
+            section.push_str("\n#### References\n\n");
+            for (filename, content) in refs {
+                section.push_str(&format!("##### {filename}\n\n"));
+                section.push_str(content);
+                section.push_str("\n\n");
+            }
+        }
+
+        section.push('\n');
+    }
+    section
+}
+
 /// Build the tool-calling protocol section with per-tool schemas.
 fn build_tool_section(registry: &ToolRegistry) -> String {
     let mut tools: Vec<_> = registry.list().iter().map(|(n, _)| n.to_string()).collect();
@@ -316,7 +359,7 @@ mod tests {
 
     #[test]
     fn test_system_prompt_empty_personality() {
-        let prompt = system_prompt("", "TestAgent", None, None);
+        let prompt = system_prompt("", "TestAgent", None, None, &[]);
         assert!(prompt.contains("You are TestAgent, a helpful AI assistant."));
         assert!(!prompt.contains("== AVAILABLE TOOLS =="));
     }
@@ -324,14 +367,14 @@ mod tests {
     #[test]
     fn test_system_prompt_with_personality() {
         let personality = "You are a specialized coding assistant.";
-        let prompt = system_prompt(personality, "TestAgent", None, None);
+        let prompt = system_prompt(personality, "TestAgent", None, None, &[]);
         assert!(prompt.contains("You are a specialized coding assistant."));
         assert!(!prompt.contains("You are TestAgent, a helpful AI assistant."));
     }
 
     #[test]
     fn test_system_prompt_none_tools() {
-        let prompt = system_prompt("", "Agent", None, None);
+        let prompt = system_prompt("", "Agent", None, None, &[]);
         assert!(!prompt.contains("== AVAILABLE TOOLS =="));
         assert!(!prompt.contains("== TOOL CALLING =="));
     }
@@ -339,7 +382,7 @@ mod tests {
     #[test]
     fn test_system_prompt_empty_registry() {
         let reg = ToolRegistry::new();
-        let prompt = system_prompt("", "Agent", Some(&reg), None);
+        let prompt = system_prompt("", "Agent", Some(&reg), None, &[]);
         assert!(!prompt.contains("test_tool"));
         assert!(prompt.contains("== SKILL SYSTEM =="));
     }
@@ -347,7 +390,7 @@ mod tests {
     #[test]
     fn test_system_prompt_with_registry_containing_tool() {
         let reg = registry_with_mock_tool();
-        let prompt = system_prompt("", "Agent", Some(&reg), None);
+        let prompt = system_prompt("", "Agent", Some(&reg), None, &[]);
 
         assert!(prompt.contains("== AVAILABLE TOOLS =="));
         assert!(prompt.contains("test_tool"));
@@ -359,7 +402,7 @@ mod tests {
     #[test]
     fn test_build_tool_section_indirect() {
         let reg = registry_with_mock_tool();
-        let prompt = system_prompt("", "Agent", Some(&reg), None);
+        let prompt = system_prompt("", "Agent", Some(&reg), None, &[]);
 
         assert!(prompt.contains("### test_tool"));
         assert!(prompt.contains("A tool for testing"));
@@ -368,14 +411,77 @@ mod tests {
 
     #[test]
     fn test_system_prompt_includes_timezone() {
-        let prompt = system_prompt("", "Agent", None, Some("America/New_York"));
+        let prompt = system_prompt("", "Agent", None, Some("America/New_York"), &[]);
         assert!(prompt.contains("America/New_York"));
         assert!(prompt.contains("current date and time"));
     }
 
     #[test]
     fn test_system_prompt_utc_fallback() {
-        let prompt = system_prompt("", "Agent", None, Some("UTC"));
+        let prompt = system_prompt("", "Agent", None, Some("UTC"), &[]);
         assert!(prompt.contains("UTC"));
+    }
+
+    #[test]
+    fn test_system_prompt_with_prompt_skills() {
+        use crate::skills::PromptSkill;
+        use std::collections::HashMap;
+
+        let skills = vec![PromptSkill {
+            name: "test-skill".into(),
+            description: "A test skill".into(),
+            version: None,
+            enabled: true,
+            tools: vec![],
+            triggers: vec![],
+            body: "Always be helpful and concise.".into(),
+            references: HashMap::new(),
+            source_dir: std::path::PathBuf::new(),
+        }];
+
+        let prompt = system_prompt("", "Agent", None, None, &skills);
+        assert!(prompt.contains("== LOADED SKILLS =="));
+        assert!(prompt.contains("### test-skill"));
+        assert!(prompt.contains("Always be helpful and concise."));
+    }
+
+    #[test]
+    fn test_system_prompt_no_skills_section_when_empty() {
+        let prompt = system_prompt("", "Agent", None, None, &[]);
+        assert!(!prompt.contains("== LOADED SKILLS =="));
+    }
+
+    #[test]
+    fn test_prompt_skill_references_injected_sorted() {
+        use crate::skills::PromptSkill;
+        use std::collections::HashMap;
+
+        let mut refs = HashMap::new();
+        refs.insert("z-style.md".into(), "Use snake_case everywhere.".into());
+        refs.insert("a-rules.md".into(), "No globals allowed.".into());
+
+        let skills = vec![PromptSkill {
+            name: "ref-skill".into(),
+            description: "Skill with references".into(),
+            version: None,
+            enabled: true,
+            tools: vec![],
+            triggers: vec![],
+            body: "Follow the attached references.".into(),
+            references: refs,
+            source_dir: std::path::PathBuf::new(),
+        }];
+
+        let prompt = system_prompt("", "Agent", None, None, &skills);
+        assert!(prompt.contains("#### References"));
+        assert!(prompt.contains("##### a-rules.md"));
+        assert!(prompt.contains("No globals allowed."));
+        assert!(prompt.contains("##### z-style.md"));
+        assert!(prompt.contains("Use snake_case everywhere."));
+
+        // Verify alphabetical ordering: a-rules.md should appear before z-style.md
+        let a_pos = prompt.find("##### a-rules.md").unwrap();
+        let z_pos = prompt.find("##### z-style.md").unwrap();
+        assert!(a_pos < z_pos, "references should be sorted alphabetically");
     }
 }
