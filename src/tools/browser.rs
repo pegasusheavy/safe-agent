@@ -69,7 +69,7 @@ impl Tool for BrowserTool {
                 if url.is_empty() {
                     return Ok(ToolOutput::error("url is required for navigate"));
                 }
-                // TODO: Full CDP integration via chromiumoxide
+                // TODO: Full CDP integration
                 Ok(ToolOutput::ok(format!(
                     "Browser navigation to {url} — CDP integration pending"
                 )))

@@ -48,7 +48,6 @@ chrono-tz = "0.10"
 uuid = { version = "1", features = ["v4", "serde"] }
 dirs = "5"
 rust-embed = { version = "8", features = ["compression"] }
-mime_guess = "2"
 
 # Web tools
 htmd = "0.1"
@@ -60,9 +59,6 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 
 # Telegram bot
 teloxide = { version = "0.13", features = ["macros"] }
-
-# Browser automation
-chromiumoxide = { version = "0.7", default-features = false, features = ["tokio-runtime"] }
 
 # Cron scheduling
 cron = "0.15"

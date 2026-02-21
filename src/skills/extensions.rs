@@ -273,9 +273,17 @@ impl ExtensionManager {
         let safe_path = jail.validate(file_path)?;
 
         let content = std::fs::read(&safe_path).ok()?;
-        let content_type = mime_guess::from_path(&safe_path)
-            .first_or_octet_stream()
-            .to_string();
+        let content_type = match safe_path.extension().and_then(|e| e.to_str()) {
+            Some("html") => "text/html",
+            Some("css") => "text/css",
+            Some("js") => "application/javascript",
+            Some("json") => "application/json",
+            Some("png") => "image/png",
+            Some("svg") => "image/svg+xml",
+            Some("woff2") => "font/woff2",
+            _ => "application/octet-stream",
+        }
+        .to_string();
 
         Some((content, content_type))
     }
