@@ -32,6 +32,7 @@ impl BridgeBackend {
     }
 
     /// Check bridge health.
+    #[allow(dead_code)]
     pub async fn status(&self) -> Result<BridgeStatus> {
         let resp = self
             .http
@@ -62,6 +63,7 @@ impl BridgeBackend {
     }
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct BridgeStatus {
     pub state: String,

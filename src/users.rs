@@ -356,6 +356,7 @@ impl UserManager {
     }
 
     /// Link an iMessage ID to a user.
+    #[allow(dead_code)]
     pub async fn link_imessage(&self, user_id: &str, imessage_id: &str) -> Result<()> {
         let enc = self.enc.encrypt(imessage_id);
         let blind = self.enc.blind_index(imessage_id);
@@ -369,6 +370,7 @@ impl UserManager {
     }
 
     /// Link a Twilio number to a user.
+    #[allow(dead_code)]
     pub async fn link_twilio(&self, user_id: &str, number: &str) -> Result<()> {
         let enc = self.enc.encrypt(number);
         let blind = self.enc.blind_index(number);
@@ -382,6 +384,7 @@ impl UserManager {
     }
 
     /// Link an Android SMS ID to a user.
+    #[allow(dead_code)]
     pub async fn link_android_sms(&self, user_id: &str, number: &str) -> Result<()> {
         let enc = self.enc.encrypt(number);
         let blind = self.enc.blind_index(number);

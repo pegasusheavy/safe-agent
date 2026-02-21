@@ -428,10 +428,6 @@ pub struct IMessageConfig {
     #[serde(default = "default_imessage_bridge_url")]
     pub bridge_url: String,
 
-    /// Dashboard port for constructing the webhook callback URL.
-    #[serde(default = "default_imessage_webhook_port")]
-    pub webhook_port: u16,
-
     /// Allowed phone numbers and/or iCloud email addresses.
     #[serde(default)]
     pub allowed_ids: Vec<String>,
@@ -441,16 +437,11 @@ fn default_imessage_bridge_url() -> String {
     "http://127.0.0.1:3040".to_string()
 }
 
-fn default_imessage_webhook_port() -> u16 {
-    3030
-}
-
 impl Default for IMessageConfig {
     fn default() -> Self {
         Self {
             enabled: false,
             bridge_url: default_imessage_bridge_url(),
-            webhook_port: default_imessage_webhook_port(),
             allowed_ids: Vec::new(),
         }
     }
@@ -467,17 +458,9 @@ pub struct TwilioConfig {
     #[serde(default)]
     pub from_number: String,
 
-    /// Dashboard port for constructing the webhook callback URL.
-    #[serde(default = "default_twilio_webhook_port")]
-    pub webhook_port: u16,
-
     /// Allowed destination phone numbers.
     #[serde(default)]
     pub allowed_numbers: Vec<String>,
-}
-
-fn default_twilio_webhook_port() -> u16 {
-    3030
 }
 
 impl Default for TwilioConfig {
@@ -485,7 +468,6 @@ impl Default for TwilioConfig {
         Self {
             enabled: false,
             from_number: String::new(),
-            webhook_port: default_twilio_webhook_port(),
             allowed_numbers: Vec::new(),
         }
     }
@@ -502,10 +484,6 @@ pub struct AndroidSmsConfig {
     #[serde(default = "default_android_sms_bridge_url")]
     pub bridge_url: String,
 
-    /// Dashboard port for constructing the webhook callback URL.
-    #[serde(default = "default_android_sms_webhook_port")]
-    pub webhook_port: u16,
-
     /// Allowed phone numbers.
     #[serde(default)]
     pub allowed_ids: Vec<String>,
@@ -515,16 +493,11 @@ fn default_android_sms_bridge_url() -> String {
     "http://127.0.0.1:3041".to_string()
 }
 
-fn default_android_sms_webhook_port() -> u16 {
-    3030
-}
-
 impl Default for AndroidSmsConfig {
     fn default() -> Self {
         Self {
             enabled: false,
             bridge_url: default_android_sms_bridge_url(),
-            webhook_port: default_android_sms_webhook_port(),
             allowed_ids: Vec::new(),
         }
     }
