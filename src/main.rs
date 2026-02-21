@@ -619,29 +619,111 @@ async fn run_checks(config: &Config, _sandbox: &SandboxedFs) {
     // Tunnel check
     let tunnel_enabled = config.tunnel.enabled || std::env::var("NGROK_AUTHTOKEN").is_ok();
     if tunnel_enabled {
-        let ngrok_bin = std::env::var("NGROK_BIN")
-            .unwrap_or_else(|_| config.tunnel.ngrok_bin.clone());
+        let provider = config.tunnel.provider.as_str();
+        info!("tunnel provider: {provider}");
 
-        match tokio::process::Command::new(&ngrok_bin)
-            .arg("version")
-            .output()
-            .await
-        {
-            Ok(out) if out.status.success() => {
-                let ver = String::from_utf8_lossy(&out.stdout);
-                info!("ngrok: OK ({})", ver.trim());
-            }
-            Ok(out) => {
-                error!("ngrok: exited with {}", out.status);
-            }
-            Err(e) => {
-                error!("ngrok: NOT FOUND ({}): {e}", ngrok_bin);
-            }
-        }
+        match provider {
+            "ngrok" => {
+                let ngrok_bin = std::env::var("NGROK_BIN")
+                    .unwrap_or_else(|_| config.tunnel.ngrok.bin.clone());
 
-        match std::env::var("NGROK_AUTHTOKEN") {
-            Ok(_) => info!("NGROK_AUTHTOKEN: set"),
-            Err(_) => info!("NGROK_AUTHTOKEN: not set (ngrok will use saved auth)"),
+                match tokio::process::Command::new(&ngrok_bin)
+                    .arg("version")
+                    .output()
+                    .await
+                {
+                    Ok(out) if out.status.success() => {
+                        let ver = String::from_utf8_lossy(&out.stdout);
+                        info!("ngrok: OK ({})", ver.trim());
+                    }
+                    Ok(out) => {
+                        error!("ngrok: exited with {}", out.status);
+                    }
+                    Err(e) => {
+                        error!("ngrok: NOT FOUND ({}): {e}", ngrok_bin);
+                    }
+                }
+
+                match std::env::var("NGROK_AUTHTOKEN") {
+                    Ok(_) => info!("NGROK_AUTHTOKEN: set"),
+                    Err(_) => info!("NGROK_AUTHTOKEN: not set (ngrok will use saved auth)"),
+                }
+            }
+            "cloudflare" => {
+                let static_url = std::env::var("CLOUDFLARE_TUNNEL_URL").ok()
+                    .filter(|u| !u.is_empty())
+                    .or_else(|| {
+                        if config.tunnel.cloudflare.url.is_empty() { None }
+                        else { Some(config.tunnel.cloudflare.url.clone()) }
+                    });
+
+                if let Some(url) = static_url {
+                    info!("cloudflare: static URL configured ({})", url);
+                } else {
+                    let cf_bin = std::env::var("CLOUDFLARED_BIN")
+                        .unwrap_or_else(|_| config.tunnel.cloudflare.bin.clone());
+
+                    match tokio::process::Command::new(&cf_bin)
+                        .arg("version")
+                        .output()
+                        .await
+                    {
+                        Ok(out) if out.status.success() => {
+                            let ver_stderr = String::from_utf8_lossy(&out.stderr);
+                            let ver_stdout = String::from_utf8_lossy(&out.stdout);
+                            let ver = if ver_stderr.trim().is_empty() {
+                                ver_stdout
+                            } else {
+                                ver_stderr
+                            };
+                            info!("cloudflared: OK ({})", ver.trim());
+                        }
+                        Ok(out) => {
+                            error!("cloudflared: exited with {}", out.status);
+                        }
+                        Err(e) => {
+                            error!("cloudflared: NOT FOUND ({}): {e}", cf_bin);
+                        }
+                    }
+                }
+            }
+            "tailscale" => {
+                let static_url = std::env::var("TAILSCALE_TUNNEL_URL").ok()
+                    .filter(|u| !u.is_empty())
+                    .or_else(|| {
+                        if config.tunnel.tailscale.url.is_empty() { None }
+                        else { Some(config.tunnel.tailscale.url.clone()) }
+                    });
+
+                if let Some(url) = static_url {
+                    info!("tailscale: static URL configured ({})", url);
+                } else {
+                    let ts_bin = std::env::var("TAILSCALE_BIN")
+                        .unwrap_or_else(|_| config.tunnel.tailscale.bin.clone());
+
+                    match tokio::process::Command::new(&ts_bin)
+                        .arg("version")
+                        .output()
+                        .await
+                    {
+                        Ok(out) if out.status.success() => {
+                            let ver = String::from_utf8_lossy(&out.stdout);
+                            info!("tailscale: OK ({})", ver.trim());
+                        }
+                        Ok(out) => {
+                            error!("tailscale: exited with {}", out.status);
+                        }
+                        Err(e) => {
+                            error!("tailscale: NOT FOUND ({}): {e}", ts_bin);
+                        }
+                    }
+
+                    info!("tailscale mode: {}", config.tunnel.tailscale.mode);
+                }
+            }
+            other => {
+                error!("unknown tunnel provider: {other}");
+            }
         }
     } else {
         info!("tunnel: disabled");
@@ -761,11 +843,15 @@ TLS / ACME (LET'S ENCRYPT):
     ACME_CACHE_DIR        Directory to cache certs (default: $data_dir/acme-cache)
     ACME_PORT             HTTPS listen port (default: 443)
 
-TUNNEL (NGROK):
+TUNNEL:
     NGROK_AUTHTOKEN       Auth token from ngrok dashboard (auto-enables tunnel)
     NGROK_BIN             Path to ngrok binary (default: ngrok)
     NGROK_PORT            Override local port to tunnel (default: dashboard port)
     NGROK_DOMAIN          Static domain (e.g. myapp.ngrok-free.app)
+    CLOUDFLARED_BIN       Path to cloudflared binary (default: cloudflared)
+    CLOUDFLARE_TUNNEL_URL Static URL (skip spawning cloudflared)
+    TAILSCALE_BIN         Path to tailscale binary (default: tailscale)
+    TAILSCALE_TUNNEL_URL  Static URL (skip spawning tailscale)
 
 ENVIRONMENT:
     DASHBOARD_PASSWORD    Required. Dashboard login password.
