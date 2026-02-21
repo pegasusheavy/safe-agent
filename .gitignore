@@ -41,5 +41,8 @@ lcov.info
 coverage/
 tarpaulin-report.html
 
+# === Worktrees ===
+.worktrees/
+
 # === Misc build artifacts ===
 *.log
