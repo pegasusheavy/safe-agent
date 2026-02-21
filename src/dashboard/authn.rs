@@ -16,7 +16,7 @@ use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use sha1::Sha1;
 use tokio::sync::Mutex;
-use tracing::{error, info, warn};
+use tracing::info;
 use webauthn_rs::prelude::*;
 
 use crate::error::{Result, SafeAgentError};

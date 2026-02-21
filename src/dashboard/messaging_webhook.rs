@@ -43,7 +43,7 @@ pub async fn incoming(
         "telegram" => {
             // sender might be a chat_id string — try parsing as i64
             body.sender.parse::<i64>().ok()
-                .and_then(|id| {
+                .and_then(|_id| {
                     // Use a blocking approach since we're already in an async context
                     // but get_by_telegram_id is also async
                     None::<crate::users::User> // Will be resolved below

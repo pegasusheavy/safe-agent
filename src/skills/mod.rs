@@ -5,8 +5,8 @@ pub mod prompt_skill;
 pub mod resolver;
 pub mod rhai_runtime;
 
-pub use extensions::{ExtensionManager, SkillExtension, SkillExtensionInfo, SkillUiConfig};
-pub use manager::{CredentialSpec, CredentialStatus, SkillDetail, SkillManager, SkillManifest, SkillStatus};
-pub use plugin::{LoadedPlugin, PluginManifest, PluginRegistry};
+pub use extensions::ExtensionManager;
+pub use manager::SkillManager;
+pub use plugin::PluginRegistry;
 pub use prompt_skill::PromptSkill;
 pub use resolver::{always_on_skills, resolve_skills};

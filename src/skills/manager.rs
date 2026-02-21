@@ -1296,7 +1296,6 @@ impl SkillManager {
     }
 
     fn extract_tar_gz(data: &[u8], dest: &Path) -> Result<()> {
-        use std::io::Read;
         let gz = flate2::read::GzDecoder::new(data);
         let mut archive = tar::Archive::new(gz);
         archive
