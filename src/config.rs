@@ -58,6 +58,15 @@ pub struct Config {
     pub whatsapp: WhatsAppConfig,
 
     #[serde(default)]
+    pub imessage: IMessageConfig,
+
+    #[serde(default)]
+    pub twilio: TwilioConfig,
+
+    #[serde(default)]
+    pub android_sms: AndroidSmsConfig,
+
+    #[serde(default)]
     pub sessions: SessionsConfig,
 
     #[serde(default)]
@@ -404,6 +413,119 @@ impl Default for WhatsAppConfig {
             bridge_port: default_whatsapp_bridge_port(),
             webhook_port: default_whatsapp_webhook_port(),
             allowed_numbers: Vec::new(),
+        }
+    }
+}
+
+// -- iMessage ------------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct IMessageConfig {
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// URL of the iMessage AppleScript bridge HTTP server.
+    #[serde(default = "default_imessage_bridge_url")]
+    pub bridge_url: String,
+
+    /// Dashboard port for constructing the webhook callback URL.
+    #[serde(default = "default_imessage_webhook_port")]
+    pub webhook_port: u16,
+
+    /// Allowed phone numbers and/or iCloud email addresses.
+    #[serde(default)]
+    pub allowed_ids: Vec<String>,
+}
+
+fn default_imessage_bridge_url() -> String {
+    "http://127.0.0.1:3040".to_string()
+}
+
+fn default_imessage_webhook_port() -> u16 {
+    3030
+}
+
+impl Default for IMessageConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            bridge_url: default_imessage_bridge_url(),
+            webhook_port: default_imessage_webhook_port(),
+            allowed_ids: Vec::new(),
+        }
+    }
+}
+
+// -- Twilio --------------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TwilioConfig {
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// The Twilio phone number to send from (e.g. "+15559876543").
+    #[serde(default)]
+    pub from_number: String,
+
+    /// Dashboard port for constructing the webhook callback URL.
+    #[serde(default = "default_twilio_webhook_port")]
+    pub webhook_port: u16,
+
+    /// Allowed destination phone numbers.
+    #[serde(default)]
+    pub allowed_numbers: Vec<String>,
+}
+
+fn default_twilio_webhook_port() -> u16 {
+    3030
+}
+
+impl Default for TwilioConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            from_number: String::new(),
+            webhook_port: default_twilio_webhook_port(),
+            allowed_numbers: Vec::new(),
+        }
+    }
+}
+
+// -- Android SMS ---------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AndroidSmsConfig {
+    #[serde(default)]
+    pub enabled: bool,
+
+    /// URL of the Android Termux bridge HTTP server.
+    #[serde(default = "default_android_sms_bridge_url")]
+    pub bridge_url: String,
+
+    /// Dashboard port for constructing the webhook callback URL.
+    #[serde(default = "default_android_sms_webhook_port")]
+    pub webhook_port: u16,
+
+    /// Allowed phone numbers.
+    #[serde(default)]
+    pub allowed_ids: Vec<String>,
+}
+
+fn default_android_sms_bridge_url() -> String {
+    "http://127.0.0.1:3041".to_string()
+}
+
+fn default_android_sms_webhook_port() -> u16 {
+    3030
+}
+
+impl Default for AndroidSmsConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            bridge_url: default_android_sms_bridge_url(),
+            webhook_port: default_android_sms_webhook_port(),
+            allowed_ids: Vec::new(),
         }
     }
 }
@@ -763,6 +885,9 @@ impl Default for Config {
             dashboard: DashboardConfig::default(),
             telegram: TelegramConfig::default(),
             whatsapp: WhatsAppConfig::default(),
+            imessage: IMessageConfig::default(),
+            twilio: TwilioConfig::default(),
+            android_sms: AndroidSmsConfig::default(),
             sessions: SessionsConfig::default(),
             tunnel: TunnelConfig::default(),
             tls: TlsConfig::default(),
@@ -815,6 +940,15 @@ impl Config {
     pub fn telegram_bot_token() -> Result<String> {
         std::env::var("TELEGRAM_BOT_TOKEN")
             .map_err(|_| SafeAgentError::Config("TELEGRAM_BOT_TOKEN environment variable not set".into()))
+    }
+
+    /// Read Twilio credentials from environment variables.
+    pub fn twilio_credentials() -> Result<(String, String)> {
+        let sid = std::env::var("TWILIO_ACCOUNT_SID")
+            .map_err(|_| SafeAgentError::Config("TWILIO_ACCOUNT_SID not set".into()))?;
+        let token = std::env::var("TWILIO_AUTH_TOKEN")
+            .map_err(|_| SafeAgentError::Config("TWILIO_AUTH_TOKEN not set".into()))?;
+        Ok((sid, token))
     }
 
     /// Generate the default config file contents.
@@ -1037,5 +1171,29 @@ mod tests {
         assert_eq!(c.plugins.global_dir, "/home/user/.config/safe-agent/plugins");
         assert_eq!(c.plugins.project_dir, ".safe-agent/plugins");
         assert_eq!(c.plugins.disabled, vec!["broken-plugin"]);
+    }
+
+    #[test]
+    fn default_imessage_config() {
+        let c = IMessageConfig::default();
+        assert!(!c.enabled);
+        assert_eq!(c.bridge_url, "http://127.0.0.1:3040");
+        assert!(c.allowed_ids.is_empty());
+    }
+
+    #[test]
+    fn default_twilio_config() {
+        let c = TwilioConfig::default();
+        assert!(!c.enabled);
+        assert!(c.from_number.is_empty());
+        assert!(c.allowed_numbers.is_empty());
+    }
+
+    #[test]
+    fn default_android_sms_config() {
+        let c = AndroidSmsConfig::default();
+        assert!(!c.enabled);
+        assert_eq!(c.bridge_url, "http://127.0.0.1:3041");
+        assert!(c.allowed_ids.is_empty());
     }
 }
