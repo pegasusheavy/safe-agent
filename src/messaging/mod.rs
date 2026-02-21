@@ -70,11 +70,6 @@ impl MessagingManager {
         self.backends.iter().find(|b| b.platform_name() == platform)
     }
 
-    /// Get the first registered backend (the "primary" one).
-    pub fn primary(&self) -> Option<&Arc<dyn MessagingBackend>> {
-        self.backends.first()
-    }
-
     /// Get the primary channel for a given platform.
     pub fn primary_channel(&self, platform: &str) -> Option<&str> {
         self.primary_channels.get(platform).map(|s| s.as_str())
@@ -109,16 +104,6 @@ impl MessagingManager {
                 }
             }
         }
-    }
-
-    /// Send a message to a specific platform + channel.
-    pub async fn send_to(&self, platform: &str, channel: &str, text: &str) -> Result<()> {
-        let backend = self
-            .get(platform)
-            .ok_or_else(|| crate::error::SafeAgentError::Messaging(
-                format!("no backend for platform '{platform}'"),
-            ))?;
-        backend.send_message(channel, text).await
     }
 
     /// List all registered platform names.
@@ -202,7 +187,6 @@ mod tests {
         let mgr = MessagingManager::new();
         assert!(mgr.is_empty());
         assert!(mgr.platforms().is_empty());
-        assert!(mgr.primary().is_none());
         assert!(mgr.default_channel().is_none());
     }
 
@@ -217,16 +201,6 @@ mod tests {
         assert!(mgr.get("other").is_none());
         assert_eq!(mgr.primary_channel("test"), Some("chan123"));
         assert!(mgr.primary_channel("other").is_none());
-    }
-
-    #[test]
-    fn manager_primary_is_first() {
-        let (b1, _, _) = MockBackend::new("first");
-        let (b2, _, _) = MockBackend::new("second");
-        let mut mgr = MessagingManager::new();
-        mgr.register(b1, "c1".into());
-        mgr.register(b2, "c2".into());
-        assert_eq!(mgr.primary().unwrap().platform_name(), "first");
     }
 
     #[test]
@@ -261,22 +235,6 @@ mod tests {
         mgr.typing_all().await;
         assert_eq!(typed1.lock().unwrap().len(), 1);
         assert_eq!(typed1.lock().unwrap()[0], "ch1");
-    }
-
-    #[tokio::test]
-    async fn manager_send_to_existing() {
-        let (b, sent, _) = MockBackend::new("slack");
-        let mut mgr = MessagingManager::new();
-        mgr.register(b, "general".into());
-        mgr.send_to("slack", "random", "hi").await.unwrap();
-        assert_eq!(sent.lock().unwrap()[0], ("random".to_string(), "hi".to_string()));
-    }
-
-    #[tokio::test]
-    async fn manager_send_to_missing_platform() {
-        let mgr = MessagingManager::new();
-        let result = mgr.send_to("nonexistent", "ch", "msg").await;
-        assert!(result.is_err());
     }
 
     #[test]

@@ -354,22 +354,9 @@ impl PluginRegistry {
             .collect()
     }
 
-    /// Return the names of all loaded plugins.
-    pub fn plugin_names(&self) -> Vec<&str> {
-        self.plugins
-            .iter()
-            .map(|p| p.manifest.name.as_str())
-            .collect()
-    }
-
     /// Return the number of loaded plugins.
     pub fn len(&self) -> usize {
         self.plugins.len()
-    }
-
-    /// Return true if no plugins are loaded.
-    pub fn is_empty(&self) -> bool {
-        self.plugins.is_empty()
     }
 }
 
@@ -423,8 +410,6 @@ mod tests {
         let count = registry.scan_dir(&plugins_dir).unwrap();
 
         assert_eq!(count, 1);
-        assert_eq!(registry.len(), 1);
-        assert!(!registry.is_empty());
 
         let prompt_skills = registry.all_prompt_skills();
         assert_eq!(prompt_skills.len(), 1);
@@ -432,9 +417,6 @@ mod tests {
 
         let subprocess_dirs = registry.all_subprocess_skill_dirs();
         assert!(subprocess_dirs.is_empty());
-
-        let names = registry.plugin_names();
-        assert_eq!(names, vec!["my-prompt-skill"]);
     }
 
     #[test]
@@ -494,7 +476,6 @@ mod tests {
         let count = registry.scan_dir(&plugins_dir).unwrap();
 
         assert_eq!(count, 1);
-        assert_eq!(registry.plugin_names(), vec!["my-plugin"]);
 
         let prompt_skills = registry.all_prompt_skills();
         assert_eq!(prompt_skills.len(), 1);
@@ -525,7 +506,6 @@ mod tests {
         let count = registry.scan_dir(&plugins_dir).unwrap();
 
         assert_eq!(count, 1);
-        assert_eq!(registry.plugin_names(), vec!["enabled-skill"]);
     }
 
     #[test]
@@ -538,7 +518,6 @@ mod tests {
         let count = registry.scan_dir(&plugins_dir).unwrap();
 
         assert_eq!(count, 0);
-        assert!(registry.is_empty());
     }
 
     #[test]
@@ -550,7 +529,6 @@ mod tests {
         let count = registry.scan_dir(&nonexistent).unwrap();
 
         assert_eq!(count, 0);
-        assert!(registry.is_empty());
     }
 
     #[test]

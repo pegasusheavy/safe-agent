@@ -9,14 +9,12 @@ use crate::agent::Agent;
 #[derive(Debug, Clone, Copy)]
 pub enum CommandPrefix {
     Slash,
-    Bang,
 }
 
 impl CommandPrefix {
     pub fn as_str(&self) -> &str {
         match self {
             CommandPrefix::Slash => "/",
-            CommandPrefix::Bang => "!",
         }
     }
 }

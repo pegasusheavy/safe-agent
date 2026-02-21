@@ -163,24 +163,11 @@ impl TunnelManager {
         }
     }
 
-    /// Return the current public URL, if available.
-    pub fn public_url(&self) -> Option<String> {
-        self.url_rx.borrow().clone()
-    }
-
     /// Get a `watch::Receiver` that updates whenever the tunnel URL changes.
     pub fn url_receiver(&self) -> watch::Receiver<Option<String>> {
         self.url_rx.clone()
     }
 
-    /// Shut down the ngrok process.
-    pub async fn stop(&mut self) {
-        if let Some(ref mut child) = self.child {
-            info!("stopping ngrok tunnel");
-            let _ = child.kill().await;
-        }
-        let _ = self.url_tx.send(None);
-    }
 }
 
 impl Drop for TunnelManager {

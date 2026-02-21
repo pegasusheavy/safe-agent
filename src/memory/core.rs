@@ -35,15 +35,6 @@ impl CoreMemory {
         Ok(personality)
     }
 
-    /// Update the core personality.
-    pub async fn update(&self, personality: &str) -> Result<()> {
-        let db = self.db.lock().await;
-        db.execute(
-            "UPDATE core_memory SET personality = ?1, updated_at = datetime('now') WHERE id = 1",
-            [personality],
-        )?;
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -68,16 +59,6 @@ mod tests {
         core.init("Second").await.unwrap();
         let p = core.get().await.unwrap();
         assert_eq!(p, "First");
-    }
-
-    #[tokio::test]
-    async fn update_changes_personality() {
-        let db = test_db();
-        let core = CoreMemory::new(db);
-        core.init("Original").await.unwrap();
-        core.update("Updated").await.unwrap();
-        let p = core.get().await.unwrap();
-        assert_eq!(p, "Updated");
     }
 
     #[tokio::test]

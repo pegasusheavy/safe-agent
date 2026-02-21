@@ -51,20 +51,6 @@ impl UserRole {
         matches!(self, Self::Admin | Self::User)
     }
 
-    /// Whether this role can approve/reject pending actions.
-    pub fn can_approve(&self) -> bool {
-        matches!(self, Self::Admin)
-    }
-
-    /// Whether this role can manage users.
-    pub fn can_manage_users(&self) -> bool {
-        matches!(self, Self::Admin)
-    }
-
-    /// Whether this role can access admin-only settings.
-    pub fn can_admin(&self) -> bool {
-        matches!(self, Self::Admin)
-    }
 }
 
 impl std::fmt::Display for UserRole {
@@ -110,17 +96,6 @@ pub struct UserContext {
 }
 
 impl UserContext {
-    /// A system context for agent-initiated actions (cron, goals, etc.).
-    pub fn system() -> Self {
-        Self {
-            user_id: "system".to_string(),
-            username: "system".to_string(),
-            display_name: "System".to_string(),
-            role: UserRole::Admin,
-            source: "agent".to_string(),
-        }
-    }
-
     /// Create a context from a User and a source platform.
     pub fn from_user(user: &User, source: &str) -> Self {
         Self {
@@ -390,17 +365,6 @@ impl UserManager {
         let db = self.db.lock().await;
         db.query_row("SELECT COUNT(*) FROM users", [], |row| row.get(0))
             .unwrap_or(0)
-    }
-
-    /// Ensure a default admin user exists (used on first startup or when
-    /// multi-user mode is enabled for the first time).
-    pub async fn ensure_default_admin(&self, password: &str) -> Result<()> {
-        if self.get_by_username("admin").await.is_some() {
-            return Ok(()); // Already exists
-        }
-        self.create("admin", "Administrator", UserRole::Admin, password).await?;
-        info!("default admin user created");
-        Ok(())
     }
 
     /// Migrate any plaintext PII data to encrypted form.
@@ -720,18 +684,6 @@ mod tests {
         assert!(mgr.get_by_username("ivan").await.is_none());
     }
 
-    #[tokio::test]
-    async fn ensure_default_admin() {
-        let db = test_db();
-        let mgr = UserManager::new(db, test_encryptor());
-        mgr.ensure_default_admin("admin123").await.unwrap();
-        let admin = mgr.get_by_username("admin").await.unwrap();
-        assert!(matches!(admin.role, UserRole::Admin));
-
-        // Calling again should not fail
-        mgr.ensure_default_admin("admin123").await.unwrap();
-    }
-
     #[test]
     fn user_role_display_and_parse() {
         assert_eq!(UserRole::Admin.as_str(), "admin");
@@ -745,20 +697,7 @@ mod tests {
     #[test]
     fn user_role_permissions() {
         assert!(UserRole::Admin.can_chat());
-        assert!(UserRole::Admin.can_approve());
-        assert!(UserRole::Admin.can_manage_users());
         assert!(UserRole::User.can_chat());
-        assert!(!UserRole::User.can_approve());
-        assert!(!UserRole::User.can_manage_users());
         assert!(!UserRole::Viewer.can_chat());
-        assert!(!UserRole::Viewer.can_approve());
-    }
-
-    #[test]
-    fn user_context_system() {
-        let ctx = UserContext::system();
-        assert_eq!(ctx.user_id, "system");
-        assert!(matches!(ctx.role, UserRole::Admin));
-        assert_eq!(ctx.source, "agent");
     }
 }

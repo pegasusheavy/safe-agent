@@ -95,29 +95,6 @@ impl WhatsAppBackend {
         ))
     }
 
-    /// Query the bridge's status endpoint.
-    pub async fn status(&self) -> Result<serde_json::Value> {
-        let resp = self
-            .http
-            .get(format!("{}/status", self.bridge_url))
-            .timeout(std::time::Duration::from_secs(5))
-            .send()
-            .await
-            .map_err(|e| SafeAgentError::Messaging(format!("bridge status request failed: {e}")))?;
-
-        let body: serde_json::Value = resp
-            .json()
-            .await
-            .map_err(|e| SafeAgentError::Messaging(format!("bridge status parse error: {e}")))?;
-
-        Ok(body)
-    }
-
-    /// Get the QR code for pairing (base64-encoded PNG).
-    pub async fn qr_code(&self) -> Result<Option<String>> {
-        let status = self.status().await?;
-        Ok(status.get("qr").and_then(|v| v.as_str()).map(|s| s.to_string()))
-    }
 }
 
 #[async_trait]

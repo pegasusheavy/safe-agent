@@ -82,11 +82,6 @@ impl SandboxedFs {
         &self.root
     }
 
-    pub fn read(&self, relative: &Path) -> Result<Vec<u8>> {
-        let path = self.resolve(relative)?;
-        Ok(std::fs::read(path)?)
-    }
-
     pub fn write(&self, relative: &Path, data: &[u8]) -> Result<()> {
         let path = self.resolve(relative)?;
         Ok(std::fs::write(path, data)?)
@@ -97,9 +92,6 @@ impl SandboxedFs {
         Ok(std::fs::read_to_string(path)?)
     }
 
-    pub fn exists(&self, relative: &Path) -> bool {
-        self.resolve(relative).map(|p| p.exists()).unwrap_or(false)
-    }
 }
 
 // ===========================================================================
@@ -177,9 +169,6 @@ impl PathJail {
         None
     }
 
-    pub fn root(&self) -> &Path {
-        &self.root
-    }
 }
 
 // ===========================================================================
@@ -857,7 +846,6 @@ mod tests {
         std::fs::create_dir_all(&tmp).unwrap();
 
         let jail = PathJail::new(tmp.clone()).unwrap();
-        assert!(jail.root().ends_with("test_jail_edge") || jail.root().to_string_lossy().contains("test_jail_edge"));
 
         // Empty string - resolves to root (Path::new("") joined with root yields root)
         let res = jail.validate("");

@@ -143,20 +143,6 @@ impl ToolRegistry {
         tool.execute(params, ctx).await
     }
 
-    /// Build a compact text representation of all tools for the LLM prompt.
-    /// Only includes tool names and descriptions to minimize token usage.
-    /// Full parameter schemas are available via `parameter_schema_for(name)`.
-    pub fn schema_for_prompt(&self) -> String {
-        let mut tools: Vec<_> = self.tools.values().collect();
-        tools.sort_by_key(|t| t.name());
-
-        let mut out = String::new();
-        for tool in &tools {
-            out.push_str(&format!("- {}: {}\n", tool.name(), tool.description()));
-        }
-        out
-    }
-
     /// Number of registered tools.
     pub fn len(&self) -> usize {
         self.tools.len()
@@ -283,19 +269,6 @@ mod tests {
         assert_eq!(list.len(), 2);
         assert_eq!(list[0].0, "mock_a");
         assert_eq!(list[1].0, "mock_b");
-    }
-
-    #[test]
-    fn test_tool_registry_schema_for_prompt() {
-        let mut reg = ToolRegistry::new();
-        reg.register(Box::new(MockTool {
-            name: "foo",
-            description: "Does foo things",
-        }));
-
-        let schema = reg.schema_for_prompt();
-        assert!(schema.contains("foo"));
-        assert!(schema.contains("Does foo things"));
     }
 
     #[tokio::test]

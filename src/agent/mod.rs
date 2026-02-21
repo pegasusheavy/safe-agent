@@ -280,25 +280,6 @@ impl Agent {
         self.tick().await
     }
 
-    /// Handle an incoming user message with the structured tool-call loop.
-    ///
-    /// Flow:
-    /// 1. Store user message in conversation history
-    /// 2. Build context (recent messages + user message)
-    /// 3. Loop up to `max_tool_turns`:
-    ///    a. Call LLM with tool schemas
-    ///    b. Parse response for tool_call blocks
-    ///    c. If no tool calls → final reply, break
-    ///    d. For each tool call:
-    ///       - auto_approve_tools → execute immediately
-    ///       - otherwise → propose to approval queue
-    ///    e. If any were auto-executed → feed results back, continue loop
-    ///    f. If all need approval → break with partial reply
-    /// 4. Store assistant reply, return it
-    pub async fn handle_message(&self, user_message: &str) -> Result<String> {
-        self.handle_message_as(user_message, None).await
-    }
-
     /// Handle a message with an explicit user context (multi-user mode).
     /// If `user_ctx` is None, the message is treated as coming from the
     /// default/system user (backward-compatible single-user mode).

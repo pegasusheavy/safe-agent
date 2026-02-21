@@ -780,11 +780,6 @@ impl SkillManager {
         Ok(())
     }
 
-    /// Returns true if the given skill has been manually stopped.
-    pub fn is_manually_stopped(&self, name: &str) -> bool {
-        self.manually_stopped.contains(name)
-    }
-
     /// Check running skills for any that have exited, and remove them so
     /// they can be restarted on the next reconcile.
     async fn reap_finished(&mut self) {

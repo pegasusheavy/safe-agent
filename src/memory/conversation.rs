@@ -110,63 +110,6 @@ impl ConversationMemory {
         Ok(messages)
     }
 
-    /// Format recent conversation for inclusion in a prompt.
-    ///
-    /// Returns `(text, has_pending_user_message)` where `has_pending_user_message`
-    /// is true only if the most recent message is from the user and hasn't been
-    /// responded to yet (no tool execution or assistant reply after it).
-    ///
-    /// Only includes user messages that are still pending (unanswered).
-    /// Already-handled user messages are omitted to prevent the model from
-    /// re-responding to old messages.
-    pub async fn format_for_prompt(&self) -> Result<(String, bool)> {
-        let messages = self.recent().await?;
-
-        // First pass: find whether the last message is an unanswered user message.
-        // Walk backwards from the most recent message:
-        // - If we hit a user message first → it's pending
-        // - If we hit assistant/system first → all user messages are handled
-        let mut has_pending = false;
-        let mut pending_user_content: Option<String> = None;
-        for msg in messages.iter().rev() {
-            if msg.role == "user" {
-                has_pending = true;
-                pending_user_content = Some(msg.content.chars().take(200).collect());
-                break;
-            } else if msg.role == "assistant" || msg.role == "system" {
-                // Agent already acted after the last user message
-                break;
-            }
-        }
-
-        // Build prompt text: only include the pending user message
-        // and a few recent system messages for context
-        let mut out = String::new();
-        let max_total = 500;
-
-        // Include recent system messages (tool results) for context
-        for msg in &messages {
-            if msg.role == "system" {
-                let content: String = msg.content.chars().take(200).collect();
-                let line = format!("[{}] {}\n", msg.role, content);
-                if out.len() + line.len() > max_total {
-                    break;
-                }
-                out.push_str(&line);
-            }
-            // Skip assistant and user messages — we only add the pending user message below
-        }
-
-        // Only add the user message if it's pending
-        if let Some(content) = &pending_user_content {
-            let line = format!("USER MESSAGE: {}\n", content);
-            if out.len() + line.len() <= max_total {
-                out.push_str(&line);
-            }
-        }
-
-        Ok((out, has_pending))
-    }
 }
 
 #[cfg(test)]
@@ -219,44 +162,5 @@ mod tests {
         let msgs = conv.recent().await.unwrap();
         assert_eq!(msgs[0].content, "first");
         assert_eq!(msgs[2].content, "third");
-    }
-
-    #[tokio::test]
-    async fn format_for_prompt_no_messages() {
-        let db = test_db();
-        let conv = ConversationMemory::new(db, 50);
-        let (text, pending) = conv.format_for_prompt().await.unwrap();
-        assert!(text.is_empty());
-        assert!(!pending);
-    }
-
-    #[tokio::test]
-    async fn format_for_prompt_pending_user_message() {
-        let db = test_db();
-        let conv = ConversationMemory::new(db, 50);
-        conv.append("user", "what time is it?").await.unwrap();
-        let (text, pending) = conv.format_for_prompt().await.unwrap();
-        assert!(pending);
-        assert!(text.contains("what time is it?"));
-    }
-
-    #[tokio::test]
-    async fn format_for_prompt_answered_user_message() {
-        let db = test_db();
-        let conv = ConversationMemory::new(db, 50);
-        conv.append("user", "hello").await.unwrap();
-        conv.append("assistant", "hi!").await.unwrap();
-        let (_text, pending) = conv.format_for_prompt().await.unwrap();
-        assert!(!pending);
-    }
-
-    #[tokio::test]
-    async fn format_for_prompt_system_after_user_not_pending() {
-        let db = test_db();
-        let conv = ConversationMemory::new(db, 50);
-        conv.append("user", "do something").await.unwrap();
-        conv.append("system", "[tool result]").await.unwrap();
-        let (_text, pending) = conv.format_for_prompt().await.unwrap();
-        assert!(!pending);
     }
 }

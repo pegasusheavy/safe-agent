@@ -67,14 +67,6 @@ impl LlmPluginRegistry {
         self.backends.keys().cloned().collect()
     }
 
-    /// Number of registered backends.
-    pub fn len(&self) -> usize {
-        self.backends.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.backends.is_empty()
-    }
 }
 
 // -- Trait implementations for built-in backends ----------------------------
@@ -213,27 +205,6 @@ impl LlmEngine {
         })
     }
 
-    /// Register an additional LLM backend plugin at runtime.
-    pub fn register_plugin(&mut self, key: &str, backend: Arc<dyn LlmBackend>) {
-        self.plugins.register(key, backend);
-    }
-
-    /// Switch the active backend to a different registered plugin.
-    pub fn switch_backend(&mut self, key: &str) -> Result<()> {
-        match self.plugins.get(key) {
-            Some(b) => {
-                info!(from = %self.active_key, to = key, "switching LLM backend");
-                self.active = b;
-                self.active_key = key.to_string();
-                Ok(())
-            }
-            None => Err(SafeAgentError::Config(format!(
-                "LLM backend \"{key}\" not registered — available: [{}]",
-                self.plugins.list().join(", "),
-            ))),
-        }
-    }
-
     /// List all available backend keys (built-in + plugins).
     pub fn available_backends(&self) -> Vec<String> {
         self.plugins.list()
@@ -264,14 +235,8 @@ mod tests {
 
     #[test]
     fn test_plugin_registry() {
-        let mut registry = LlmPluginRegistry::new();
-        assert!(registry.is_empty());
-        assert_eq!(registry.len(), 0);
+        let registry = LlmPluginRegistry::new();
         assert!(registry.get("test").is_none());
         assert!(registry.list().is_empty());
-
-        // We can't easily create a real backend without config, so just test
-        // the registry interface.
-        assert_eq!(registry.len(), 0);
     }
 }
