@@ -131,8 +131,20 @@ async fn main() {
         return;
     }
 
+    // Initialize vector store (requires an embedding API key or local model)
+    let vector_store = match init_vector_store(&config, &data_dir).await {
+        Ok(vs) => {
+            info!("vector store initialized");
+            Some(vs)
+        }
+        Err(e) => {
+            warn!("vector store not available: {e}");
+            None
+        }
+    };
+
     // Build the tool registry
-    let tool_registry = build_tool_registry(&config);
+    let tool_registry = build_tool_registry(&config, vector_store.clone());
     info!(tools = tool_registry.len(), "tool registry initialized");
 
     // Shutdown signal
@@ -368,8 +380,63 @@ async fn main() {
     info!("safe-agent stopped");
 }
 
+/// Initialize the vector store with an appropriate embedding backend.
+///
+/// Tries the local fastembed model first (if the `local-embeddings` feature
+/// is enabled), then falls back to the OpenRouter API.  Returns `Err` if
+/// neither backend can be configured (e.g. no API key set).
+async fn init_vector_store(
+    config: &Config,
+    data_dir: &std::path::Path,
+) -> crate::error::Result<Arc<crate::vector::VectorStore>> {
+    use crate::vector::embed::{ApiEmbedder, Embedder};
+    use crate::vector::VectorStore;
+
+    let store_dir = data_dir.join("vector");
+
+    // Try local embeddings first (feature-gated).
+    #[cfg(feature = "local-embeddings")]
+    {
+        let cache_dir = data_dir.join("embeddings-cache");
+        match crate::vector::embed::LocalEmbedder::new(cache_dir) {
+            Ok(local) => {
+                let embedder = Embedder::Local(local);
+                let store = VectorStore::new(&store_dir, embedder).await?;
+                return Ok(Arc::new(store));
+            }
+            Err(e) => {
+                warn!("local embeddings unavailable, trying API: {e}");
+            }
+        }
+    }
+
+    // Fall back to API-based embeddings via OpenRouter.
+    let api_key = std::env::var("OPENROUTER_API_KEY").ok().or_else(|| {
+        let k = &config.llm.openrouter_api_key;
+        if k.is_empty() { None } else { Some(k.clone()) }
+    });
+
+    let api_key = api_key.ok_or_else(|| {
+        crate::error::SafeAgentError::VectorStore(
+            "no embedding backend available: set OPENROUTER_API_KEY or enable local-embeddings feature".into(),
+        )
+    })?;
+
+    let base_url = std::env::var("OPENROUTER_BASE_URL").ok().or_else(|| {
+        let u = &config.llm.openrouter_base_url;
+        if u.is_empty() { None } else { Some(u.clone()) }
+    });
+
+    let embedder = Embedder::Api(ApiEmbedder::new(api_key, None, base_url, None)?);
+    let store = VectorStore::new(&store_dir, embedder).await?;
+    Ok(Arc::new(store))
+}
+
 /// Build the tool registry from config.
-fn build_tool_registry(config: &Config) -> ToolRegistry {
+fn build_tool_registry(
+    config: &Config,
+    vector_store: Option<Arc<crate::vector::VectorStore>>,
+) -> ToolRegistry {
     use crate::tools::*;
 
     let mut registry = ToolRegistry::new();
@@ -415,6 +482,13 @@ fn build_tool_registry(config: &Config) -> ToolRegistry {
     registry.register(Box::new(memory::MemorySearchTool));
     registry.register(Box::new(memory::MemoryGetTool));
     registry.register(Box::new(knowledge::KnowledgeGraphTool::new()));
+
+    // Vector store tools (only if the store initialized successfully)
+    if let Some(vs) = vector_store {
+        registry.register(Box::new(vector::VectorSearchTool { store: vs.clone() }));
+        registry.register(Box::new(vector::VectorIngestTool { store: vs.clone() }));
+        registry.register(Box::new(vector::VectorRememberTool { store: vs }));
+    }
 
     registry
 }

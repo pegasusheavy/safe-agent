@@ -23,6 +23,7 @@ use crate::error::{Result, SafeAgentError};
 use crate::messaging::MessagingManager;
 use crate::security::SandboxedFs;
 use crate::trash::TrashManager;
+use crate::vector::VectorStore;
 
 /// Output from a tool execution.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -74,6 +75,7 @@ pub struct ToolContext {
     pub http_client: reqwest::Client,
     pub messaging: Arc<MessagingManager>,
     pub trash: Arc<TrashManager>,
+    pub vector_store: Option<Arc<VectorStore>>,
 }
 
 /// The trait all tools implement.
@@ -224,6 +226,7 @@ mod tests {
             http_client,
             messaging,
             trash,
+            vector_store: None,
         }
     }
 

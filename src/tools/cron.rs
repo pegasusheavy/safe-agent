@@ -172,6 +172,7 @@ mod tests {
             http_client: reqwest::Client::new(),
             messaging: Arc::new(MessagingManager::new()),
             trash: Arc::new(TrashManager::new(&trash_dir).unwrap()),
+            vector_store: None,
         }
     }
 

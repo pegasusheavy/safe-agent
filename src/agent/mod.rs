@@ -89,6 +89,7 @@ impl Agent {
             http_client,
             messaging: messaging.clone(),
             trash,
+            vector_store: None,
         };
 
         // Initialize skill manager
