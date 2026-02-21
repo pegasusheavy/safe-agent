@@ -32,8 +32,8 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 # Vector store & embeddings
 lancedb = "0.26"
 fastembed = { version = "5", optional = true }
-arrow-array = "54"
-arrow-schema = "54"
+arrow-array = "57"
+arrow-schema = "57"
 oxidize-pdf = "1"
 
 # Serialization
