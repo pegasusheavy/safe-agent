@@ -27,6 +27,11 @@ pub enum Embedder {
     Api(ApiEmbedder),
     #[cfg(feature = "local-embeddings")]
     Local(LocalEmbedder),
+    /// Deterministic mock embedder for tests.  Produces a fixed-dimension
+    /// vector derived from a simple hash of the input text so that identical
+    /// inputs always map to identical vectors.
+    #[cfg(test)]
+    Mock(MockEmbedder),
 }
 
 impl Embedder {
@@ -36,6 +41,8 @@ impl Embedder {
             Embedder::Api(api) => api.embed_one(text).await,
             #[cfg(feature = "local-embeddings")]
             Embedder::Local(local) => local.embed_one(text),
+            #[cfg(test)]
+            Embedder::Mock(mock) => Ok(mock.embed(text)),
         }
     }
 
@@ -45,6 +52,8 @@ impl Embedder {
             Embedder::Api(api) => api.embed_batch(texts).await,
             #[cfg(feature = "local-embeddings")]
             Embedder::Local(local) => local.embed_batch(texts),
+            #[cfg(test)]
+            Embedder::Mock(mock) => Ok(texts.iter().map(|t| mock.embed(t)).collect()),
         }
     }
 
@@ -58,6 +67,8 @@ impl Embedder {
             Embedder::Api(_) => None,
             #[cfg(feature = "local-embeddings")]
             Embedder::Local(_) => Some(1024),
+            #[cfg(test)]
+            Embedder::Mock(mock) => Some(mock.dim),
         }
     }
 }
@@ -301,6 +312,44 @@ impl LocalEmbedder {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Mock embedder for tests
+// ---------------------------------------------------------------------------
+
+/// Deterministic embedder that hashes input text to produce repeatable vectors.
+/// Two identical strings always produce identical vectors; different strings
+/// produce different (but correlated based on content overlap) vectors.
+#[cfg(test)]
+pub struct MockEmbedder {
+    pub dim: usize,
+}
+
+#[cfg(test)]
+impl MockEmbedder {
+    pub fn new(dim: usize) -> Self {
+        Self { dim }
+    }
+
+    /// Produce a deterministic vector from the input text.  Uses a simple
+    /// byte-level hash spread across the dimensions, then L2-normalizes.
+    pub fn embed(&self, text: &str) -> Vec<f32> {
+        let mut vec = vec![0.0f32; self.dim];
+        for (i, byte) in text.bytes().enumerate() {
+            let idx = i % self.dim;
+            // Spread each byte's contribution with a prime stride to reduce
+            // collisions between short texts that share a prefix.
+            let spread = (idx.wrapping_mul(31).wrapping_add(byte as usize)) % self.dim;
+            vec[spread] += (byte as f32) / 255.0;
+        }
+        // L2 normalize so dot-product distances are meaningful.
+        let norm: f32 = vec.iter().map(|v| v * v).sum::<f32>().sqrt();
+        if norm > 0.0 {
+            vec.iter_mut().for_each(|v| *v /= norm);
+        }
+        vec
+    }
+}
 
 #[cfg(test)]
 mod tests {

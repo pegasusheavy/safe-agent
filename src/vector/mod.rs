@@ -662,4 +662,139 @@ mod tests {
         assert_eq!(r2.id, "abc");
         assert_eq!(format!("{r:?}").len() > 0, true);
     }
+
+    // -- Integration tests (mock embedder, real LanceDB) ----------------------
+
+    fn mock_embedder(dim: usize) -> Embedder {
+        Embedder::Mock(embed::MockEmbedder::new(dim))
+    }
+
+    #[tokio::test]
+    async fn remember_and_search_roundtrip() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let store = VectorStore::new(dir.path(), mock_embedder(32))
+            .await
+            .expect("create store");
+
+        // Store two distinct memories.
+        let id1 = store
+            .remember("Rust is a systems programming language", "tech", "test")
+            .await
+            .expect("remember 1");
+        let id2 = store
+            .remember("The weather in Tokyo is warm today", "weather", "test")
+            .await
+            .expect("remember 2");
+
+        assert_ne!(id1, id2);
+
+        // Table should now exist.
+        let tables = store.table_names().await.expect("list tables");
+        assert!(tables.contains(&"memories".to_string()));
+
+        // Search — the mock embedder doesn't capture semantic similarity,
+        // so we only verify that both stored memories are retrievable.
+        let results = store
+            .search("Rust programming systems", "memories", 5)
+            .await
+            .expect("search");
+
+        assert_eq!(results.len(), 2, "expected both memories returned");
+        assert_eq!(results[0].table, "memories");
+
+        let contents: Vec<&str> = results.iter().map(|r| r.content.as_str()).collect();
+        assert!(
+            contents.iter().any(|c| c.contains("Rust")),
+            "Rust memory not found in results: {contents:?}"
+        );
+        assert!(
+            contents.iter().any(|c| c.contains("Tokyo")),
+            "Tokyo memory not found in results: {contents:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn ingest_chunks_and_search_roundtrip() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let store = VectorStore::new(dir.path(), mock_embedder(32))
+            .await
+            .expect("create store");
+
+        let chunks = vec![
+            Chunk {
+                text: "LanceDB is an embedded vector database".to_string(),
+                index: 0,
+            },
+            Chunk {
+                text: "Arrow is a columnar memory format".to_string(),
+                index: 1,
+            },
+        ];
+
+        let count = store
+            .ingest_chunks(&chunks, "test.md", "markdown")
+            .await
+            .expect("ingest");
+        assert_eq!(count, 2);
+
+        let tables = store.table_names().await.expect("list tables");
+        assert!(tables.contains(&"documents".to_string()));
+
+        let results = store
+            .search("vector database", "documents", 5)
+            .await
+            .expect("search");
+        assert!(!results.is_empty());
+        assert_eq!(results[0].table, "documents");
+    }
+
+    #[tokio::test]
+    async fn search_all_spans_both_tables() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let store = VectorStore::new(dir.path(), mock_embedder(32))
+            .await
+            .expect("create store");
+
+        store
+            .remember("memory about databases", "tech", "test")
+            .await
+            .expect("remember");
+
+        let chunks = vec![Chunk {
+            text: "document about databases".to_string(),
+            index: 0,
+        }];
+        store
+            .ingest_chunks(&chunks, "doc.txt", "text")
+            .await
+            .expect("ingest");
+
+        let results = store
+            .search("databases", "all", 10)
+            .await
+            .expect("search all");
+
+        assert!(results.len() >= 2, "expected results from both tables");
+
+        let tables: Vec<&str> = results.iter().map(|r| r.table.as_str()).collect();
+        assert!(tables.contains(&"memories"), "missing memories result");
+        assert!(tables.contains(&"documents"), "missing documents result");
+    }
+
+    #[tokio::test]
+    async fn ingest_empty_chunks_is_noop() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let store = VectorStore::new(dir.path(), mock_embedder(32))
+            .await
+            .expect("create store");
+
+        let count = store
+            .ingest_chunks(&[], "empty.txt", "text")
+            .await
+            .expect("ingest empty");
+        assert_eq!(count, 0);
+
+        let tables = store.table_names().await.expect("list tables");
+        assert!(tables.is_empty());
+    }
 }
