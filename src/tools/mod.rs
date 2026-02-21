@@ -9,6 +9,7 @@ pub mod memory;
 pub mod message;
 pub mod process;
 pub mod sessions;
+pub mod vector;
 pub mod web;
 
 use std::collections::HashMap;
