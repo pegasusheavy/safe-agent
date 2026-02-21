@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use tracing::{info, warn};
 
-use crate::crypto::FieldEncryptor;
+use crate::crypto::{self, FieldEncryptor};
 use crate::error::{Result, SafeAgentError};
 
 // ---------------------------------------------------------------------------
@@ -164,11 +164,15 @@ impl UserManager {
 
         let id = uuid::Uuid::new_v4().to_string();
         let enc_display = self.enc.encrypt(display_name);
-        let enc_password = self.enc.encrypt(password);
+        let hashed_password = if password.is_empty() {
+            String::new()
+        } else {
+            crypto::hash_password(password)?
+        };
 
         db.execute(
             "INSERT INTO users (id, username, display_name, role, password_hash) VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![id, username, enc_display, role.as_str(), enc_password],
+            rusqlite::params![id, username, enc_display, role.as_str(), hashed_password],
         )?;
 
         info!(username, role = role.as_str(), "user created");
@@ -250,25 +254,59 @@ impl UserManager {
 
     /// Authenticate a user by username and password. Returns the user if valid.
     ///
-    /// The stored password is decrypted transparently (it's already
-    /// decrypted by `row_to_user_raw.decrypt()`).
+    /// Supports three stored formats with transparent migration:
+    /// - `$argon2id$...` — Argon2id PHC hash, verified directly.
+    /// - `ENC$...` — Legacy AES-encrypted plaintext, decrypted and compared,
+    ///   then migrated to Argon2id on successful login.
+    /// - Anything else — Legacy plaintext, compared directly, then migrated.
     pub async fn authenticate(&self, username: &str, password: &str) -> Option<User> {
         let user = self.get_by_username(username).await?;
         if !user.enabled {
             warn!(username, "login attempt for disabled user");
             return None;
         }
-        if user.password_hash == password {
-            // Update last_seen_at
-            let db = self.db.lock().await;
-            let _ = db.execute(
-                "UPDATE users SET last_seen_at = datetime('now') WHERE id = ?1",
-                [&user.id],
-            );
-            Some(user)
+
+        // `user.password_hash` is the raw stored value (no longer decrypted
+        // by RawUser::decrypt).
+        let stored = &user.password_hash;
+
+        let valid = if crypto::is_argon2_hash(stored) {
+            // Current format: verify directly
+            crypto::verify_password(password, stored).unwrap_or(false)
+        } else if stored.starts_with("ENC$") {
+            // Legacy AES-encrypted: decrypt, then compare
+            match self.enc.decrypt(stored) {
+                Ok(plain) => plain == password,
+                Err(_) => false,
+            }
         } else {
-            None
+            // Legacy plaintext
+            stored == password
+        };
+
+        if !valid {
+            return None;
         }
+
+        // Migrate legacy password to Argon2id on successful login
+        if !crypto::is_argon2_hash(stored) {
+            if let Ok(new_hash) = crypto::hash_password(password) {
+                let db = self.db.lock().await;
+                let _ = db.execute(
+                    "UPDATE users SET password_hash = ?1, updated_at = datetime('now') WHERE id = ?2",
+                    rusqlite::params![new_hash, user.id],
+                );
+                info!(username, "migrated password from legacy format to Argon2id");
+            }
+        }
+
+        // Update last_seen_at
+        let db = self.db.lock().await;
+        let _ = db.execute(
+            "UPDATE users SET last_seen_at = datetime('now') WHERE id = ?1",
+            [&user.id],
+        );
+        Some(user)
     }
 
     /// List all users.
@@ -357,13 +395,13 @@ impl UserManager {
         Ok(())
     }
 
-    /// Change a user's password.
+    /// Change a user's password. Hashes with Argon2id.
     pub async fn set_password(&self, user_id: &str, password: &str) -> Result<()> {
-        let enc_pw = self.enc.encrypt(password);
+        let hashed = crypto::hash_password(password)?;
         let db = self.db.lock().await;
         db.execute(
             "UPDATE users SET password_hash = ?1, updated_at = datetime('now') WHERE id = ?2",
-            rusqlite::params![enc_pw, user_id],
+            rusqlite::params![hashed, user_id],
         )?;
         Ok(())
     }
@@ -465,12 +503,11 @@ impl UserManager {
                 String::new()
             };
 
-            let enc_pw = if FieldEncryptor::is_plaintext(&row.password_hash) {
-                needs_update = true;
-                self.enc.encrypt(&row.password_hash)
-            } else {
-                row.password_hash.clone()
-            };
+            // Passwords are NOT encrypted with AES anymore. They are stored
+            // as Argon2id hashes.  Legacy ENC$ or plaintext passwords are
+            // migrated to Argon2id on next successful login, so we leave
+            // them as-is here.
+            let enc_pw = row.password_hash.clone();
 
             let (enc_tid, tid_blind) = match &row.telegram_id {
                 Some(v) if FieldEncryptor::is_plaintext(v) => {
@@ -576,10 +613,14 @@ struct RawUser {
 
 impl RawUser {
     /// Decrypt PII fields into a proper `User`.
+    ///
+    /// Note: `password_hash` is NOT decrypted here. It is stored as either
+    /// an Argon2id PHC string (current) or a legacy `ENC$` blob that the
+    /// `authenticate()` method handles directly.
     fn decrypt(self, enc: &FieldEncryptor) -> User {
         let display_name = enc.decrypt(&self.display_name).unwrap_or(self.display_name);
         let email = enc.decrypt(&self.email).unwrap_or(self.email);
-        let password_hash = enc.decrypt(&self.password_hash).unwrap_or(self.password_hash);
+        let password_hash = self.password_hash;
         let whatsapp_id = self.whatsapp_id.map(|v| enc.decrypt(&v).unwrap_or(v));
 
         // telegram_id is stored as encrypted TEXT now; decrypt and parse

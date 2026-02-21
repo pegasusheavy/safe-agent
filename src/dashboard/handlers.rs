@@ -451,7 +451,7 @@ pub async fn get_skill_credentials(
     Path(skill_name): Path<String>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     let sm = state.agent.skill_manager.lock().await;
-    let creds = sm.get_credentials(&skill_name);
+    let creds = sm.get_credentials(&skill_name, None);
     // Return keys + whether they have values, but never expose raw secret values
     let masked: Vec<serde_json::Value> = creds
         .keys()

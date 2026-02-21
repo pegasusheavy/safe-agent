@@ -19,6 +19,7 @@ use async_trait::async_trait;
 use rusqlite::Connection;
 use tokio::sync::Mutex;
 
+use crate::crypto::FieldEncryptor;
 use crate::error::{Result, SafeAgentError};
 use crate::messaging::MessagingManager;
 use crate::security::SandboxedFs;
@@ -76,6 +77,7 @@ pub struct ToolContext {
     pub messaging: Arc<MessagingManager>,
     pub trash: Arc<TrashManager>,
     pub vector_store: Option<Arc<VectorStore>>,
+    pub encryptor: Arc<FieldEncryptor>,
 }
 
 /// The trait all tools implement.
@@ -173,6 +175,7 @@ impl ToolRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::crypto::FieldEncryptor;
     use crate::messaging::MessagingManager;
     use crate::trash::TrashManager;
     use std::path::Path;
@@ -219,6 +222,7 @@ mod tests {
         let http_client = reqwest::Client::new();
         let messaging = Arc::new(MessagingManager::new());
         let trash = Arc::new(TrashManager::new(Path::new(&tmp)).unwrap());
+        let encryptor = FieldEncryptor::ensure_key(&tmp).unwrap();
 
         ToolContext {
             sandbox,
@@ -227,6 +231,7 @@ mod tests {
             messaging,
             trash,
             vector_store: None,
+            encryptor,
         }
     }
 

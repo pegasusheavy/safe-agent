@@ -89,6 +89,13 @@ rand = "0.10.0"
 webauthn-rs = { version = "0.5.4", features = ["danger-allow-state-serialisation"] }
 aes-gcm = "0.10.3"
 sha2 = "0.10.9"
+argon2 = "0.5"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+
+# OS keyring for secret storage (Linux keyutils)
+[target.'cfg(target_os = "linux")'.dependencies.keyring]
+version = "3"
+features = ["linux-native"]
 
 # Unix process group management & sandboxing
 [target.'cfg(unix)'.dependencies]
@@ -98,6 +105,7 @@ rlimit = "0.10"
 # Linux-only kernel sandboxing
 [target.'cfg(target_os = "linux")'.dependencies]
 landlock = "0.4"
+seccompiler = "0.4"
 
 [dev-dependencies]
 tempfile = "3"

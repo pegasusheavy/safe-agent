@@ -4,6 +4,8 @@ mod approval;
 mod config;
 mod crypto;
 mod dashboard;
+#[allow(dead_code)]
+mod keyring;
 mod db;
 mod error;
 mod federation;
@@ -131,6 +133,12 @@ async fn main() {
         return;
     }
 
+    // Handle --rotate-keys
+    if args.iter().any(|a| a == "--rotate-keys") {
+        run_key_rotation(&data_dir, &db).await;
+        return;
+    }
+
     // Initialize vector store (requires an embedding API key or local model)
     let vector_store = match init_vector_store(&config, &data_dir).await {
         Ok(vs) => {
@@ -229,6 +237,16 @@ async fn main() {
     // Migrate any existing plaintext PII to encrypted form
     if let Err(e) = agent.user_manager.migrate_encrypt_pii().await {
         warn!("PII migration warning: {e}");
+    }
+
+    // Migrate any plaintext OAuth tokens to encrypted form
+    {
+        let db_guard = db.lock().await;
+        if let Err(e) =
+            dashboard::oauth::migrate_encrypt_oauth_tokens(&db_guard, &agent.ctx.encryptor)
+        {
+            warn!("OAuth token migration warning: {e}");
+        }
     }
 
     // Start Telegram dispatcher (if enabled)
@@ -677,6 +695,180 @@ async fn run_checks(config: &Config, _sandbox: &SandboxedFs) {
 
 }
 
+/// Rotate the encryption key: generate a new key and re-encrypt all
+/// encrypted fields in the database (PII, OAuth tokens, passwords are
+/// hashes so they're unaffected).
+async fn run_key_rotation(
+    data_dir: &std::path::Path,
+    db: &Arc<Mutex<rusqlite::Connection>>,
+) {
+    info!("starting encryption key rotation...");
+
+    // Load the current key
+    let old_enc = match crypto::FieldEncryptor::ensure_key(data_dir) {
+        Ok(e) => e,
+        Err(e) => {
+            error!("failed to load current encryption key: {e}");
+            return;
+        }
+    };
+
+    // Generate a new key
+    let new_enc = match crypto::FieldEncryptor::rotate_key(data_dir) {
+        Ok(e) => e,
+        Err(e) => {
+            error!("failed to generate new encryption key: {e}");
+            return;
+        }
+    };
+
+    let db_guard = db.lock().await;
+
+    // Re-encrypt users table (email, telegram_id, whatsapp_id)
+    let mut re_encrypted = 0usize;
+    if let Err(e) = re_encrypt_table(
+        &db_guard, &old_enc, &new_enc,
+        "users",
+        &["email", "telegram_id", "whatsapp_id"],
+        "id",
+    ) {
+        error!("key rotation failed on users table: {e}");
+        return;
+    } else {
+        re_encrypted += 1;
+    }
+
+    // Re-encrypt oauth_tokens table
+    if let Err(e) = re_encrypt_table(
+        &db_guard, &old_enc, &new_enc,
+        "oauth_tokens",
+        &["access_token", "refresh_token"],
+        "rowid",
+    ) {
+        warn!("key rotation skipped oauth_tokens: {e}");
+    } else {
+        re_encrypted += 1;
+    }
+
+    // Re-encrypt skill credentials file
+    let skills_cred_path = data_dir.join("skills").join("credentials.json");
+    if skills_cred_path.exists() {
+        match re_encrypt_credentials_file(&skills_cred_path, &old_enc, &new_enc) {
+            Ok(n) => {
+                info!(values = n, "re-encrypted skill credentials");
+                re_encrypted += 1;
+            }
+            Err(e) => warn!("key rotation skipped skill credentials: {e}"),
+        }
+    }
+
+    info!(tables = re_encrypted, "key rotation complete");
+}
+
+/// Re-encrypt specific columns in a database table.
+fn re_encrypt_table(
+    db: &rusqlite::Connection,
+    old_enc: &crypto::FieldEncryptor,
+    new_enc: &crypto::FieldEncryptor,
+    table: &str,
+    columns: &[&str],
+    pk: &str,
+) -> crate::error::Result<()> {
+    use tracing::debug;
+
+    // Build SELECT query
+    let col_list = std::iter::once(pk)
+        .chain(columns.iter().copied())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let select_sql = format!("SELECT {col_list} FROM {table}");
+
+    let mut stmt = db.prepare(&select_sql)
+        .map_err(|e| crate::error::SafeAgentError::Config(format!("rotate select: {e}")))?;
+
+    let rows: Vec<Vec<String>> = stmt
+        .query_map([], |row| {
+            let mut vals = Vec::with_capacity(columns.len() + 1);
+            for i in 0..=columns.len() {
+                vals.push(row.get::<_, String>(i).unwrap_or_default());
+            }
+            Ok(vals)
+        })
+        .map_err(|e| crate::error::SafeAgentError::Config(format!("rotate query: {e}")))?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let mut count = 0usize;
+    for row in &rows {
+        let pk_val = &row[0];
+        let mut updates = Vec::new();
+        for (i, col) in columns.iter().enumerate() {
+            let old_val = &row[i + 1];
+            if old_val.is_empty() {
+                continue;
+            }
+            let new_val = old_enc.re_encrypt(old_val, &new_enc)?;
+            if new_val != *old_val {
+                updates.push((*col, new_val));
+            }
+        }
+        if !updates.is_empty() {
+            let set_clause: Vec<String> = updates.iter()
+                .map(|(col, _)| format!("{col} = ?"))
+                .collect();
+            let sql = format!(
+                "UPDATE {table} SET {} WHERE {pk} = ?",
+                set_clause.join(", ")
+            );
+            let mut params: Vec<&dyn rusqlite::types::ToSql> = updates.iter()
+                .map(|(_, v)| v as &dyn rusqlite::types::ToSql)
+                .collect();
+            params.push(&pk_val);
+            db.execute(&sql, rusqlite::params_from_iter(params))
+                .map_err(|e| crate::error::SafeAgentError::Config(format!("rotate update: {e}")))?;
+            count += updates.len();
+        }
+    }
+
+    debug!(table, fields = count, "re-encrypted table fields");
+    Ok(())
+}
+
+/// Re-encrypt a JSON credentials file (skill credentials).
+fn re_encrypt_credentials_file(
+    path: &std::path::Path,
+    old_enc: &crypto::FieldEncryptor,
+    new_enc: &crypto::FieldEncryptor,
+) -> crate::error::Result<usize> {
+    let contents = std::fs::read_to_string(path)
+        .map_err(|e| crate::error::SafeAgentError::Config(format!("read creds: {e}")))?;
+    let mut creds: std::collections::HashMap<String, std::collections::HashMap<String, String>> =
+        serde_json::from_str(&contents)
+            .map_err(|e| crate::error::SafeAgentError::Config(format!("parse creds: {e}")))?;
+
+    let mut count = 0;
+    for skill_creds in creds.values_mut() {
+        for value in skill_creds.values_mut() {
+            if !value.is_empty() {
+                let new_val = old_enc.re_encrypt(value, new_enc)?;
+                if new_val != *value {
+                    *value = new_val;
+                    count += 1;
+                }
+            }
+        }
+    }
+
+    if count > 0 {
+        let json = serde_json::to_string_pretty(&creds)
+            .map_err(|e| crate::error::SafeAgentError::Config(format!("serialize creds: {e}")))?;
+        std::fs::write(path, json)
+            .map_err(|e| crate::error::SafeAgentError::Io(e))?;
+    }
+
+    Ok(count)
+}
+
 fn print_usage() {
     println!(
         "safe-agent — sandboxed autonomous AI agent with tool execution
@@ -688,6 +880,7 @@ OPTIONS:
     --config <PATH>     Path to config file (default: ~/.config/safe-agent/config.toml)
     --default-config    Print default config to stdout and exit
     --check             Validate config and connectivity, then exit
+    --rotate-keys       Generate a new encryption key and re-encrypt all data
     -h, --help          Print this help message
 
 LLM BACKEND:

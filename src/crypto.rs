@@ -26,6 +26,10 @@ use crate::error::{Result, SafeAgentError};
 /// encrypted from legacy plaintext in the database.
 const ENC_PREFIX: &str = "ENC$";
 
+/// Versioned prefix for key-rotation support.  New encryptions always
+/// use this format; decrypt accepts both `ENC$v1$…` and legacy `ENC$…`.
+const ENC_V1_PREFIX: &str = "ENC$v1$";
+
 type HmacSha256 = hmac::Hmac<Sha256>;
 
 /// Field-level encryptor backed by a 256-bit AES-GCM key.
@@ -42,55 +46,32 @@ impl FieldEncryptor {
     // Key lifecycle
     // -----------------------------------------------------------------
 
-    /// Load the encryption key from `<data_dir>/encryption.key`, generating
-    /// a new one on the very first launch.
+    /// Load the encryption key via the OS keyring (with file fallback),
+    /// generating a new one on the very first launch.
     ///
-    /// The key file is 32 random bytes stored as 64 hex characters plus a
-    /// trailing newline.  File permissions are set to 0600 on Unix.
+    /// On Linux the key is stored in the kernel keyring (keyutils) and
+    /// mirrored to `<data_dir>/encryption.key` as a hex file (0600).
+    /// Existing file-only installations are migrated into the keyring
+    /// automatically.
     pub fn ensure_key(data_dir: &Path) -> Result<Arc<Self>> {
-        let key_path = data_dir.join("encryption.key");
+        let km = crate::keyring::KeyManager::new(data_dir);
 
-        let key_bytes: [u8; 32] = if key_path.exists() {
-            // Load existing key
-            let hex = std::fs::read_to_string(&key_path)
-                .map_err(|e| SafeAgentError::Config(format!("failed to read encryption key: {e}")))?;
-            let hex = hex.trim();
-            if hex.len() != 64 {
-                return Err(SafeAgentError::Config(format!(
-                    "encryption key file corrupt (expected 64 hex chars, got {})",
-                    hex.len()
-                )));
+        let key_bytes: [u8; 32] = match km.load_key()? {
+            Some(key) => {
+                // Opportunistically migrate file-based key into keyring
+                let _ = km.migrate_to_keyring();
+                info!("loaded existing PII encryption key");
+                key
             }
-            let mut buf = [0u8; 32];
-            hex_decode(hex, &mut buf)?;
-            info!("loaded existing PII encryption key");
-            buf
-        } else {
-            // Generate new key — this is the first launch
-            let key = Aes256Gcm::generate_key(OsRng);
-            let mut buf = [0u8; 32];
-            buf.copy_from_slice(&key);
-
-            // Ensure parent directory exists
-            if let Some(parent) = key_path.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| SafeAgentError::Config(format!("failed to create data dir: {e}")))?;
+            None => {
+                // First launch — generate a fresh 256-bit key
+                let key = Aes256Gcm::generate_key(OsRng);
+                let mut buf = [0u8; 32];
+                buf.copy_from_slice(&key);
+                km.store_key(&buf)?;
+                info!("generated new PII encryption key (first launch)");
+                buf
             }
-
-            // Write key as hex
-            std::fs::write(&key_path, format!("{}\n", hex_encode(&buf)))
-                .map_err(|e| SafeAgentError::Config(format!("failed to write encryption key: {e}")))?;
-
-            // Restrict permissions to owner-only on Unix
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let perms = std::fs::Permissions::from_mode(0o600);
-                let _ = std::fs::set_permissions(&key_path, perms);
-            }
-
-            info!(path = %key_path.display(), "generated new PII encryption key (first launch)");
-            buf
         };
 
         // Derive a separate HMAC key for blind indexes so the blind index
@@ -109,7 +90,7 @@ impl FieldEncryptor {
     // Encrypt / decrypt
     // -----------------------------------------------------------------
 
-    /// Encrypt a plaintext string → `ENC$<base64(nonce ‖ ciphertext)>`.
+    /// Encrypt a plaintext string → `ENC$v1$<base64(nonce ‖ ciphertext)>`.
     ///
     /// Returns the original value unchanged if it's empty (no point
     /// encrypting empty strings) or already encrypted.
@@ -131,11 +112,12 @@ impl FieldEncryptor {
         combined.extend_from_slice(&nonce);
         combined.extend_from_slice(&ciphertext);
 
-        format!("{ENC_PREFIX}{}", BASE64.encode(&combined))
+        format!("{ENC_V1_PREFIX}{}", BASE64.encode(&combined))
     }
 
     /// Decrypt a value produced by [`encrypt`].
     ///
+    /// Accepts both versioned (`ENC$v1$…`) and legacy (`ENC$…`) formats.
     /// If the value doesn't carry the `ENC$` prefix it's treated as
     /// legacy plaintext and returned as-is (graceful migration).
     pub fn decrypt(&self, stored: &str) -> Result<String> {
@@ -143,7 +125,12 @@ impl FieldEncryptor {
             return Ok(String::new());
         }
 
-        let Some(encoded) = stored.strip_prefix(ENC_PREFIX) else {
+        // Try versioned format first, then legacy
+        let encoded = if let Some(e) = stored.strip_prefix(ENC_V1_PREFIX) {
+            e
+        } else if let Some(e) = stored.strip_prefix(ENC_PREFIX) {
+            e
+        } else {
             // Legacy plaintext — return as-is
             return Ok(stored.to_string());
         };
@@ -250,6 +237,87 @@ impl FieldEncryptor {
     pub fn is_plaintext(value: &str) -> bool {
         !value.is_empty() && !value.starts_with(ENC_PREFIX)
     }
+
+    // -----------------------------------------------------------------
+    // Key rotation
+    // -----------------------------------------------------------------
+
+    /// Generate a fresh key and persist it, replacing the current one.
+    ///
+    /// Returns the new `FieldEncryptor`.  Callers must then re-encrypt all
+    /// stored data with the new key (use `re_encrypt` to translate individual
+    /// values from old → new).
+    pub fn rotate_key(data_dir: &Path) -> Result<Arc<Self>> {
+        let km = crate::keyring::KeyManager::new(data_dir);
+        let key = Aes256Gcm::generate_key(OsRng);
+        let mut buf = [0u8; 32];
+        buf.copy_from_slice(&key);
+        km.store_key(&buf)?;
+
+        let mut mac = <HmacSha256 as Mac>::new_from_slice(&buf)
+            .expect("HMAC can take any key size");
+        mac.update(b"safe-agent-blind-index-v1");
+        let derived = mac.finalize().into_bytes();
+        let mut blind_key = [0u8; 32];
+        blind_key.copy_from_slice(&derived);
+
+        info!("encryption key rotated — all stored data must be re-encrypted");
+        Ok(Arc::new(Self {
+            key_bytes: buf,
+            blind_key,
+        }))
+    }
+
+    /// Re-encrypt a value: decrypt with `self` (old key), encrypt with `new`
+    /// key.  Passes through empty and plaintext values unchanged.
+    pub fn re_encrypt(&self, stored: &str, new: &FieldEncryptor) -> Result<String> {
+        if stored.is_empty() || !stored.starts_with(ENC_PREFIX) {
+            // Plaintext — just encrypt with new key
+            return Ok(if stored.is_empty() {
+                String::new()
+            } else {
+                new.encrypt(stored)
+            });
+        }
+        let plaintext = self.decrypt(stored)?;
+        Ok(new.encrypt(&plaintext))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Password hashing (Argon2id)
+// ---------------------------------------------------------------------------
+
+/// Prefix on Argon2id PHC strings, used to detect already-hashed passwords.
+const ARGON2_PREFIX: &str = "$argon2id$";
+
+/// Hash a password with Argon2id using OWASP-recommended minimum parameters:
+/// m=19456 (19 MiB), t=2 iterations, p=1 lane.
+pub fn hash_password(plaintext: &str) -> Result<String> {
+    use argon2::{Argon2, PasswordHasher, password_hash::SaltString};
+
+    let params = argon2::Params::new(19456, 2, 1, None)
+        .map_err(|e| SafeAgentError::Config(format!("argon2 params: {e}")))?;
+    let argon2 = Argon2::new(argon2::Algorithm::Argon2id, argon2::Version::V0x13, params);
+    let salt = SaltString::generate(OsRng);
+    let hash = argon2
+        .hash_password(plaintext.as_bytes(), &salt)
+        .map_err(|e| SafeAgentError::Config(format!("argon2 hash: {e}")))?;
+    Ok(hash.to_string())
+}
+
+/// Verify a plaintext password against an Argon2id PHC hash string.
+pub fn verify_password(plaintext: &str, hash: &str) -> Result<bool> {
+    use argon2::{Argon2, PasswordVerifier, password_hash::PasswordHash};
+
+    let parsed = PasswordHash::new(hash)
+        .map_err(|e| SafeAgentError::Config(format!("argon2 parse hash: {e}")))?;
+    Ok(Argon2::default().verify_password(plaintext.as_bytes(), &parsed).is_ok())
+}
+
+/// Returns `true` if the value is an Argon2id PHC hash string.
+pub fn is_argon2_hash(value: &str) -> bool {
+    value.starts_with(ARGON2_PREFIX)
 }
 
 // ---------------------------------------------------------------------------
@@ -380,6 +448,31 @@ mod tests {
         assert!(FieldEncryptor::is_plaintext("hello"));
         assert!(!FieldEncryptor::is_plaintext(""));
         assert!(!FieldEncryptor::is_plaintext("ENC$abc123"));
+        assert!(!FieldEncryptor::is_plaintext("ENC$v1$abc123"));
+    }
+
+    #[test]
+    fn encrypt_uses_v1_prefix() {
+        let enc = test_encryptor();
+        let ct = enc.encrypt("test");
+        assert!(ct.starts_with("ENC$v1$"), "expected v1 prefix, got: {ct}");
+    }
+
+    #[test]
+    fn re_encrypt_with_new_key() {
+        let enc1 = test_encryptor();
+        let enc2 = FieldEncryptor {
+            key_bytes: [0x99u8; 32],
+            blind_key: [0u8; 32],
+        };
+
+        let ct1 = enc1.encrypt("secret");
+        let ct2 = enc1.re_encrypt(&ct1, &enc2).unwrap();
+
+        // ct2 should be decryptable with enc2
+        assert_eq!(enc2.decrypt(&ct2).unwrap(), "secret");
+        // ct2 should NOT be decryptable with enc1
+        assert!(enc1.decrypt(&ct2).is_err());
     }
 
     #[test]
@@ -391,6 +484,21 @@ mod tests {
         let mut decoded = [0u8; 4];
         hex_decode(&hex, &mut decoded).unwrap();
         assert_eq!(decoded, bytes);
+    }
+
+    #[test]
+    fn argon2_hash_and_verify() {
+        let hash = super::hash_password("my-secret-pw").unwrap();
+        assert!(hash.starts_with("$argon2id$"));
+        assert!(super::verify_password("my-secret-pw", &hash).unwrap());
+        assert!(!super::verify_password("wrong-pw", &hash).unwrap());
+    }
+
+    #[test]
+    fn argon2_is_argon2_hash() {
+        assert!(super::is_argon2_hash("$argon2id$v=19$m=19456,t=2,p=1$salt$hash"));
+        assert!(!super::is_argon2_hash("ENC$abc"));
+        assert!(!super::is_argon2_hash("plaintext"));
     }
 
     #[test]

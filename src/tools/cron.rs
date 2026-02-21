@@ -173,6 +173,7 @@ mod tests {
             messaging: Arc::new(MessagingManager::new()),
             trash: Arc::new(TrashManager::new(&trash_dir).unwrap()),
             vector_store: None,
+            encryptor: crate::crypto::FieldEncryptor::ensure_key(&base).unwrap(),
         }
     }
 

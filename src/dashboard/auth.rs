@@ -11,6 +11,97 @@ use super::authn;
 use super::oauth;
 use super::routes::DashState;
 
+// ---------------------------------------------------------------------------
+// Login rate limiter
+// ---------------------------------------------------------------------------
+
+/// Per-IP login attempt tracker.
+struct AttemptTracker {
+    count: u32,
+    window_start: std::time::Instant,
+    locked_until: Option<std::time::Instant>,
+}
+
+/// In-memory rate limiter for login attempts.
+///
+/// Thresholds (within a 15-minute window):
+/// *  5 failures → 30 s lockout
+/// * 10 failures → 5 min lockout
+/// * 20 failures → 1 hr lockout
+///
+/// Successful login resets the counter for that IP.
+pub struct LoginRateLimiter {
+    attempts: tokio::sync::Mutex<std::collections::HashMap<std::net::IpAddr, AttemptTracker>>,
+}
+
+const RATE_WINDOW: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+
+impl LoginRateLimiter {
+    pub fn new() -> Self {
+        Self {
+            attempts: tokio::sync::Mutex::new(std::collections::HashMap::new()),
+        }
+    }
+
+    /// Record a failed login attempt.  Returns the lockout duration (if any).
+    pub async fn record_failure(&self, ip: std::net::IpAddr) -> Option<std::time::Duration> {
+        let mut map = self.attempts.lock().await;
+        let now = std::time::Instant::now();
+
+        let entry = map.entry(ip).or_insert_with(|| AttemptTracker {
+            count: 0,
+            window_start: now,
+            locked_until: None,
+        });
+
+        // Reset if window has expired
+        if now.duration_since(entry.window_start) > RATE_WINDOW {
+            entry.count = 0;
+            entry.window_start = now;
+            entry.locked_until = None;
+        }
+
+        entry.count += 1;
+
+        let lockout = if entry.count >= 20 {
+            Some(std::time::Duration::from_secs(3600))
+        } else if entry.count >= 10 {
+            Some(std::time::Duration::from_secs(300))
+        } else if entry.count >= 5 {
+            Some(std::time::Duration::from_secs(30))
+        } else {
+            None
+        };
+
+        if let Some(dur) = lockout {
+            entry.locked_until = Some(now + dur);
+        }
+
+        lockout
+    }
+
+    /// Check if an IP is currently locked out.  Returns remaining lockout
+    /// duration, or `None` if the IP is allowed to attempt login.
+    pub async fn check(&self, ip: std::net::IpAddr) -> Option<std::time::Duration> {
+        let map = self.attempts.lock().await;
+        let now = std::time::Instant::now();
+
+        if let Some(entry) = map.get(&ip) {
+            if let Some(until) = entry.locked_until {
+                if now < until {
+                    return Some(until - now);
+                }
+            }
+        }
+        None
+    }
+
+    /// Reset the counter after a successful login.
+    pub async fn reset(&self, ip: std::net::IpAddr) {
+        self.attempts.lock().await.remove(&ip);
+    }
+}
+
 const COOKIE_NAME: &str = "sa_token";
 
 /// JWT expiry: 7 days (in seconds).
@@ -34,6 +125,38 @@ struct Claims {
     /// User role. None for legacy sessions (treated as admin).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     role: Option<String>,
+    /// CSRF token — must be echoed back via `X-CSRF-Token` header on
+    /// state-mutating requests (POST/PUT/DELETE).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    csrf: Option<String>,
+}
+
+/// Returns `true` when the dashboard is reachable over HTTPS.
+///
+/// Checks the `TUNNEL_URL` env var for an `https://` prefix; if not set
+/// (or not HTTPS) returns `false`.  Used to decide whether cookies need
+/// the `Secure` flag and `SameSite=Strict`.
+fn is_https() -> bool {
+    std::env::var("TUNNEL_URL")
+        .map(|url| url.starts_with("https://"))
+        .unwrap_or(false)
+}
+
+/// Build a `Set-Cookie` string with correct security flags.
+///
+/// * Always: `HttpOnly`, `Path=/`
+/// * HTTPS detected: `Secure; SameSite=Strict`
+/// * HTTP only:      `SameSite=Lax`
+fn make_session_cookie(token: &str) -> String {
+    let secure = is_https();
+    let same_site = if secure { "Strict" } else { "Lax" };
+    let mut cookie = format!(
+        "{COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite={same_site}; Max-Age={TOKEN_EXPIRY_SECS}"
+    );
+    if secure {
+        cookie.push_str("; Secure");
+    }
+    cookie
 }
 
 /// Extract and validate the JWT from the request's cookie header.
@@ -69,7 +192,7 @@ fn mint_token(secret: &[u8], subject: &str, method: &str) -> Result<String, json
     mint_token_with_user(secret, subject, method, None, None)
 }
 
-/// Mint a JWT with user identity embedded.
+/// Mint a JWT with user identity and CSRF token embedded.
 fn mint_token_with_user(
     secret: &[u8],
     subject: &str,
@@ -82,6 +205,9 @@ fn mint_token_with_user(
         .unwrap()
         .as_secs();
 
+    let csrf_bytes: [u8; 32] = rand::random();
+    let csrf_token: String = csrf_bytes.iter().map(|b| format!("{b:02x}")).collect();
+
     let claims = Claims {
         sub: subject.to_string(),
         iat: now,
@@ -89,6 +215,7 @@ fn mint_token_with_user(
         method: Some(method.to_string()),
         user_id: user_id.map(|s| s.to_string()),
         role: role.map(|s| s.to_string()),
+        csrf: Some(csrf_token),
     };
 
     encode(&Header::default(), &claims, &EncodingKey::from_secret(secret))
@@ -120,20 +247,101 @@ pub async fn require_auth(
         return next.run(req).await;
     }
 
-    if validate_token(&req, &state.jwt_secret) {
-        return next.run(req).await;
+    let Some(claims) = extract_claims(&req, &state.jwt_secret) else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({ "error": "unauthorized" })),
+        )
+            .into_response();
+    };
+
+    // CSRF check: POST/PUT/DELETE must carry X-CSRF-Token matching the JWT claim
+    let method = req.method().clone();
+    if method == axum::http::Method::POST
+        || method == axum::http::Method::PUT
+        || method == axum::http::Method::DELETE
+    {
+        if let Some(ref expected_csrf) = claims.csrf {
+            let header_csrf = req
+                .headers()
+                .get("X-CSRF-Token")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("");
+            if header_csrf != expected_csrf {
+                return (
+                    StatusCode::FORBIDDEN,
+                    Json(serde_json::json!({ "error": "CSRF token mismatch" })),
+                )
+                    .into_response();
+            }
+        }
     }
 
-    (
-        StatusCode::UNAUTHORIZED,
-        Json(serde_json::json!({ "error": "unauthorized" })),
-    )
-        .into_response()
+    next.run(req).await
 }
 
 // ---------------------------------------------------------------------------
 // Endpoints
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Security headers middleware
+// ---------------------------------------------------------------------------
+
+/// Middleware that appends defensive HTTP headers to every response.
+pub async fn security_headers(req: Request<Body>, next: Next) -> Response {
+    let mut resp = next.run(req).await;
+    let headers = resp.headers_mut();
+
+    headers.insert(
+        axum::http::header::X_FRAME_OPTIONS,
+        "DENY".parse().unwrap(),
+    );
+    headers.insert(
+        axum::http::header::X_CONTENT_TYPE_OPTIONS,
+        "nosniff".parse().unwrap(),
+    );
+    headers.insert(
+        axum::http::header::REFERRER_POLICY,
+        "strict-origin-when-cross-origin".parse().unwrap(),
+    );
+    // Disable browser XSS auditor (modern best practice)
+    headers.insert(
+        axum::http::header::HeaderName::from_static("x-xss-protection"),
+        "0".parse().unwrap(),
+    );
+    headers.insert(
+        axum::http::header::CONTENT_SECURITY_POLICY,
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+            .parse()
+            .unwrap(),
+    );
+    if is_https() {
+        headers.insert(
+            axum::http::header::STRICT_TRANSPORT_SECURITY,
+            "max-age=31536000; includeSubDomains".parse().unwrap(),
+        );
+    }
+    resp
+}
+
+/// Extract the client IP from proxy headers, falling back to loopback.
+fn client_ip(headers: &axum::http::HeaderMap) -> std::net::IpAddr {
+    if let Some(xff) = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+    {
+        if let Some(ip) = xff.split(',').next().and_then(|s| s.trim().parse().ok()) {
+            return ip;
+        }
+    }
+    if let Some(real_ip) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
+        if let Ok(ip) = real_ip.trim().parse() {
+            return ip;
+        }
+    }
+    std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
+}
 
 #[derive(Deserialize)]
 pub struct LoginBody {
@@ -148,10 +356,27 @@ pub struct LoginBody {
 /// Supports two modes:
 /// 1. **Legacy**: just `password` → checks against dashboard_password config.
 /// 2. **Multi-user**: `username` + `password` → authenticates against the users table.
+///
+/// Rate-limited: 5 failures → 30 s lockout, 10 → 5 min, 20 → 1 hr.
 pub async fn login(
     State(state): State<DashState>,
+    headers: axum::http::HeaderMap,
     Json(body): Json<LoginBody>,
 ) -> Response {
+    // Rate-limit check
+    let ip = client_ip(&headers);
+    if let Some(remaining) = state.login_limiter.check(ip).await {
+        return (
+            StatusCode::TOO_MANY_REQUESTS,
+            Json(serde_json::json!({
+                "ok": false,
+                "error": "too many login attempts",
+                "retry_after_secs": remaining.as_secs(),
+            })),
+        )
+            .into_response();
+    }
+
     if !state.config.dashboard.password_enabled {
         return (
             StatusCode::FORBIDDEN,
@@ -218,12 +443,11 @@ pub async fn login(
                     }
                 };
 
-                let cookie = format!(
-                    "{COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={TOKEN_EXPIRY_SECS}"
-                );
+                let cookie = make_session_cookie(&token);
                 let mut headers = axum::http::HeaderMap::new();
                 headers.insert(axum::http::header::SET_COOKIE, cookie.parse().unwrap());
 
+                state.login_limiter.reset(ip).await;
                 info!(username = %u.username, role = %u.role, "user login successful");
                 return (headers, Json(serde_json::json!({
                     "ok": true,
@@ -237,6 +461,7 @@ pub async fn login(
             }
             None => {
                 warn!(username, "multi-user login failed");
+                state.login_limiter.record_failure(ip).await;
                 return (
                     StatusCode::UNAUTHORIZED,
                     Json(serde_json::json!({ "ok": false, "error": "invalid username or password" })),
@@ -247,6 +472,7 @@ pub async fn login(
 
     // Legacy single-password login
     if state.dashboard_password.is_empty() || body.password != state.dashboard_password {
+        state.login_limiter.record_failure(ip).await;
         return (
             StatusCode::UNAUTHORIZED,
             Json(serde_json::json!({ "ok": false, "error": "invalid password" })),
@@ -266,9 +492,9 @@ pub async fn login(
         }
     };
 
-    let cookie = format!(
-        "{COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={TOKEN_EXPIRY_SECS}"
-    );
+    state.login_limiter.reset(ip).await;
+
+    let cookie = make_session_cookie(&token);
 
     let mut headers = axum::http::HeaderMap::new();
     headers.insert(axum::http::header::SET_COOKIE, cookie.parse().unwrap());
@@ -303,6 +529,9 @@ pub async fn check(
             }
             if let Some(ref role) = claims.role {
                 resp["role"] = serde_json::json!(role);
+            }
+            if let Some(ref csrf) = claims.csrf {
+                resp["csrf_token"] = serde_json::json!(csrf);
             }
             Json(resp)
         }
@@ -382,7 +611,7 @@ fn sso_client_credentials(
     // Fall back to skill credential store
     let skill_name = format!("{}-oauth", provider.id);
     let sm = state.agent.skill_manager.try_lock().ok()?;
-    let creds = sm.get_credentials(&skill_name);
+    let creds = sm.get_credentials(&skill_name, None);
     let id = creds.get(provider.client_id_key)?.clone();
     let secret = creds.get(provider.client_secret_key)?.clone();
     if id.is_empty() || secret.is_empty() {
@@ -605,9 +834,7 @@ pub async fn sso_callback(
     info!(provider = provider.id, email = %email, "SSO login successful");
 
     // Set cookie and redirect to dashboard
-    let cookie = format!(
-        "{COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={TOKEN_EXPIRY_SECS}"
-    );
+    let cookie = make_session_cookie(&token);
 
     let mut headers = axum::http::HeaderMap::new();
     headers.insert(axum::http::header::SET_COOKIE, cookie.parse().unwrap());
@@ -784,9 +1011,7 @@ pub async fn verify_2fa(
         }
     };
 
-    let cookie = format!(
-        "{COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={TOKEN_EXPIRY_SECS}"
-    );
+    let cookie = make_session_cookie(&token);
     let mut headers = axum::http::HeaderMap::new();
     headers.insert(axum::http::header::SET_COOKIE, cookie.parse().unwrap());
 
@@ -1078,9 +1303,7 @@ pub async fn passkey_auth_finish(
         }
     };
 
-    let cookie = format!(
-        "{COOKIE_NAME}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={TOKEN_EXPIRY_SECS}"
-    );
+    let cookie = make_session_cookie(&token);
     let mut headers = axum::http::HeaderMap::new();
     headers.insert(axum::http::header::SET_COOKIE, cookie.parse().unwrap());
 
@@ -1200,6 +1423,7 @@ mod tests {
             method: Some("sso:google".to_string()),
             user_id: Some("u-123".to_string()),
             role: Some("admin".to_string()),
+            csrf: Some("abc123".to_string()),
         };
         let json = serde_json::to_string(&claims).unwrap();
         let decoded: Claims = serde_json::from_str(&json).unwrap();
@@ -1218,11 +1442,13 @@ mod tests {
             method: None,
             user_id: None,
             role: None,
+            csrf: None,
         };
         let json = serde_json::to_string(&claims).unwrap();
         assert!(!json.contains("method"));
         assert!(!json.contains("user_id"));
         assert!(!json.contains("role"));
+        assert!(!json.contains("csrf"));
     }
 
     #[test]

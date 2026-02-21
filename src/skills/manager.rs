@@ -7,7 +7,9 @@ use std::sync::Arc;
 use tokio::process::{Child, Command};
 use tracing::{error, info, warn};
 
+use crate::crypto::FieldEncryptor;
 use crate::error::{Result, SafeAgentError};
+use crate::skills::signing::SkillSigner;
 use crate::tunnel::TunnelUrl;
 
 use super::rhai_runtime;
@@ -94,12 +96,18 @@ struct RunningSkill {
 /// Manages skill lifecycle: discovery, start, stop, restart, credentials.
 pub struct SkillManager {
     skills_dir: PathBuf,
+    /// Content-addressable store: `skills-cas/<content_hash>/`.
+    cas_dir: PathBuf,
     running: HashMap<String, RunningSkill>,
     telegram_bot_token: Option<String>,
     telegram_chat_id: Option<i64>,
     /// Stored credentials: skill_name -> { env_var_name -> value }
     credentials: HashMap<String, HashMap<String, String>>,
     credentials_path: PathBuf,
+    /// Field-level encryptor for credential at-rest encryption.
+    enc: Arc<FieldEncryptor>,
+    /// Ed25519 skill signer for tamper detection.
+    signer: Option<SkillSigner>,
     /// Ngrok tunnel public URL receiver.
     tunnel_url: Option<TunnelUrl>,
     /// Skills that were manually stopped via API and should not be
@@ -112,13 +120,36 @@ impl SkillManager {
         skills_dir: PathBuf,
         telegram_bot_token: Option<String>,
         telegram_chat_id: Option<i64>,
+        enc: Arc<FieldEncryptor>,
+        data_dir: &Path,
     ) -> Self {
         if let Err(e) = std::fs::create_dir_all(&skills_dir) {
             warn!(path = %skills_dir.display(), err = %e, "failed to create skills directory");
         }
 
+        // Content-addressable store sits alongside the skills directory
+        let cas_dir = skills_dir.parent()
+            .unwrap_or(skills_dir.as_path())
+            .join("skills-cas");
+        if let Err(e) = std::fs::create_dir_all(&cas_dir) {
+            warn!(path = %cas_dir.display(), err = %e, "failed to create CAS directory");
+        }
+
         let credentials_path = skills_dir.join("credentials.json");
-        let credentials = Self::load_credentials(&credentials_path);
+        let credentials = Self::load_credentials(&credentials_path, &enc);
+
+        // Initialize skill signer (best-effort — log and continue without
+        // signing if it fails, e.g. on read-only filesystems)
+        let signer = match SkillSigner::ensure(data_dir, &enc) {
+            Ok(s) => {
+                info!(fingerprint = %s.fingerprint(), "skill signer initialized");
+                Some(s)
+            }
+            Err(e) => {
+                warn!("skill signing unavailable: {e}");
+                None
+            }
+        };
 
         info!(
             path = %skills_dir.display(),
@@ -128,11 +159,14 @@ impl SkillManager {
 
         Self {
             skills_dir,
+            cas_dir,
             running: HashMap::new(),
             telegram_bot_token,
             telegram_chat_id,
             credentials,
             credentials_path,
+            enc,
+            signer,
             tunnel_url: None,
             manually_stopped: std::collections::HashSet::new(),
         }
@@ -144,11 +178,34 @@ impl SkillManager {
         self.tunnel_url = Some(url);
     }
 
-    fn load_credentials(path: &Path) -> HashMap<String, HashMap<String, String>> {
-        match std::fs::read_to_string(path) {
+    /// Load credentials from disk. Detects legacy plaintext values (no `ENC$`
+    /// prefix) and migrates them to encrypted form on the fly.
+    fn load_credentials(path: &Path, enc: &FieldEncryptor) -> HashMap<String, HashMap<String, String>> {
+        let mut creds: HashMap<String, HashMap<String, String>> = match std::fs::read_to_string(path) {
             Ok(contents) => serde_json::from_str(&contents).unwrap_or_default(),
-            Err(_) => HashMap::new(),
+            Err(_) => return HashMap::new(),
+        };
+
+        // Migrate any plaintext values to encrypted form.
+        let mut needs_save = false;
+        for skill_creds in creds.values_mut() {
+            for value in skill_creds.values_mut() {
+                if !value.is_empty() && FieldEncryptor::is_plaintext(value) {
+                    *value = enc.encrypt(value);
+                    needs_save = true;
+                }
+            }
         }
+
+        if needs_save {
+            // Re-save with encrypted values
+            if let Ok(json) = serde_json::to_string_pretty(&creds) {
+                let _ = std::fs::write(path, json);
+            }
+            info!("migrated plaintext skill credentials to encrypted form");
+        }
+
+        creds
     }
 
     fn save_credentials(&self) -> Result<()> {
@@ -159,17 +216,45 @@ impl SkillManager {
         Ok(())
     }
 
-    /// Get stored credentials for a skill.
-    pub fn get_credentials(&self, skill_name: &str) -> HashMap<String, String> {
-        self.credentials.get(skill_name).cloned().unwrap_or_default()
+    /// Get stored credentials for a skill, decrypted to plaintext.
+    ///
+    /// When `caller_skill` is `Some`, the requested `skill_name` must match
+    /// the caller — this prevents a skill from reading another skill's secrets.
+    /// Dashboard/admin callers pass `None` to bypass the check.
+    pub fn get_credentials(
+        &self,
+        skill_name: &str,
+        caller_skill: Option<&str>,
+    ) -> HashMap<String, String> {
+        if let Some(caller) = caller_skill {
+            if caller != skill_name {
+                warn!(
+                    caller,
+                    requested = skill_name,
+                    "credential access denied: skill tried to read another skill's credentials"
+                );
+                return HashMap::new();
+            }
+        }
+        match self.credentials.get(skill_name) {
+            Some(creds) => creds
+                .iter()
+                .map(|(k, v)| {
+                    let plain = self.enc.decrypt(v).unwrap_or_else(|_| v.clone());
+                    (k.clone(), plain)
+                })
+                .collect(),
+            None => HashMap::new(),
+        }
     }
 
-    /// Set a credential value for a skill and persist to disk.
+    /// Set a credential value for a skill (encrypted at rest) and persist to disk.
     pub fn set_credential(&mut self, skill_name: &str, key: &str, value: &str) -> Result<()> {
+        let encrypted = self.enc.encrypt(value);
         self.credentials
             .entry(skill_name.to_string())
             .or_default()
-            .insert(key.to_string(), value.to_string());
+            .insert(key.to_string(), encrypted);
         self.save_credentials()
     }
 
@@ -263,6 +348,18 @@ impl SkillManager {
     /// Start a skill — either as an external process (Python, Node.js, shell)
     /// or as an embedded Rhai script.
     async fn start_skill(&mut self, manifest: SkillManifest, dir: PathBuf) {
+        // Verify signature before starting (if signer is available)
+        if let Some(ref signer) = self.signer {
+            if let Err(e) = signer.verify_skill(&dir) {
+                warn!(
+                    skill = %manifest.name,
+                    err = %e,
+                    "skill signature verification failed — refusing to start"
+                );
+                return;
+            }
+        }
+
         let entrypoint = dir.join(&manifest.entrypoint);
         if !entrypoint.exists() {
             warn!(
@@ -368,16 +465,33 @@ impl SkillManager {
             cmd.env(k, v);
         }
 
-        // On Unix: set process group + apply resource limits (rlimit)
+        // On Unix: set process group + resource limits + seccomp sandbox
         #[cfg(unix)]
         {
             #[allow(unused_imports)]
             use std::os::unix::process::CommandExt;
             let limits = crate::security::ProcessLimits::skill();
+
+            // Build seccomp BPF before fork — allocation is not
+            // async-signal-safe, so it must happen in the parent.
+            #[cfg(target_os = "linux")]
+            let seccomp_bpf = match crate::security::build_skill_seccomp_filter() {
+                Ok(bpf) => Some(bpf),
+                Err(e) => {
+                    warn!(skill = %manifest.name, error = %e,
+                        "failed to build seccomp filter, proceeding without");
+                    None
+                }
+            };
+
             unsafe {
                 cmd.pre_exec(move || {
                     libc::setpgid(0, 0);
                     crate::security::apply_process_limits(&limits)?;
+                    #[cfg(target_os = "linux")]
+                    if let Some(ref bpf) = seccomp_bpf {
+                        crate::security::apply_seccomp_filter(bpf)?;
+                    }
                     Ok(())
                 });
             }
@@ -617,11 +731,11 @@ impl SkillManager {
             env.insert(k.clone(), v.clone());
         }
 
-        // Stored credentials
-        if let Some(creds) = self.credentials.get(&manifest.name) {
-            for (k, v) in creds {
-                env.insert(k.clone(), v.clone());
-            }
+        // Stored credentials (decrypted for the process environment).
+        // Pass the skill name as caller to enforce isolation.
+        let decrypted_creds = self.get_credentials(&manifest.name, Some(&manifest.name));
+        for (k, v) in &decrypted_creds {
+            env.insert(k.clone(), v.clone());
         }
 
         // Tunnel URL
@@ -821,7 +935,7 @@ impl SkillManager {
                         SkillHandle::Embedded { .. } => None,
                     });
 
-                let stored = self.get_credentials(&name);
+                let stored = self.get_credentials(&name, None);
                 let credential_status: Vec<CredentialStatus> = manifest
                     .credentials
                     .iter()
@@ -900,7 +1014,7 @@ impl SkillManager {
             SkillHandle::Embedded { .. } => None,
         });
 
-        let stored = self.get_credentials(name);
+        let stored = self.get_credentials(name, None);
         let credential_status: Vec<CredentialStatus> = manifest
             .credentials
             .iter()
@@ -1161,8 +1275,56 @@ impl SkillManager {
             }
         }
 
+        // Sign the skill so it can be verified on future loads
+        if let Some(ref signer) = self.signer {
+            signer.sign_skill(&dest)?;
+        }
+
+        // Move into content-addressable store and create symlink.
+        // Compute content hash (signature excluded), use as CAS key.
+        let hash = super::signing::content_hash(&dest)?;
+        let cas_entry = self.cas_dir.join(&hash);
+
+        let final_dest = if !cas_entry.exists() {
+            // Move the imported directory into CAS
+            std::fs::rename(&dest, &cas_entry)
+                .map_err(|_| {
+                    // rename fails across filesystems — fall back to copy+remove
+                    copy_dir_recursive(&dest, &cas_entry)
+                        .and_then(|()| std::fs::remove_dir_all(&dest).map_err(SafeAgentError::Io))
+                })
+                .or_else(|r| r)?;
+
+            // Create symlink: skills/<name> → ../skills-cas/<hash>
+            #[cfg(unix)]
+            {
+                let target = PathBuf::from("../skills-cas").join(&hash);
+                std::os::unix::fs::symlink(&target, &dest)
+                    .map_err(|e| SafeAgentError::Config(format!("create skill symlink: {e}")))?;
+            }
+            #[cfg(not(unix))]
+            {
+                // On non-Unix, just leave the directory in place (no CAS)
+                let _ = copy_dir_recursive(&cas_entry, &dest);
+            }
+
+            info!(hash = &hash[..16], "skill stored in CAS");
+            cas_entry
+        } else {
+            // CAS entry already exists (identical content) — just symlink
+            let _ = std::fs::remove_dir_all(&dest);
+            #[cfg(unix)]
+            {
+                let target = PathBuf::from("../skills-cas").join(&hash);
+                std::os::unix::fs::symlink(&target, &dest)
+                    .map_err(|e| SafeAgentError::Config(format!("create skill symlink: {e}")))?;
+            }
+            info!(hash = &hash[..16], "skill already in CAS (reused)");
+            cas_entry
+        };
+
         // Read the final manifest name
-        let manifest = self.read_manifest(&dest.join("skill.toml"))?;
+        let manifest = self.read_manifest(&final_dest.join("skill.toml"))?;
         info!(
             skill = %manifest.name,
             source,
@@ -1301,6 +1463,10 @@ impl SkillManager {
     }
 
     /// Delete a skill directory entirely (stopping it first if running).
+    ///
+    /// If the skill is a CAS symlink, only the symlink is removed — the CAS
+    /// entry is left for `gc_cas()` to clean up later.  If it's a regular
+    /// directory, it's removed directly.
     pub async fn delete_skill(&mut self, name: &str) -> Result<()> {
         // Stop if running
         if self.running.contains_key(name) {
@@ -1311,7 +1477,11 @@ impl SkillManager {
             SafeAgentError::Config(format!("skill '{name}' not found"))
         })?;
 
-        std::fs::remove_dir_all(&dir).map_err(SafeAgentError::Io)?;
+        if dir.is_symlink() {
+            std::fs::remove_file(&dir).map_err(SafeAgentError::Io)?;
+        } else {
+            std::fs::remove_dir_all(&dir).map_err(SafeAgentError::Io)?;
+        }
 
         // Clean up credentials
         self.credentials.remove(name);
@@ -1319,6 +1489,49 @@ impl SkillManager {
 
         info!(skill = %name, "skill deleted");
         Ok(())
+    }
+
+    /// Garbage-collect orphan CAS entries.
+    ///
+    /// Walks `skills-cas/`, checks whether any symlink in `skills/` still
+    /// references each hash directory, and removes unreferenced ones.
+    /// Returns the number of entries removed.
+    pub fn gc_cas(&self) -> usize {
+        let entries = match std::fs::read_dir(&self.cas_dir) {
+            Ok(e) => e,
+            Err(_) => return 0,
+        };
+
+        // Collect all CAS hashes currently referenced by symlinks
+        let mut referenced: std::collections::HashSet<String> = std::collections::HashSet::new();
+        if let Ok(skills) = std::fs::read_dir(&self.skills_dir) {
+            for entry in skills.flatten() {
+                let path = entry.path();
+                if path.is_symlink() {
+                    if let Ok(target) = std::fs::read_link(&path) {
+                        // Extract hash from target like "../skills-cas/<hash>"
+                        if let Some(hash) = target.file_name() {
+                            referenced.insert(hash.to_string_lossy().to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut removed = 0;
+        for entry in entries.flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if !referenced.contains(&name) {
+                if let Err(e) = std::fs::remove_dir_all(entry.path()) {
+                    warn!(cas_entry = %name, err = %e, "failed to remove orphan CAS entry");
+                } else {
+                    info!(cas_entry = &name[..16.min(name.len())], "removed orphan CAS entry");
+                    removed += 1;
+                }
+            }
+        }
+
+        removed
     }
 
     /// Stop all running skills (called on shutdown).

@@ -90,6 +90,7 @@ impl Agent {
             messaging: messaging.clone(),
             trash,
             vector_store: None,
+            encryptor: encryptor.clone(),
         };
 
         // Initialize skill manager
@@ -98,7 +99,13 @@ impl Agent {
         let telegram_chat_id = messaging
             .primary_channel("telegram")
             .and_then(|s| s.parse::<i64>().ok());
-        let skill_manager = SkillManager::new(skills_dir, bot_token, telegram_chat_id);
+        let skill_manager = SkillManager::new(
+            skills_dir,
+            bot_token,
+            telegram_chat_id,
+            encryptor.clone(),
+            sandbox.root(),
+        );
 
         // Security subsystems
         let audit = AuditLogger::new(db.clone());

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
 
 use super::routes::DashState;
+use crate::crypto::FieldEncryptor;
 
 // ---------------------------------------------------------------------------
 // Provider registry
@@ -260,13 +261,13 @@ fn provider_client_credentials(state: &DashState, provider: &OAuthProvider) -> O
     // Fall back to skill credential store (use provider id as skill name)
     let skill_name = format!("{}-oauth", provider.id);
     let sm = state.agent.skill_manager.try_lock().ok()?;
-    let creds = sm.get_credentials(&skill_name);
+    let creds = sm.get_credentials(&skill_name, None);
     let id = creds.get(provider.client_id_key)?.clone();
     let secret = creds.get(provider.client_secret_key)?.clone();
     if id.is_empty() || secret.is_empty() {
         // Also try the google-oauth skill name for backwards compat
         if provider.id == "google" {
-            let creds2 = sm.get_credentials("google-oauth");
+            let creds2 = sm.get_credentials("google-oauth", None);
             let id2 = creds2.get("GOOGLE_CLIENT_ID")?.clone();
             let secret2 = creds2.get("GOOGLE_CLIENT_SECRET")?.clone();
             if !id2.is_empty() && !secret2.is_empty() {
@@ -546,6 +547,7 @@ pub async fn oauth_callback(
                 .to_string()
         });
 
+        let enc = &state.agent.ctx.encryptor;
         if let Err(e) = db.execute(
             "INSERT OR REPLACE INTO oauth_tokens (provider, account, email, access_token, refresh_token, expires_at, scopes, updated_at)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))",
@@ -553,8 +555,8 @@ pub async fn oauth_callback(
                 provider.id,
                 &account_id,
                 &email,
-                token_data.access_token,
-                token_data.refresh_token,
+                enc.encrypt(&token_data.access_token),
+                enc.encrypt_opt(token_data.refresh_token.as_deref()),
                 expires_at,
                 provider.default_scopes,
             ],
@@ -572,6 +574,7 @@ pub async fn oauth_callback(
         &token_data.access_token,
         token_data.refresh_token.as_deref(),
         provider.default_scopes,
+        &state.agent.ctx.encryptor,
     );
 
     Ok(Html(format!(
@@ -698,6 +701,7 @@ pub async fn oauth_refresh(
             (StatusCode::INTERNAL_SERVER_ERROR, Json(serde_json::json!({"error": "DB error"})))
         })?;
 
+        let enc = &state.agent.ctx.encryptor;
         stmt.query_map(rusqlite::params![provider.id], |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
@@ -706,6 +710,10 @@ pub async fn oauth_refresh(
         })?
         .filter_map(|r| r.ok())
         .filter(|(acct, _)| query.account.as_ref().map_or(true, |a| a == acct))
+        .map(|(acct, rt)| {
+            let plain_rt = enc.decrypt(&rt).unwrap_or_else(|_| rt);
+            (acct, plain_rt)
+        })
         .collect()
     };
 
@@ -762,9 +770,10 @@ pub async fn oauth_refresh(
 
         {
             let db = state.db.lock().await;
+            let enc = &state.agent.ctx.encryptor;
             let _ = db.execute(
                 "UPDATE oauth_tokens SET access_token = ?1, expires_at = ?2, updated_at = datetime('now') WHERE provider = ?3 AND account = ?4",
-                rusqlite::params![access_token, expires_at, provider.id, account_id],
+                rusqlite::params![enc.encrypt(access_token), expires_at, provider.id, account_id],
             );
         }
 
@@ -776,6 +785,7 @@ pub async fn oauth_refresh(
             access_token,
             Some(refresh_token),
             provider.default_scopes,
+            &state.agent.ctx.encryptor,
         );
 
         refreshed += 1;
@@ -856,6 +866,7 @@ fn write_provider_credentials(
     access_token: &str,
     refresh_token: Option<&str>,
     scopes: &str,
+    enc: &FieldEncryptor,
 ) -> std::io::Result<()> {
     let data_dir = crate::config::Config::data_dir();
     let filename = format!("{account_id}.json");
@@ -867,10 +878,10 @@ fn write_provider_credentials(
     let universal_json = serde_json::json!({
         "provider": provider.id,
         "account": account_id,
-        "access_token": access_token,
-        "refresh_token": refresh_token.unwrap_or(""),
+        "access_token": enc.encrypt(access_token),
+        "refresh_token": enc.encrypt_opt(refresh_token).unwrap_or_default(),
         "client_id": client_id,
-        "client_secret": client_secret,
+        "client_secret": enc.encrypt(client_secret),
         "token_url": provider.token_url,
         "scopes": scopes,
     });
@@ -884,9 +895,9 @@ fn write_provider_credentials(
         let compat_json = serde_json::json!({
             "type": "authorized_user",
             "client_id": client_id,
-            "client_secret": client_secret,
-            "refresh_token": refresh_token.unwrap_or(""),
-            "token": access_token,
+            "client_secret": enc.encrypt(client_secret),
+            "refresh_token": enc.encrypt_opt(refresh_token).unwrap_or_default(),
+            "token": enc.encrypt(access_token),
             "token_uri": "https://oauth2.googleapis.com/token",
             "account": account_id,
         });
@@ -1055,6 +1066,68 @@ fn urlencoding(s: &str) -> String {
         .replace('?', "%3F")
         .replace('#', "%23")
         .replace('@', "%40")
+}
+
+/// Migrate plaintext OAuth tokens in the DB to encrypted form.
+///
+/// Called once at startup.  Scans `oauth_tokens` for access_token /
+/// refresh_token values that lack the `ENC$` prefix and encrypts them
+/// in-place so existing deployments are transparently upgraded.
+pub fn migrate_encrypt_oauth_tokens(
+    db: &rusqlite::Connection,
+    enc: &FieldEncryptor,
+) -> crate::error::Result<()> {
+    let mut stmt = db.prepare(
+        "SELECT provider, account, access_token, refresh_token FROM oauth_tokens",
+    )?;
+    let rows: Vec<(String, String, String, Option<String>)> = stmt
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+            ))
+        })?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    let mut migrated = 0u32;
+    for (provider, account, access_token, refresh_token) in &rows {
+        let at_plain = FieldEncryptor::is_plaintext(access_token);
+        let rt_plain = refresh_token
+            .as_ref()
+            .map_or(false, |rt| FieldEncryptor::is_plaintext(rt));
+
+        if at_plain || rt_plain {
+            let enc_at = if at_plain {
+                enc.encrypt(access_token)
+            } else {
+                access_token.clone()
+            };
+            let enc_rt = refresh_token.as_ref().map(|rt| {
+                if FieldEncryptor::is_plaintext(rt) {
+                    enc.encrypt(rt)
+                } else {
+                    rt.clone()
+                }
+            });
+            db.execute(
+                "UPDATE oauth_tokens SET access_token = ?1, refresh_token = ?2 \
+                 WHERE provider = ?3 AND account = ?4",
+                rusqlite::params![enc_at, enc_rt, provider, account],
+            )?;
+            migrated += 1;
+        }
+    }
+
+    if migrated > 0 {
+        info!(
+            count = migrated,
+            "migrated plaintext OAuth tokens to encrypted form"
+        );
+    }
+    Ok(())
 }
 
 #[cfg(test)]

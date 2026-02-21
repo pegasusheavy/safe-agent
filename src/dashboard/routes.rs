@@ -39,6 +39,8 @@ pub struct DashState {
     pub trash: Arc<TrashManager>,
     /// WebAuthn/passkey manager (None if origin not configured).
     pub passkey_manager: Option<Arc<PasskeyManager>>,
+    /// Per-IP login rate limiter.
+    pub login_limiter: Arc<auth::LoginRateLimiter>,
 }
 
 pub fn build(
@@ -128,6 +130,7 @@ pub fn build(
         messaging,
         trash,
         passkey_manager,
+        login_limiter: Arc::new(auth::LoginRateLimiter::new()),
     };
 
     Ok(Router::new()
@@ -273,6 +276,8 @@ pub fn build(
         .route("/api/events", get(sse::events))
         // Auth middleware — applied to all routes above
         .layer(middleware::from_fn_with_state(state.clone(), auth::require_auth))
+        // Security headers — applied to all responses
+        .layer(middleware::from_fn(auth::security_headers))
         // Unauthenticated endpoints (health check, metrics, federation sync, onboarding) — below auth layer
         .route("/healthz", get(handlers::healthz))
         // Onboarding wizard — exempt from auth so the wizard works before any user exists

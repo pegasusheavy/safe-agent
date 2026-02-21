@@ -40,12 +40,69 @@ pub struct AuditSummary {
     pub permission_denials: u64,
 }
 
+// ---------------------------------------------------------------------------
+// Sensitive-value redaction for audit log params
+// ---------------------------------------------------------------------------
+
+/// Redact sensitive values from a JSON string before audit logging.
+///
+/// Scans JSON keys for patterns suggesting secrets (passwords, tokens,
+/// API keys, credentials) and replaces their values with `[REDACTED]`.
+/// Non-JSON strings are returned unchanged.
+pub fn redact_sensitive_params(json: &str) -> String {
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(json) else {
+        return json.to_string();
+    };
+    redact_value(&mut value);
+    serde_json::to_string(&value).unwrap_or_else(|_| json.to_string())
+}
+
+fn is_sensitive_key(key: &str) -> bool {
+    let lower = key.to_lowercase();
+    lower.contains("password")
+        || lower.contains("secret")
+        || lower.contains("token")
+        || lower.contains("api_key")
+        || lower.contains("apikey")
+        || lower.contains("auth")
+        || lower.contains("credential")
+        || lower.contains("bearer")
+        || lower.contains("private_key")
+        || lower.contains("signing_key")
+}
+
+fn redact_value(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, val) in map.iter_mut() {
+                if is_sensitive_key(key) {
+                    if val.is_string() {
+                        *val = serde_json::Value::String("[REDACTED]".to_string());
+                    }
+                } else {
+                    redact_value(val);
+                }
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for item in arr.iter_mut() {
+                redact_value(item);
+            }
+        }
+        _ => {}
+    }
+}
+
 impl AuditLogger {
     pub fn new(db: Arc<Mutex<Connection>>) -> Self {
         Self { db }
     }
 
     /// Log a security-relevant event.
+    ///
+    /// The `params_json` field is automatically redacted: any JSON keys
+    /// matching sensitive patterns (password, token, secret, etc.) have
+    /// their values replaced with `[REDACTED]` before persistence.
     pub async fn log(
         &self,
         event_type: &str,
@@ -58,6 +115,7 @@ impl AuditLogger {
         success: Option<bool>,
         source: &str,
     ) {
+        let redacted = params_json.map(redact_sensitive_params);
         let db = self.db.lock().await;
         if let Err(e) = db.execute(
             "INSERT INTO audit_log (event_type, tool, action, user_context, reasoning, params_json, result, success, source)
@@ -68,7 +126,7 @@ impl AuditLogger {
                 action,
                 user_context,
                 reasoning,
-                params_json,
+                redacted,
                 result,
                 success,
                 source,
@@ -463,5 +521,72 @@ mod tests {
         let chain = logger.explain_action(entries[0].id).await;
         assert!(!chain.is_empty());
         assert_eq!(chain[0].reasoning.as_deref(), Some("delete all"));
+    }
+
+    // -- Redaction tests --------------------------------------------------
+
+    #[test]
+    fn redact_sensitive_keys() {
+        let input = r#"{"api_key":"sk-123","query":"hello","password":"s3cret"}"#;
+        let result = redact_sensitive_params(input);
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["api_key"], "[REDACTED]");
+        assert_eq!(v["query"], "hello");
+        assert_eq!(v["password"], "[REDACTED]");
+    }
+
+    #[test]
+    fn redact_nested_sensitive_keys() {
+        let input = r#"{"config":{"client_secret":"abc","name":"test"}}"#;
+        let result = redact_sensitive_params(input);
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["config"]["client_secret"], "[REDACTED]");
+        assert_eq!(v["config"]["name"], "test");
+    }
+
+    #[test]
+    fn redact_in_array() {
+        let input = r#"[{"token":"xyz"},{"cmd":"ls"}]"#;
+        let result = redact_sensitive_params(input);
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v[0]["token"], "[REDACTED]");
+        assert_eq!(v[1]["cmd"], "ls");
+    }
+
+    #[test]
+    fn redact_non_json_passthrough() {
+        let input = "not json at all";
+        assert_eq!(redact_sensitive_params(input), input);
+    }
+
+    #[test]
+    fn redact_preserves_non_sensitive() {
+        let input = r#"{"cmd":"ls","path":"/tmp"}"#;
+        let result = redact_sensitive_params(input);
+        let v: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(v["cmd"], "ls");
+        assert_eq!(v["path"], "/tmp");
+    }
+
+    #[tokio::test]
+    async fn audit_log_redacts_params() {
+        let logger = make_logger().await;
+        logger
+            .log_tool_call(
+                "exec",
+                &serde_json::json!({"cmd": "curl", "authorization": "Bearer sk-123"}),
+                "ok",
+                true,
+                "agent",
+                "",
+                "",
+            )
+            .await;
+
+        let entries = logger.recent(1, 0, None, None).await;
+        let params = entries[0].params_json.as_deref().unwrap();
+        let v: serde_json::Value = serde_json::from_str(params).unwrap();
+        assert_eq!(v["authorization"], "[REDACTED]");
+        assert_eq!(v["cmd"], "curl");
     }
 }

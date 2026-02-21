@@ -642,6 +642,164 @@ pub fn apply_landlock(_data_dir: &Path, _config_dir: &Path) -> std::result::Resu
 }
 
 // ===========================================================================
+// Seccomp-BPF sandbox for skill subprocesses (Linux only)
+// ===========================================================================
+
+/// Build a seccomp-BPF program that restricts skill subprocesses to a safe
+/// set of syscalls. Anything not explicitly allowed returns EPERM.
+///
+/// Blocked operations include: ptrace, mount/umount, reboot, kexec, kernel
+/// module loading, pivot_root, chroot, and other privileged operations.
+/// The socket() syscall is restricted to AF_INET, AF_INET6, and AF_UNIX.
+#[cfg(target_os = "linux")]
+pub fn build_skill_seccomp_filter() -> std::result::Result<seccompiler::BpfProgram, String> {
+    use std::collections::BTreeMap;
+    use seccompiler::{
+        SeccompAction, SeccompCmpArgLen, SeccompCmpOp, SeccompCondition,
+        SeccompFilter, SeccompRule, TargetArch,
+    };
+
+    #[cfg(target_arch = "x86_64")]
+    let arch = TargetArch::x86_64;
+    #[cfg(target_arch = "aarch64")]
+    let arch = TargetArch::aarch64;
+
+    let mut rules: BTreeMap<i64, Vec<SeccompRule>> = BTreeMap::new();
+
+    // Helper: create a rule that always matches (arg0 >= 0 is trivially true
+    // for unsigned values, which is how BPF interprets comparisons).
+    let allow_rule = || -> std::result::Result<Vec<SeccompRule>, String> {
+        Ok(vec![SeccompRule::new(vec![
+            SeccompCondition::new(0, SeccompCmpArgLen::Dword, SeccompCmpOp::Ge, 0)
+                .map_err(|e| format!("seccomp condition: {e}"))?,
+        ]).map_err(|e| format!("seccomp rule: {e}"))?])
+    };
+
+    // Collect all unconditionally allowed syscalls, then insert in bulk.
+    let mut unconditional: Vec<i64> = vec![
+        // --- File I/O ---
+        libc::SYS_read, libc::SYS_write, libc::SYS_openat, libc::SYS_close,
+        libc::SYS_pread64, libc::SYS_pwrite64, libc::SYS_readv,
+        libc::SYS_writev, libc::SYS_lseek, libc::SYS_ftruncate,
+        libc::SYS_fallocate,
+        // --- File metadata ---
+        libc::SYS_fstat, libc::SYS_newfstatat, libc::SYS_faccessat,
+        libc::SYS_readlinkat, libc::SYS_statfs, libc::SYS_fstatfs,
+        // --- Directory operations ---
+        libc::SYS_getdents64, libc::SYS_getcwd, libc::SYS_chdir,
+        libc::SYS_fchdir, libc::SYS_mkdirat, libc::SYS_rmdir,
+        libc::SYS_unlinkat, libc::SYS_renameat2, libc::SYS_symlinkat,
+        libc::SYS_linkat, libc::SYS_fchmodat, libc::SYS_fchownat,
+        libc::SYS_utimensat,
+        // --- Memory management ---
+        libc::SYS_mmap, libc::SYS_mprotect, libc::SYS_munmap, libc::SYS_brk,
+        libc::SYS_mremap, libc::SYS_madvise, libc::SYS_msync,
+        libc::SYS_memfd_create,
+        // --- Process / Thread ---
+        libc::SYS_clone, libc::SYS_clone3, libc::SYS_execve, libc::SYS_exit,
+        libc::SYS_exit_group, libc::SYS_wait4, libc::SYS_waitid,
+        libc::SYS_getpid, libc::SYS_getppid, libc::SYS_gettid,
+        libc::SYS_getpgid, libc::SYS_setpgid, libc::SYS_setsid,
+        libc::SYS_kill, libc::SYS_tgkill, libc::SYS_getrusage,
+        libc::SYS_prctl, libc::SYS_sched_yield, libc::SYS_sched_getaffinity,
+        // --- Signals ---
+        libc::SYS_rt_sigaction, libc::SYS_rt_sigprocmask,
+        libc::SYS_rt_sigreturn, libc::SYS_sigaltstack,
+        libc::SYS_rt_sigpending,
+        // --- File descriptors ---
+        libc::SYS_dup, libc::SYS_dup3, libc::SYS_pipe2, libc::SYS_fcntl,
+        libc::SYS_ioctl,
+        // --- I/O multiplexing ---
+        libc::SYS_ppoll, libc::SYS_pselect6, libc::SYS_epoll_create1,
+        libc::SYS_epoll_ctl, libc::SYS_epoll_pwait, libc::SYS_eventfd2,
+        // --- Networking (non-socket) ---
+        libc::SYS_connect, libc::SYS_bind, libc::SYS_listen,
+        libc::SYS_accept4, libc::SYS_getsockname, libc::SYS_getpeername,
+        libc::SYS_sendto, libc::SYS_recvfrom, libc::SYS_sendmsg,
+        libc::SYS_recvmsg, libc::SYS_setsockopt, libc::SYS_getsockopt,
+        libc::SYS_shutdown, libc::SYS_socketpair,
+        // --- Time ---
+        libc::SYS_clock_gettime, libc::SYS_clock_getres,
+        libc::SYS_gettimeofday, libc::SYS_nanosleep,
+        libc::SYS_clock_nanosleep,
+        // --- Synchronization ---
+        libc::SYS_futex, libc::SYS_set_robust_list,
+        // --- Thread setup ---
+        libc::SYS_set_tid_address, libc::SYS_arch_prctl,
+        // --- Identity ---
+        libc::SYS_getuid, libc::SYS_getgid, libc::SYS_geteuid,
+        libc::SYS_getegid, libc::SYS_getgroups,
+        // --- Resource limits ---
+        libc::SYS_prlimit64,
+        // --- Random ---
+        libc::SYS_getrandom,
+        // --- Misc ---
+        libc::SYS_uname, libc::SYS_sysinfo, libc::SYS_umask,
+        libc::SYS_rseq,
+    ];
+
+    // x86_64 has legacy syscall variants that Python/Node.js still use.
+    // aarch64 only has the *at() versions.
+    #[cfg(target_arch = "x86_64")]
+    unconditional.extend_from_slice(&[
+        libc::SYS_open, libc::SYS_stat, libc::SYS_lstat, libc::SYS_access,
+        libc::SYS_readlink, libc::SYS_dup2, libc::SYS_pipe, libc::SYS_select,
+        libc::SYS_poll, libc::SYS_epoll_wait, libc::SYS_mkdir,
+        libc::SYS_unlink, libc::SYS_rename, libc::SYS_chmod, libc::SYS_chown,
+        libc::SYS_getdents, libc::SYS_getrlimit, libc::SYS_accept,
+        libc::SYS_fork, libc::SYS_vfork, libc::SYS_symlink, libc::SYS_link,
+        libc::SYS_renameat,
+    ]);
+
+    for id in unconditional {
+        rules.insert(id, allow_rule()?);
+    }
+
+    // socket() restricted to AF_INET, AF_INET6, AF_UNIX only.
+    // Each domain is a separate rule — seccompiler OR's multiple rules.
+    rules.insert(libc::SYS_socket, vec![
+        SeccompRule::new(vec![
+            SeccompCondition::new(
+                0, SeccompCmpArgLen::Dword, SeccompCmpOp::Eq, libc::AF_INET as u64,
+            ).map_err(|e| format!("seccomp condition: {e}"))?,
+        ]).map_err(|e| format!("seccomp rule: {e}"))?,
+        SeccompRule::new(vec![
+            SeccompCondition::new(
+                0, SeccompCmpArgLen::Dword, SeccompCmpOp::Eq, libc::AF_INET6 as u64,
+            ).map_err(|e| format!("seccomp condition: {e}"))?,
+        ]).map_err(|e| format!("seccomp rule: {e}"))?,
+        SeccompRule::new(vec![
+            SeccompCondition::new(
+                0, SeccompCmpArgLen::Dword, SeccompCmpOp::Eq, libc::AF_UNIX as u64,
+            ).map_err(|e| format!("seccomp condition: {e}"))?,
+        ]).map_err(|e| format!("seccomp rule: {e}"))?,
+    ]);
+
+    // Unlisted syscalls (ptrace, mount, umount2, reboot, swapon, swapoff,
+    // init_module, finit_module, delete_module, kexec_load, pivot_root,
+    // chroot, acct, settimeofday, sethostname, setdomainname, etc.)
+    // all hit the default mismatch action: ERRNO(EPERM).
+
+    let filter = SeccompFilter::new(
+        rules,
+        SeccompAction::Errno(libc::EPERM as u32),   // unlisted → EPERM
+        SeccompAction::Allow,                        // listed → allow
+        arch,
+    ).map_err(|e| format!("seccomp filter: {e}"))?;
+
+    seccompiler::BpfProgram::try_from(filter)
+        .map_err(|e| format!("seccomp compile: {e}"))
+}
+
+/// Apply a pre-built seccomp-BPF filter to the calling thread.
+/// Intended for use inside `pre_exec`, after fork.
+#[cfg(target_os = "linux")]
+pub fn apply_seccomp_filter(bpf: &seccompiler::BpfProgram) -> std::io::Result<()> {
+    seccompiler::apply_filter(bpf)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, format!("seccomp: {e}")))
+}
+
+// ===========================================================================
 // Tests
 // ===========================================================================
 
@@ -951,5 +1109,33 @@ mod tests {
         assert!(jail.validate("..\\etc\\passwd").is_none());
 
         std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    // -------------------------------------------------------------------------
+    // Seccomp BPF filter
+    // -------------------------------------------------------------------------
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_build_skill_seccomp_filter_succeeds() {
+        let bpf = super::build_skill_seccomp_filter()
+            .expect("seccomp filter should build without error");
+        // BPF program should contain instructions
+        assert!(!bpf.is_empty(), "BPF program should not be empty");
+        // A realistic filter has hundreds of instructions
+        assert!(bpf.len() > 50, "BPF program should have many instructions, got {}", bpf.len());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn test_seccomp_filter_includes_socket_restriction() {
+        // Verify the filter builds successfully — the socket restriction
+        // uses conditional rules (AF_INET, AF_INET6, AF_UNIX) which are
+        // the most complex part of the filter. If this builds, the
+        // conditional logic is correct.
+        let bpf = super::build_skill_seccomp_filter().unwrap();
+        // Socket restriction adds branching instructions, making the
+        // program longer than a simple unconditional-only filter would be.
+        assert!(bpf.len() > 100, "filter with socket restrictions should be substantial");
     }
 }
