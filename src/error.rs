@@ -23,44 +23,20 @@ pub enum SafeAgentError {
     #[error("sandbox violation: {0}")]
     SandboxViolation(String),
 
-    #[error("network not allowed: {0}")]
-    NetworkNotAllowed(String),
-
     #[error("rate limited: {0}")]
     RateLimited(String),
 
     #[error("approval error: {0}")]
     Approval(String),
 
-    #[error("agent error: {0}")]
-    Agent(String),
-
     #[error("tool not found: {0}")]
     ToolNotFound(String),
-
-    #[error("tool execution error: {0}")]
-    ToolExecution(String),
-
-    #[error("OAuth error: {0}")]
-    OAuth(String),
-
-    #[error("Telegram error: {0}")]
-    Telegram(String),
 
     #[error("messaging error: {0}")]
     Messaging(String),
 
     #[error("permission denied: {0}")]
     PermissionDenied(String),
-
-    #[error("2FA required: {0}")]
-    TwoFactorRequired(String),
-
-    #[error("cost limit exceeded: {0}")]
-    CostLimitExceeded(String),
-
-    #[error("PII detected: {0}")]
-    PiiDetected(String),
 
     #[error("plugin error: {0}")]
     Plugin(String),
@@ -78,19 +54,11 @@ mod tests {
             (SafeAgentError::Config("bad key".into()), "config error: bad key"),
             (SafeAgentError::Llm("timeout".into()), "LLM error: timeout"),
             (SafeAgentError::SandboxViolation("path escape".into()), "sandbox violation: path escape"),
-            (SafeAgentError::NetworkNotAllowed("localhost".into()), "network not allowed: localhost"),
             (SafeAgentError::RateLimited("too fast".into()), "rate limited: too fast"),
             (SafeAgentError::Approval("not found".into()), "approval error: not found"),
-            (SafeAgentError::Agent("crashed".into()), "agent error: crashed"),
             (SafeAgentError::ToolNotFound("foo".into()), "tool not found: foo"),
-            (SafeAgentError::ToolExecution("failed".into()), "tool execution error: failed"),
-            (SafeAgentError::OAuth("expired".into()), "OAuth error: expired"),
-            (SafeAgentError::Telegram("send fail".into()), "Telegram error: send fail"),
             (SafeAgentError::Messaging("offline".into()), "messaging error: offline"),
             (SafeAgentError::PermissionDenied("blocked".into()), "permission denied: blocked"),
-            (SafeAgentError::TwoFactorRequired("exec rm".into()), "2FA required: exec rm"),
-            (SafeAgentError::CostLimitExceeded("$5.00".into()), "cost limit exceeded: $5.00"),
-            (SafeAgentError::PiiDetected("SSN".into()), "PII detected: SSN"),
             (SafeAgentError::Plugin("bad manifest".into()), "plugin error: bad manifest"),
         ];
         for (err, expected) in cases {
@@ -123,7 +91,7 @@ mod tests {
     fn result_type_alias_works() {
         let ok: Result<i32> = Ok(42);
         assert_eq!(ok.unwrap(), 42);
-        let err: Result<i32> = Err(SafeAgentError::Agent("fail".into()));
+        let err: Result<i32> = Err(SafeAgentError::Config("fail".into()));
         assert!(err.is_err());
     }
 

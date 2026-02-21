@@ -32,8 +32,6 @@ pub struct TrashEntry {
 /// Manages the trash directory and its contents.
 #[derive(Debug, Clone)]
 pub struct TrashManager {
-    /// Root of the trash system: $DATA_DIR/trash/
-    root: PathBuf,
     /// Where trashed files are stored: $DATA_DIR/trash/files/
     files_dir: PathBuf,
     /// Where metadata JSON files are stored: $DATA_DIR/trash/meta/
@@ -55,7 +53,6 @@ impl TrashManager {
         std::fs::create_dir_all(&bin_dir)?;
 
         let mgr = Self {
-            root,
             files_dir,
             meta_dir,
             bin_dir,

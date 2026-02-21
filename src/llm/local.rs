@@ -37,29 +37,16 @@ impl LocalEngine {
         let engine_config = EngineConfig {
             model_path: model_path.clone(),
             temperature: config.llm.temperature,
-            top_k: config.llm.top_k,
             top_p: config.llm.top_p,
-            repeat_penalty: config.llm.repeat_penalty,
             max_tokens: config.llm.max_tokens,
-            use_gpu: config.llm.use_gpu,
             ..Default::default()
         };
-
-        if config.llm.context_length > 0 {
-            info!(
-                context_length = config.llm.context_length,
-                "context_length override requested (applied at model level if supported)"
-            );
-        }
 
         info!(
             model = %model_path,
             temperature = config.llm.temperature,
-            top_k = config.llm.top_k,
             top_p = config.llm.top_p,
             max_tokens = config.llm.max_tokens,
-            context_length = config.llm.context_length,
-            use_gpu = config.llm.use_gpu,
             "loading local GGUF model"
         );
 

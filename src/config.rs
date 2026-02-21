@@ -93,17 +93,6 @@ pub struct FederationConfig {
     #[serde(default)]
     pub advertise_address: String,
 
-    /// Peer node addresses to connect to on startup.
-    #[serde(default)]
-    pub peers: Vec<String>,
-
-    /// Heartbeat interval in seconds (default: 30).
-    #[serde(default = "default_heartbeat_interval")]
-    pub heartbeat_interval_secs: u64,
-
-    /// Sync interval in seconds (default: 5).
-    #[serde(default = "default_sync_interval")]
-    pub sync_interval_secs: u64,
 }
 
 impl Default for FederationConfig {
@@ -112,19 +101,8 @@ impl Default for FederationConfig {
             enabled: false,
             node_name: String::new(),
             advertise_address: String::new(),
-            peers: Vec::new(),
-            heartbeat_interval_secs: default_heartbeat_interval(),
-            sync_interval_secs: default_sync_interval(),
         }
     }
-}
-
-fn default_heartbeat_interval() -> u64 {
-    30
-}
-
-fn default_sync_interval() -> u64 {
-    5
 }
 
 // -- Security ----------------------------------------------------------------
@@ -281,30 +259,14 @@ pub struct LlmConfig {
     #[serde(default = "default_temperature")]
     pub temperature: f32,
 
-    /// Top-K sampling for local model (0 = disabled).
-    #[serde(default = "default_top_k")]
-    pub top_k: usize,
-
     /// Top-P (nucleus) sampling for local model.
     #[serde(default = "default_top_p")]
     pub top_p: f32,
-
-    /// Repetition penalty for local model (1.0 = none).
-    #[serde(default = "default_repeat_penalty")]
-    pub repeat_penalty: f32,
 
     /// Maximum tokens to generate per response.
     #[serde(default = "default_max_tokens")]
     pub max_tokens: usize,
 
-    /// Maximum context length for the local model.
-    /// Caps KV cache size; 0 = use model default.
-    #[serde(default)]
-    pub context_length: usize,
-
-    /// Use GPU acceleration for local model (requires cuda feature).
-    #[serde(default)]
-    pub use_gpu: bool,
 }
 
 // -- Tools ---------------------------------------------------------------
@@ -332,14 +294,8 @@ pub struct ExecToolConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
 
-    #[serde(default)]
-    pub allowed_commands: Vec<String>,
-
     #[serde(default = "default_exec_timeout")]
     pub timeout_secs: u64,
-
-    #[serde(default = "default_exec_security")]
-    pub security: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -347,14 +303,8 @@ pub struct WebToolConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
 
-    #[serde(default = "default_true")]
-    pub safe_search: bool,
-
     #[serde(default = "default_web_max_results")]
     pub max_results: usize,
-
-    #[serde(default)]
-    pub allowed_domains: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -376,9 +326,6 @@ pub struct MessageToolConfig {
 pub struct CronToolConfig {
     #[serde(default = "default_true")]
     pub enabled: bool,
-
-    #[serde(default = "default_cron_max_jobs")]
-    pub max_jobs: usize,
 }
 
 // -- Dashboard -----------------------------------------------------------
@@ -467,9 +414,6 @@ impl Default for WhatsAppConfig {
 pub struct SessionsConfig {
     #[serde(default)]
     pub enabled: bool,
-
-    #[serde(default = "default_sessions_max_agents")]
-    pub max_agents: usize,
 }
 
 // -- Plugins -------------------------------------------------------------
@@ -632,14 +576,8 @@ fn default_timeout_secs() -> u64 {
 fn default_temperature() -> f32 {
     0.7
 }
-fn default_top_k() -> usize {
-    40
-}
 fn default_top_p() -> f32 {
     0.95
-}
-fn default_repeat_penalty() -> f32 {
-    1.1
 }
 fn default_max_tokens() -> usize {
     2048
@@ -650,16 +588,7 @@ fn default_true() -> bool {
 fn default_exec_timeout() -> u64 {
     30
 }
-fn default_exec_security() -> String {
-    "approval".to_string()
-}
 fn default_web_max_results() -> usize {
-    10
-}
-fn default_cron_max_jobs() -> usize {
-    50
-}
-fn default_sessions_max_agents() -> usize {
     10
 }
 fn default_acme_port() -> u16 {
@@ -712,12 +641,8 @@ impl Default for LlmConfig {
             openrouter_app_name: String::new(),
             model_path: String::new(),
             temperature: default_temperature(),
-            top_k: default_top_k(),
             top_p: default_top_p(),
-            repeat_penalty: default_repeat_penalty(),
             max_tokens: default_max_tokens(),
-            context_length: 0,
-            use_gpu: false,
         }
     }
 }
@@ -726,9 +651,7 @@ impl Default for ExecToolConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            allowed_commands: Vec::new(),
             timeout_secs: default_exec_timeout(),
-            security: default_exec_security(),
         }
     }
 }
@@ -737,9 +660,7 @@ impl Default for WebToolConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            safe_search: true,
             max_results: default_web_max_results(),
-            allowed_domains: Vec::new(),
         }
     }
 }
@@ -763,7 +684,6 @@ impl Default for CronToolConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            max_jobs: default_cron_max_jobs(),
         }
     }
 }
@@ -781,7 +701,6 @@ impl Default for SessionsConfig {
     fn default() -> Self {
         Self {
             enabled: false,
-            max_agents: default_sessions_max_agents(),
         }
     }
 }
@@ -939,11 +858,8 @@ mod tests {
         assert_eq!(llm.max_turns, 10);
         assert_eq!(llm.timeout_secs, 120);
         assert!((llm.temperature - 0.7).abs() < 0.001);
-        assert_eq!(llm.top_k, 40);
         assert!((llm.top_p - 0.95).abs() < 0.001);
-        assert!((llm.repeat_penalty - 1.1).abs() < 0.001);
         assert_eq!(llm.max_tokens, 2048);
-        assert!(!llm.use_gpu);
     }
 
     #[test]
@@ -951,15 +867,12 @@ mod tests {
         let tools = ToolsConfig::default();
         assert!(tools.exec.enabled);
         assert_eq!(tools.exec.timeout_secs, 30);
-        assert_eq!(tools.exec.security, "approval");
         assert!(tools.web.enabled);
-        assert!(tools.web.safe_search);
         assert_eq!(tools.web.max_results, 10);
         assert!(!tools.browser.enabled);
         assert!(tools.browser.headless);
         assert!(!tools.message.enabled);
         assert!(tools.cron.enabled);
-        assert_eq!(tools.cron.max_jobs, 50);
     }
 
     #[test]
@@ -990,7 +903,6 @@ mod tests {
     fn default_sessions_config() {
         let s = SessionsConfig::default();
         assert!(!s.enabled);
-        assert_eq!(s.max_agents, 10);
     }
 
     #[test]
@@ -1045,12 +957,10 @@ mod tests {
         [tools.exec]
         enabled = false
         timeout_secs = 60
-        security = "sandbox"
         "#;
         let c: Config = toml::from_str(toml_str).unwrap();
         assert!(!c.tools.exec.enabled);
         assert_eq!(c.tools.exec.timeout_secs, 60);
-        assert_eq!(c.tools.exec.security, "sandbox");
     }
 
     #[test]

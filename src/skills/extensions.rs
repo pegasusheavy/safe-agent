@@ -56,17 +56,15 @@ pub struct SkillUiConfig {
 pub struct ExtensionManager {
     engine: Engine,
     extensions: HashMap<String, SkillExtension>,
-    db_path: PathBuf,
     skills_dir: PathBuf,
 }
 
 impl ExtensionManager {
     pub fn new(skills_dir: PathBuf, db_path: PathBuf) -> Self {
-        let engine = create_engine(db_path.clone(), skills_dir.clone());
+        let engine = create_engine(db_path, skills_dir.clone());
         Self {
             engine,
             extensions: HashMap::new(),
-            db_path,
             skills_dir,
         }
     }

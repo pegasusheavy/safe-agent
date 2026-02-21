@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::Deserialize;
 
@@ -14,13 +14,10 @@ use crate::error::{Result, SafeAgentError};
 pub struct PromptSkill {
     pub name: String,
     pub description: String,
-    pub version: Option<String>,
     pub enabled: bool,
-    pub tools: Vec<String>,
     pub triggers: Vec<String>,
     pub body: String,
     pub references: HashMap<String, String>,
-    pub source_dir: PathBuf,
 }
 
 /// Intermediate struct for deserializing YAML frontmatter.
@@ -28,11 +25,8 @@ pub struct PromptSkill {
 struct Frontmatter {
     name: String,
     description: String,
-    version: Option<String>,
     #[serde(default = "default_enabled")]
     enabled: bool,
-    #[serde(default)]
-    tools: Vec<String>,
     #[serde(default)]
     triggers: Vec<String>,
 }
@@ -64,13 +58,10 @@ impl PromptSkill {
         Ok(PromptSkill {
             name: frontmatter.name,
             description: frontmatter.description,
-            version: frontmatter.version,
             enabled: frontmatter.enabled,
-            tools: frontmatter.tools,
             triggers: frontmatter.triggers,
             body,
             references,
-            source_dir: dir.to_path_buf(),
         })
     }
 
@@ -188,13 +179,10 @@ mod tests {
         let skill = PromptSkill::load(tmp.path()).unwrap();
         assert_eq!(skill.name, "minimal");
         assert_eq!(skill.description, "A minimal skill");
-        assert!(skill.version.is_none());
         assert!(skill.enabled);
-        assert!(skill.tools.is_empty());
         assert!(skill.triggers.is_empty());
         assert_eq!(skill.body, "Hello world.");
         assert!(skill.references.is_empty());
-        assert_eq!(skill.source_dir, tmp.path());
     }
 
     #[test]
@@ -222,9 +210,7 @@ This is the body with **markdown**."#;
         let skill = PromptSkill::load(tmp.path()).unwrap();
         assert_eq!(skill.name, "full-skill");
         assert_eq!(skill.description, "A full skill with all fields");
-        assert_eq!(skill.version.as_deref(), Some("1.2.3"));
         assert!(skill.enabled);
-        assert_eq!(skill.tools, vec!["exec", "web_search"]);
         assert_eq!(skill.triggers, vec!["simplify code", "clean up"]);
         assert!(skill.body.contains("# Full Skill"));
         assert!(skill.body.contains("**markdown**"));

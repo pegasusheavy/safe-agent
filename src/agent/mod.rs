@@ -436,7 +436,7 @@ impl Agent {
                                 }));
                                 continue;
                             }
-                            TwoFactorVerdict::Confirmed(_) => {
+                            TwoFactorVerdict::Confirmed => {
                                 self.audit.log_2fa(&call.tool, "confirmed", "agent").await;
                                 // Fall through to execute
                             }

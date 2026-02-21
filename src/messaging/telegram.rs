@@ -82,7 +82,6 @@ struct TelegramState {
     db: Arc<Mutex<Connection>>,
     config: TelegramConfig,
     agent: Arc<Agent>,
-    backend: Arc<TelegramBackend>,
 }
 
 /// Start the Telegram long-polling dispatcher. Returns the bot handle and a
@@ -99,7 +98,6 @@ pub async fn start(
         db,
         config: config.clone(),
         agent,
-        backend,
     };
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();

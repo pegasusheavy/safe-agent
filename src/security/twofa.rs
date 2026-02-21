@@ -55,7 +55,7 @@ pub enum TwoFactorVerdict {
     /// A 2FA challenge was created — must be confirmed before execution.
     ChallengeCreated(String),
     /// A valid, confirmed challenge exists — proceed with execution.
-    Confirmed(String),
+    Confirmed,
 }
 
 impl TwoFactorManager {
@@ -72,7 +72,7 @@ impl TwoFactorManager {
     /// Returns the verdict:
     /// - `NotRequired`: tool doesn't need 2FA
     /// - `ChallengeCreated(id)`: challenge created, needs confirmation
-    /// - `Confirmed(id)`: a confirmed challenge exists
+    /// - `Confirmed`: a confirmed challenge exists
     pub fn check(
         &self,
         tool_name: &str,
@@ -99,7 +99,7 @@ impl TwoFactorManager {
                 info!(tool = %tool_name, challenge_id = %id, "2FA challenge confirmed — proceeding");
                 let id = id.clone();
                 challenges.remove(&id);
-                return TwoFactorVerdict::Confirmed(id);
+                return TwoFactorVerdict::Confirmed;
             }
         }
 
@@ -221,7 +221,7 @@ mod tests {
 
         // Now check again — should be Confirmed
         match mgr.check("exec", &params, "delete", "agent") {
-            TwoFactorVerdict::Confirmed(_) => {}
+            TwoFactorVerdict::Confirmed => {}
             _ => panic!("expected Confirmed"),
         }
     }

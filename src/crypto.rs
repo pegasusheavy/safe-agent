@@ -169,42 +169,6 @@ impl FieldEncryptor {
             .map_err(|e| SafeAgentError::Config(format!("PII decrypt: invalid UTF-8: {e}")))
     }
 
-    /// Encrypt an `Option<T>` where `T: AsRef<str>`, returning `None` for `None`.
-    pub fn encrypt_opt(&self, value: Option<&str>) -> Option<String> {
-        value.map(|v| self.encrypt(v))
-    }
-
-    /// Decrypt an `Option<String>`, returning `None` for `None`.
-    pub fn decrypt_opt(&self, stored: Option<String>) -> Result<Option<String>> {
-        match stored {
-            None => Ok(None),
-            Some(v) if v.is_empty() => Ok(Some(String::new())),
-            Some(v) => self.decrypt(&v).map(Some),
-        }
-    }
-
-    /// Encrypt an optional i64 by converting to string first.
-    pub fn encrypt_i64_opt(&self, value: Option<i64>) -> Option<String> {
-        value.map(|v| self.encrypt(&v.to_string()))
-    }
-
-    /// Decrypt an optional i64 that was encrypted as a string.
-    pub fn decrypt_i64_opt(&self, stored: Option<String>) -> Result<Option<i64>> {
-        match stored {
-            None => Ok(None),
-            Some(v) if v.is_empty() => Ok(None),
-            Some(v) => {
-                let plain = self.decrypt(&v)?;
-                if plain.is_empty() {
-                    return Ok(None);
-                }
-                plain.parse::<i64>()
-                    .map(Some)
-                    .map_err(|e| SafeAgentError::Config(format!("PII decrypt i64: {e}")))
-            }
-        }
-    }
-
     // -----------------------------------------------------------------
     // Blind index (deterministic HMAC-SHA-256 for lookups)
     // -----------------------------------------------------------------
@@ -224,22 +188,6 @@ impl FieldEncryptor {
     /// Blind index for an i64 value.
     pub fn blind_index_i64(&self, value: i64) -> String {
         self.blind_index(&value.to_string())
-    }
-
-    /// Blind index for an optional value.  Returns empty string for None.
-    pub fn blind_index_opt(&self, value: Option<&str>) -> String {
-        match value {
-            Some(v) if !v.is_empty() => self.blind_index(v),
-            _ => String::new(),
-        }
-    }
-
-    /// Blind index for an optional i64.
-    pub fn blind_index_i64_opt(&self, value: Option<i64>) -> String {
-        match value {
-            Some(v) => self.blind_index_i64(v),
-            None => String::new(),
-        }
     }
 
     // -----------------------------------------------------------------
@@ -363,16 +311,6 @@ mod tests {
         let idx1 = enc.blind_index("alice@example.com");
         let idx2 = enc.blind_index("bob@example.com");
         assert_ne!(idx1, idx2);
-    }
-
-    #[test]
-    fn encrypt_i64_roundtrip() {
-        let enc = test_encryptor();
-        let encrypted = enc.encrypt_i64_opt(Some(123456789));
-        assert!(encrypted.is_some());
-
-        let decrypted = enc.decrypt_i64_opt(encrypted).unwrap();
-        assert_eq!(decrypted, Some(123456789));
     }
 
     #[test]

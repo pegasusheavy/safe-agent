@@ -88,7 +88,6 @@ enum SkillHandle {
 struct RunningSkill {
     manifest: SkillManifest,
     handle: SkillHandle,
-    dir: PathBuf,
 }
 
 /// Manages skill lifecycle: discovery, start, stop, restart, credentials.
@@ -451,7 +450,6 @@ impl SkillManager {
                     RunningSkill {
                         manifest,
                         handle: SkillHandle::Process(child),
-                        dir,
                     },
                 );
             }
@@ -637,7 +635,6 @@ impl SkillManager {
             RunningSkill {
                 manifest,
                 handle: SkillHandle::Embedded { task, cancel },
-                dir,
             },
         );
     }

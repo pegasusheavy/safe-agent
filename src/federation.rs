@@ -17,7 +17,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, info};
 
 /// Unique identity of this agent node.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,8 +65,6 @@ pub struct FederationManager {
     node_name: String,
     address: String,
     peers: Mutex<HashMap<String, NodeInfo>>,
-    pending_deltas: Mutex<Vec<MemoryDelta>>,
-    client: reqwest::Client,
     enabled: bool,
 }
 
@@ -85,18 +83,8 @@ impl FederationManager {
             node_name: node_name.to_string(),
             address: address.to_string(),
             peers: Mutex::new(HashMap::new()),
-            pending_deltas: Mutex::new(Vec::new()),
-            client: reqwest::Client::builder()
-                .user_agent("safe-agent-federation")
-                .timeout(std::time::Duration::from_secs(10))
-                .build()
-                .unwrap_or_default(),
             enabled,
         }
-    }
-
-    pub fn node_id(&self) -> &str {
-        &self.node_id
     }
 
     pub fn is_enabled(&self) -> bool {
@@ -140,145 +128,6 @@ impl FederationManager {
     pub async fn list_peers(&self) -> Vec<NodeInfo> {
         let peers = self.peers.lock().await;
         peers.values().cloned().collect()
-    }
-
-    /// Queue a memory delta for replication to peers.
-    pub async fn enqueue_delta(&self, delta: MemoryDelta) {
-        if !self.enabled {
-            return;
-        }
-        let mut deltas = self.pending_deltas.lock().await;
-        deltas.push(delta);
-    }
-
-    /// Sync pending deltas to all peers.  Called periodically from the
-    /// agent tick loop.
-    pub async fn sync(&self) {
-        if !self.enabled {
-            return;
-        }
-
-        let deltas = {
-            let mut pending = self.pending_deltas.lock().await;
-            if pending.is_empty() {
-                return;
-            }
-            std::mem::take(&mut *pending)
-        };
-
-        let peers = self.peers.lock().await;
-        if peers.is_empty() {
-            return;
-        }
-
-        debug!(
-            deltas = deltas.len(),
-            peers = peers.len(),
-            "syncing deltas to peers"
-        );
-
-        for (peer_id, peer) in peers.iter() {
-            let url = format!("{}/api/federation/sync", peer.address);
-            let payload = serde_json::json!({
-                "origin": self.node_id,
-                "deltas": deltas,
-            });
-
-            match self.client.post(&url).json(&payload).send().await {
-                Ok(resp) if resp.status().is_success() => {
-                    debug!(peer_id = %peer_id, "sync OK");
-                }
-                Ok(resp) => {
-                    warn!(
-                        peer_id = %peer_id,
-                        status = %resp.status(),
-                        "sync to peer failed"
-                    );
-                }
-                Err(e) => {
-                    warn!(peer_id = %peer_id, err = %e, "sync to peer failed");
-                }
-            }
-        }
-    }
-
-    /// Send a heartbeat to all peers.
-    pub async fn heartbeat(&self) {
-        if !self.enabled {
-            return;
-        }
-
-        let peers = self.peers.lock().await;
-        let info = self.local_info();
-
-        for (peer_id, peer) in peers.iter() {
-            let url = format!("{}/api/federation/heartbeat", peer.address);
-            match self.client.post(&url).json(&info).send().await {
-                Ok(resp) if resp.status().is_success() => {
-                    debug!(peer_id = %peer_id, "heartbeat OK");
-                }
-                Ok(resp) => {
-                    warn!(peer_id = %peer_id, status = %resp.status(), "heartbeat failed");
-                }
-                Err(e) => {
-                    warn!(peer_id = %peer_id, err = %e, "heartbeat failed");
-                }
-            }
-        }
-    }
-
-    /// Try to claim a goal task for this node.  Returns true if claimed
-    /// successfully (no other node has claimed it).
-    pub async fn try_claim_task(
-        &self,
-        db: &Arc<Mutex<rusqlite::Connection>>,
-        task_id: &str,
-    ) -> bool {
-        if !self.enabled {
-            return true; // Single-node mode — always claim
-        }
-
-        let db = db.lock().await;
-
-        // Check if already claimed by another node
-        let claimed_by: Option<String> = db
-            .query_row(
-                "SELECT result FROM goal_tasks WHERE id = ?1 AND result LIKE 'claimed_by:%'",
-                [task_id],
-                |row| row.get(0),
-            )
-            .ok()
-            .flatten();
-
-        if let Some(ref claim) = claimed_by {
-            if let Some(claimer) = claim.strip_prefix("claimed_by:") {
-                if claimer != self.node_id {
-                    debug!(task_id, claimed_by = claimer, "task already claimed by another node");
-                    return false;
-                }
-            }
-        }
-
-        // Claim it
-        let _ = db.execute(
-            "UPDATE goal_tasks SET result = ?1 WHERE id = ?2 AND (result IS NULL OR result LIKE 'claimed_by:%')",
-            rusqlite::params![format!("claimed_by:{}", self.node_id), task_id],
-        );
-
-        // Notify peers
-        let peers = self.peers.lock().await;
-        let claim = TaskClaim {
-            task_id: task_id.to_string(),
-            claimed_by: self.node_id.clone(),
-            claimed_at: chrono::Utc::now().to_rfc3339(),
-        };
-
-        for (_peer_id, peer) in peers.iter() {
-            let url = format!("{}/api/federation/claim", peer.address);
-            let _ = self.client.post(&url).json(&claim).send().await;
-        }
-
-        true
     }
 
     /// Apply incoming deltas from a peer (called when receiving sync).
@@ -357,7 +206,6 @@ mod tests {
         let mgr = FederationManager::new("test-node", "http://localhost:3030", false);
         let info = mgr.local_info();
         assert_eq!(info.name, "test-node");
-        assert!(!mgr.node_id().is_empty());
         assert!(!mgr.is_enabled());
     }
 
@@ -396,50 +244,6 @@ mod tests {
 
         mgr.remove_peer("node-b").await;
         assert!(mgr.list_peers().await.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_enqueue_delta_disabled() {
-        let mgr = FederationManager::new("node", "http://a:3030", false);
-        mgr.enqueue_delta(MemoryDelta {
-            id: "1".into(),
-            origin_node: "node".into(),
-            table: "test".into(),
-            operation: "insert".into(),
-            key: "k".into(),
-            data: serde_json::json!({}),
-            timestamp: String::new(),
-        }).await;
-        // Should not accumulate when disabled
-        let pending = mgr.pending_deltas.lock().await;
-        assert!(pending.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_enqueue_delta_enabled() {
-        let mgr = FederationManager::new("node", "http://a:3030", true);
-        mgr.enqueue_delta(MemoryDelta {
-            id: "1".into(),
-            origin_node: "node".into(),
-            table: "test".into(),
-            operation: "insert".into(),
-            key: "k".into(),
-            data: serde_json::json!({}),
-            timestamp: String::new(),
-        }).await;
-        let pending = mgr.pending_deltas.lock().await;
-        assert_eq!(pending.len(), 1);
-    }
-
-    #[tokio::test]
-    async fn test_claim_task_single_node() {
-        let mgr = FederationManager::new("node", "http://a:3030", false);
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
-        crate::db::migrate(&conn).unwrap();
-        let db = Arc::new(Mutex::new(conn));
-
-        // Single node always claims
-        assert!(mgr.try_claim_task(&db, "task-1").await);
     }
 
     #[test]

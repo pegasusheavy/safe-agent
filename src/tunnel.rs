@@ -28,7 +28,7 @@ struct NgrokTunnel {
 /// the current value without coordination.
 pub struct TunnelManager {
     child: Option<Child>,
-    url_tx: watch::Sender<Option<String>>,
+    _url_tx: watch::Sender<Option<String>>,
     url_rx: watch::Receiver<Option<String>>,
 }
 
@@ -99,7 +99,7 @@ impl TunnelManager {
                 error!(err = %e, bin = %ngrok_bin, "failed to spawn ngrok — tunnel disabled");
                 return Self {
                     child: None,
-                    url_tx,
+                    _url_tx: url_tx,
                     url_rx,
                 };
             }
@@ -158,7 +158,7 @@ impl TunnelManager {
 
         Self {
             child,
-            url_tx,
+            _url_tx: url_tx,
             url_rx,
         }
     }

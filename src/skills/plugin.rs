@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use tracing::{info, warn};
@@ -17,24 +16,13 @@ use super::prompt_skill::PromptSkill;
 pub struct PluginManifest {
     pub name: String,
     #[serde(default)]
-    pub version: String,
-    #[serde(default)]
-    pub description: String,
-    #[serde(default)]
-    pub author: String,
-    #[serde(default)]
     pub skills: Vec<String>,
-    #[serde(default)]
-    pub hooks: Vec<String>,
-    #[serde(default)]
-    pub config: HashMap<String, serde_json::Value>,
 }
 
 /// A fully loaded plugin with its manifest and discovered skills.
 #[derive(Debug)]
 pub struct LoadedPlugin {
     pub manifest: PluginManifest,
-    pub dir: PathBuf,
     pub prompt_skills: Vec<PromptSkill>,
     pub subprocess_skill_dirs: Vec<PathBuf>,
 }
@@ -181,7 +169,6 @@ impl PluginRegistry {
 
         Ok(LoadedPlugin {
             manifest,
-            dir: dir.to_path_buf(),
             prompt_skills,
             subprocess_skill_dirs,
         })
@@ -197,12 +184,7 @@ impl PluginRegistry {
 
         let manifest = PluginManifest {
             name: dir_name,
-            version: String::new(),
-            description: String::new(),
-            author: String::new(),
             skills: Vec::new(),
-            hooks: Vec::new(),
-            config: HashMap::new(),
         };
 
         let mut prompt_skills = Vec::new();
@@ -212,7 +194,6 @@ impl PluginRegistry {
 
         Ok(LoadedPlugin {
             manifest,
-            dir: dir.to_path_buf(),
             prompt_skills,
             subprocess_skill_dirs,
         })

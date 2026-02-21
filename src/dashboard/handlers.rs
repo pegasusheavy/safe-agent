@@ -2161,8 +2161,6 @@ pub struct ConvertTimeQuery {
     pub utc: String,
     #[serde(default = "default_utc_str")]
     pub timezone: String,
-    #[serde(default)]
-    pub locale: String,
 }
 
 fn default_utc_str() -> String { "UTC".to_string() }
