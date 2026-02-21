@@ -139,7 +139,7 @@ impl MessagingManager {
 /// Split a long message into chunks that fit within the given character limit.
 /// Tries to break at newlines near the end of each chunk for readability.
 pub fn split_message(text: &str, max_len: usize) -> Vec<&str> {
-    if text.len() <= max_len {
+    if max_len == 0 || text.len() <= max_len {
         return vec![text];
     }
     let mut chunks = Vec::new();
@@ -147,9 +147,10 @@ pub fn split_message(text: &str, max_len: usize) -> Vec<&str> {
     while start < text.len() {
         let end = (start + max_len).min(text.len());
         let break_at = if end < text.len() {
+            let chunk_len = end - start;
             text[start..end]
                 .rfind('\n')
-                .filter(|&pos| pos > end - start - 200)
+                .filter(|&pos| pos > chunk_len.saturating_sub(200))
                 .map(|pos| start + pos + 1)
                 .unwrap_or(end)
         } else {

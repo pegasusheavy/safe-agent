@@ -251,6 +251,8 @@ impl AllowlistedHttpClient {
 /// Validate a URL for Rhai HTTP functions. Blocks dangerous schemes and
 /// private/internal network addresses.
 pub fn validate_url(url: &str) -> std::result::Result<Url, String> {
+    use std::net::Ipv4Addr;
+
     let parsed: Url = url.parse().map_err(|e| format!("invalid URL: {e}"))?;
 
     // Only allow http and https
@@ -262,19 +264,30 @@ pub fn validate_url(url: &str) -> std::result::Result<Url, String> {
     // Block access to private/internal networks
     if let Some(host) = parsed.host_str() {
         let host_lower = host.to_lowercase();
+
+        // Check domain-based blocklist
         if host_lower == "localhost"
-            || host_lower == "127.0.0.1"
-            || host_lower == "::1"
-            || host_lower == "[::1]"
-            || host_lower == "0.0.0.0"
-            || host_lower.starts_with("10.")
-            || host_lower.starts_with("192.168.")
-            || host_lower.starts_with("169.254.")
-            || is_172_private(&host_lower)
             || host_lower.ends_with(".local")
             || host_lower.ends_with(".internal")
         {
             return Err(format!("blocked internal/private host: {host}"));
+        }
+
+        // Parse as IP address to catch IPv4, IPv6 loopback, and
+        // IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1).
+        if let Ok(ipv4) = host_lower.parse::<Ipv4Addr>() {
+            if is_private_ipv4(ipv4) {
+                return Err(format!("blocked internal/private host: {host}"));
+            }
+        } else if let Ok(ipv6) = host_lower.parse::<std::net::Ipv6Addr>() {
+            if ipv6.is_loopback() {
+                return Err(format!("blocked internal/private host: {host}"));
+            }
+            if let Some(mapped) = ipv6.to_ipv4_mapped() {
+                if is_private_ipv4(mapped) {
+                    return Err(format!("blocked internal/private host: {host}"));
+                }
+            }
         }
     } else {
         return Err("URL has no host".into());
@@ -293,16 +306,13 @@ pub fn validate_url(url: &str) -> std::result::Result<Url, String> {
     Ok(parsed)
 }
 
-fn is_172_private(host: &str) -> bool {
-    if let Some(rest) = host.strip_prefix("172.") {
-        if let Some(second_octet) = rest.split('.').next() {
-            if let Ok(n) = second_octet.parse::<u8>() {
-                return (16..=31).contains(&n);
-            }
-        }
-    }
-    false
+fn is_private_ipv4(ip: std::net::Ipv4Addr) -> bool {
+    ip.is_loopback()
+        || ip.is_private()
+        || ip.is_link_local()
+        || ip.is_unspecified()
 }
+
 
 // ===========================================================================
 // SQL guard — restrict dangerous SQL from Rhai extensions
