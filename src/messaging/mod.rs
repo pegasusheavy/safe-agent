@@ -1,6 +1,7 @@
 pub mod bridge;
 pub mod commands;
 pub mod telegram;
+pub mod twilio;
 pub mod whatsapp;
 
 use std::sync::Arc;
