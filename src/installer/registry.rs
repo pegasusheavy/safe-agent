@@ -110,5 +110,23 @@ pub fn builtin_registry() -> Vec<BinaryDef> {
                 version_args: vec!["--version".into()],
             },
         },
+        BinaryDef {
+            name: "codex".into(),
+            display_name: "OpenAI Codex CLI".into(),
+            description: "OpenAI coding agent for the terminal".into(),
+            install_method: InstallMethod::Npm {
+                package: "@openai/codex".into(),
+                version_args: vec!["--version".into()],
+            },
+        },
+        BinaryDef {
+            name: "gemini".into(),
+            display_name: "Google Gemini CLI".into(),
+            description: "Google Gemini AI agent for the terminal".into(),
+            install_method: InstallMethod::Npm {
+                package: "@google/gemini-cli".into(),
+                version_args: vec!["--version".into()],
+            },
+        },
     ]
 }
