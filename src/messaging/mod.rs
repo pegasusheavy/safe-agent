@@ -1,6 +1,7 @@
 pub mod bridge;
 pub mod commands;
 pub mod discord;
+pub mod signal;
 pub mod telegram;
 pub mod twilio;
 pub mod whatsapp;

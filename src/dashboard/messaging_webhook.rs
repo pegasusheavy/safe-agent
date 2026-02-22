@@ -62,6 +62,10 @@ pub async fn incoming(
             state.agent.user_manager.get_by_discord_id(&body.sender).await
                 .map(|u| crate::users::UserContext::from_user(&u, "discord"))
         }
+        "signal" => {
+            state.agent.user_manager.get_by_signal_id(&body.sender).await
+                .map(|u| crate::users::UserContext::from_user(&u, "signal"))
+        }
         _ => None,
     };
 
@@ -259,6 +263,13 @@ pub async fn list_platforms(
         platforms.push(PlatformInfo {
             name: "discord".to_string(),
             connected: state.messaging.get("discord").is_some(),
+        });
+    }
+
+    if state.config.signal.enabled {
+        platforms.push(PlatformInfo {
+            name: "signal".to_string(),
+            connected: state.messaging.get("signal").is_some(),
         });
     }
 

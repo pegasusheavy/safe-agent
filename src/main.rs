@@ -286,6 +286,21 @@ async fn main() {
         }
     }
 
+    // Register Signal bridge backend (if enabled)
+    if config.signal.enabled {
+        let backend = Arc::new(messaging::signal::SignalBackend::new(
+            config.signal.bridge_url.clone(),
+        ));
+        let primary_channel = config
+            .signal
+            .allowed_numbers
+            .first()
+            .cloned()
+            .unwrap_or_default();
+        msg_manager.register(backend, primary_channel);
+        info!("Signal bridge backend registered");
+    }
+
     let messaging = Arc::new(msg_manager);
 
     // Initialize PII encryption key (generated on first launch)

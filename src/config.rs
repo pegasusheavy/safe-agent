@@ -70,6 +70,9 @@ pub struct Config {
     pub discord: DiscordConfig,
 
     #[serde(default)]
+    pub signal: SignalConfig,
+
+    #[serde(default)]
     pub sessions: SessionsConfig,
 
     #[serde(default)]
@@ -530,6 +533,35 @@ impl Default for DiscordConfig {
     }
 }
 
+// -- Signal --------------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SignalConfig {
+    #[serde(default)]
+    pub enabled: bool,
+
+    #[serde(default)]
+    pub allowed_numbers: Vec<String>,
+
+    /// URL of the signal-cli-rest-api bridge.
+    #[serde(default = "default_signal_bridge_url")]
+    pub bridge_url: String,
+}
+
+fn default_signal_bridge_url() -> String {
+    "http://127.0.0.1:3042".to_string()
+}
+
+impl Default for SignalConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            allowed_numbers: Vec::new(),
+            bridge_url: default_signal_bridge_url(),
+        }
+    }
+}
+
 // -- Sessions ------------------------------------------------------------
 
 #[derive(Debug, Clone, Deserialize)]
@@ -973,6 +1005,7 @@ impl Default for Config {
             twilio: TwilioConfig::default(),
             android_sms: AndroidSmsConfig::default(),
             discord: DiscordConfig::default(),
+            signal: SignalConfig::default(),
             sessions: SessionsConfig::default(),
             tunnel: TunnelConfig::default(),
             tls: TlsConfig::default(),

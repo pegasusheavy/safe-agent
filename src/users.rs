@@ -75,6 +75,7 @@ pub struct User {
     pub twilio_number: Option<String>,
     pub android_sms_id: Option<String>,
     pub discord_id: Option<String>,
+    pub signal_id: Option<String>,
     pub enabled: bool,
     /// IANA timezone name (e.g. "America/New_York"). Empty = use system default.
     #[serde(default)]
@@ -163,7 +164,7 @@ impl UserManager {
 
     fn get_by_id_sync(&self, db: &Connection, user_id: &str) -> Result<User> {
         db.query_row(
-            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
+            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, signal_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
              FROM users WHERE id = ?1",
             [user_id],
             row_to_user_raw,
@@ -176,7 +177,7 @@ impl UserManager {
     pub async fn get_by_username(&self, username: &str) -> Option<User> {
         let db = self.db.lock().await;
         db.query_row(
-            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
+            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, signal_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
              FROM users WHERE username = ?1",
             [username],
             row_to_user_raw,
@@ -190,7 +191,7 @@ impl UserManager {
         let blind = self.enc.blind_index(email);
         let db = self.db.lock().await;
         db.query_row(
-            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
+            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, signal_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
              FROM users WHERE email_blind = ?1 AND email_blind != ''",
             [&blind],
             row_to_user_raw,
@@ -204,7 +205,7 @@ impl UserManager {
         let blind = self.enc.blind_index_i64(telegram_id);
         let db = self.db.lock().await;
         db.query_row(
-            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
+            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, signal_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
              FROM users WHERE telegram_id_blind = ?1 AND telegram_id_blind != ''",
             [&blind],
             row_to_user_raw,
@@ -218,7 +219,7 @@ impl UserManager {
         let blind = self.enc.blind_index(whatsapp_id);
         let db = self.db.lock().await;
         db.query_row(
-            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
+            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, signal_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
              FROM users WHERE whatsapp_id_blind = ?1 AND whatsapp_id_blind != ''",
             [&blind],
             row_to_user_raw,
@@ -232,7 +233,7 @@ impl UserManager {
         let blind = self.enc.blind_index(imessage_id);
         let db = self.db.lock().await;
         db.query_row(
-            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
+            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, signal_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
              FROM users WHERE imessage_id_blind = ?1 AND imessage_id_blind != ''",
             [&blind],
             row_to_user_raw,
@@ -246,7 +247,7 @@ impl UserManager {
         let blind = self.enc.blind_index(number);
         let db = self.db.lock().await;
         db.query_row(
-            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
+            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, signal_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
              FROM users WHERE twilio_number_blind = ?1 AND twilio_number_blind != ''",
             [&blind],
             row_to_user_raw,
@@ -260,7 +261,7 @@ impl UserManager {
         let blind = self.enc.blind_index(number);
         let db = self.db.lock().await;
         db.query_row(
-            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
+            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, signal_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
              FROM users WHERE android_sms_id_blind = ?1 AND android_sms_id_blind != ''",
             [&blind],
             row_to_user_raw,
@@ -274,8 +275,22 @@ impl UserManager {
         let blind = self.enc.blind_index(discord_id);
         let db = self.db.lock().await;
         db.query_row(
-            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
+            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, signal_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
              FROM users WHERE discord_id_blind = ?1 AND discord_id_blind != ''",
+            [&blind],
+            row_to_user_raw,
+        )
+        .ok()
+        .map(|raw| raw.decrypt(&self.enc))
+    }
+
+    /// Look up a user by Signal ID / phone number (uses blind index).
+    pub async fn get_by_signal_id(&self, signal_id: &str) -> Option<User> {
+        let blind = self.enc.blind_index(signal_id);
+        let db = self.db.lock().await;
+        db.query_row(
+            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, signal_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
+             FROM users WHERE signal_id_blind = ?1 AND signal_id_blind != ''",
             [&blind],
             row_to_user_raw,
         )
@@ -310,7 +325,7 @@ impl UserManager {
     pub async fn list(&self) -> Vec<User> {
         let db = self.db.lock().await;
         let mut stmt = db.prepare(
-            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
+            "SELECT id, username, display_name, role, email, password_hash, telegram_id, whatsapp_id, imessage_id, twilio_number, android_sms_id, discord_id, signal_id, timezone, locale, enabled, last_seen_at, created_at, updated_at
              FROM users ORDER BY created_at",
         ).unwrap();
         let enc = &self.enc;
@@ -423,6 +438,20 @@ impl UserManager {
             rusqlite::params![enc, blind, user_id],
         )?;
         info!(user_id, "linked Discord ID (encrypted)");
+        Ok(())
+    }
+
+    /// Link a Signal ID (phone number) to a user.
+    #[allow(dead_code)]
+    pub async fn link_signal(&self, user_id: &str, signal_id: &str) -> Result<()> {
+        let enc = self.enc.encrypt(signal_id);
+        let blind = self.enc.blind_index(signal_id);
+        let db = self.db.lock().await;
+        db.execute(
+            "UPDATE users SET signal_id = ?1, signal_id_blind = ?2, updated_at = datetime('now') WHERE id = ?3",
+            rusqlite::params![enc, blind, user_id],
+        )?;
+        info!(user_id, "linked Signal ID (encrypted)");
         Ok(())
     }
 
@@ -631,12 +660,13 @@ fn row_to_user_raw(row: &rusqlite::Row<'_>) -> rusqlite::Result<RawUser> {
         twilio_number: row.get(9)?,
         android_sms_id: row.get(10)?,
         discord_id: row.get(11)?,
-        timezone: row.get(12)?,
-        locale: row.get(13)?,
-        enabled_int: row.get(14)?,
-        last_seen_at: row.get(15)?,
-        created_at: row.get(16)?,
-        updated_at: row.get(17)?,
+        signal_id: row.get(12)?,
+        timezone: row.get(13)?,
+        locale: row.get(14)?,
+        enabled_int: row.get(15)?,
+        last_seen_at: row.get(16)?,
+        created_at: row.get(17)?,
+        updated_at: row.get(18)?,
     })
 }
 
@@ -654,6 +684,7 @@ struct RawUser {
     twilio_number: Option<String>,
     android_sms_id: Option<String>,
     discord_id: Option<String>,
+    signal_id: Option<String>,
     timezone: String,
     locale: String,
     enabled_int: i32,
@@ -673,6 +704,7 @@ impl RawUser {
         let twilio_number = self.twilio_number.map(|v| enc.decrypt(&v).unwrap_or(v));
         let android_sms_id = self.android_sms_id.map(|v| enc.decrypt(&v).unwrap_or(v));
         let discord_id = self.discord_id.map(|v| enc.decrypt(&v).unwrap_or(v));
+        let signal_id = self.signal_id.map(|v| enc.decrypt(&v).unwrap_or(v));
 
         // telegram_id is stored as encrypted TEXT now; decrypt and parse
         let telegram_id: Option<i64> = self.telegram_id_str.and_then(|v| {
@@ -693,6 +725,7 @@ impl RawUser {
             twilio_number,
             android_sms_id,
             discord_id,
+            signal_id,
             timezone: self.timezone,
             locale: self.locale,
             enabled: self.enabled_int != 0,
