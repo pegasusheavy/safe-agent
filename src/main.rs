@@ -114,6 +114,24 @@ async fn main() {
     };
     info!(bin_dir = %trash.bin_dir().display(), "trash system initialized");
 
+    // Set up binary installer (user-space tool management via dashboard)
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/home/safeagent".to_string());
+    let local_bin = std::path::PathBuf::from(&home).join(".local/bin");
+    let installer = installer::BinaryInstaller::new(local_bin.clone(), &data_dir);
+
+    // Ensure ~/.local/bin exists and prepend it to PATH so user-installed
+    // binaries are found by tunnel providers and tool execution.
+    if let Err(e) = installer.ensure_install_dir() {
+        warn!("could not create ~/.local/bin: {e}");
+    } else {
+        let current_path = std::env::var("PATH").unwrap_or_default();
+        let new_path = format!("{}:{current_path}", local_bin.display());
+        // SAFETY: Called during single-threaded startup before any tool
+        // spawning or tunnel processes.
+        unsafe { std::env::set_var("PATH", &new_path); }
+        info!(path = %local_bin.display(), "prepended ~/.local/bin to PATH");
+    }
+
     // Ensure CLAUDE.md exists in the data directory for the Claude CLI backend.
     // This writes/updates the system-managed rules section while preserving any
     // user-added rules below the end marker.
@@ -397,8 +415,9 @@ async fn main() {
         let tls = tls_config.clone();
         let messaging_clone = messaging.clone();
         let trash_clone = trash.clone();
+        let installer = installer.clone();
         tokio::spawn(async move {
-            if let Err(e) = dashboard::serve(config, agent, db, shutdown_rx, tls, messaging_clone, trash_clone).await {
+            if let Err(e) = dashboard::serve(config, agent, db, shutdown_rx, tls, messaging_clone, trash_clone, installer).await {
                 error!("dashboard error: {e}");
                 // If the dashboard (ACME cert acquisition) fails, kill the
                 // entire process so the container restarts.
