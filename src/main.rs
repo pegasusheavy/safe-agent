@@ -155,7 +155,7 @@ async fn main() {
     }
 
     // Build the tool registry
-    let tool_registry = build_tool_registry(&config);
+    let tool_registry = build_tool_registry(&config, &data_dir);
     info!(tools = tool_registry.len(), "tool registry initialized");
 
     // Shutdown signal
@@ -505,7 +505,7 @@ async fn main() {
 }
 
 /// Build the tool registry from config.
-fn build_tool_registry(config: &Config) -> ToolRegistry {
+fn build_tool_registry(config: &Config, data_dir: &std::path::Path) -> ToolRegistry {
     use crate::tools::*;
 
     let mut registry = ToolRegistry::new();
@@ -528,7 +528,10 @@ fn build_tool_registry(config: &Config) -> ToolRegistry {
     }
 
     if config.tools.browser.enabled {
-        registry.register(Box::new(browser::BrowserTool::new(config.tools.browser.headless)));
+        registry.register(Box::new(browser::BrowserTool::new(
+            config.tools.browser.headless,
+            data_dir.to_path_buf(),
+        )));
     }
 
     if config.tools.message.enabled {

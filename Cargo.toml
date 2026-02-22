@@ -52,6 +52,9 @@ rust-embed = { version = "8", features = ["compression"] }
 # Web tools
 htmd = "0.1"
 
+# Browser automation (Chrome DevTools Protocol)
+chromiumoxide = { version = "0.7", default-features = false, features = ["tokio-runtime"] }
+
 # Archive extraction (skill import)
 flate2 = "1"
 tar = "0.4"
