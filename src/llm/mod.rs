@@ -3,6 +3,7 @@ pub mod prompts;
 
 mod aider;
 mod claude;
+mod cline;
 mod codex;
 mod gemini;
 mod openrouter;
@@ -80,6 +81,14 @@ impl LlmBackend for claude::ClaudeEngine {
 }
 
 #[async_trait::async_trait]
+impl LlmBackend for cline::ClineEngine {
+    fn name(&self) -> &str { "Cline CLI" }
+    async fn generate(&self, ctx: &GenerateContext<'_>) -> Result<String> {
+        self.generate(ctx).await
+    }
+}
+
+#[async_trait::async_trait]
 impl LlmBackend for codex::CodexEngine {
     fn name(&self) -> &str { "Codex CLI" }
     async fn generate(&self, ctx: &GenerateContext<'_>) -> Result<String> {
@@ -126,6 +135,7 @@ impl LlmBackend for local::LocalEngine {
 ///
 /// Built-in backends:
 /// - **Claude**      -- Claude Code CLI (default)
+/// - **Cline**       -- Cline autonomous coding agent CLI
 /// - **Codex**       -- OpenAI Codex CLI
 /// - **Gemini**      -- Google Gemini CLI
 /// - **Aider**       -- Aider multi-provider AI pair-programmer
@@ -147,14 +157,17 @@ impl LlmEngine {
     /// non-empty, otherwise falls back to a single-element chain from
     /// `config.llm.backend` (overridable with `LLM_BACKEND` env var).
     ///
-    /// Valid backend keys: `"claude"`, `"codex"`, `"gemini"`, `"aider"`,
-    /// `"openrouter"`, `"local"`.
+    /// Valid backend keys: `"claude"`, `"cline"`, `"codex"`, `"gemini"`,
+    /// `"aider"`, `"openrouter"`, `"local"`.
     pub fn new(config: &Config) -> Result<Self> {
         let mut plugins = LlmPluginRegistry::new();
 
         // Register all built-in backends that are configurable
         if let Ok(engine) = claude::ClaudeEngine::new(config) {
             plugins.register("claude", Arc::new(engine));
+        }
+        if let Ok(engine) = cline::ClineEngine::new(config) {
+            plugins.register("cline", Arc::new(engine));
         }
         if let Ok(engine) = codex::CodexEngine::new(config) {
             plugins.register("codex", Arc::new(engine));

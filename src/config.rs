@@ -159,8 +159,8 @@ pub struct SecurityConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct LlmConfig {
-    /// Backend to use: "claude" (default), "codex", "gemini", "aider",
-    /// "openrouter", or "local".
+    /// Backend to use: "claude" (default), "cline", "codex", "gemini",
+    /// "aider", "openrouter", or "local".
     /// Can be overridden with the `LLM_BACKEND` env var.
     #[serde(default = "default_backend")]
     pub backend: String,
@@ -195,6 +195,18 @@ pub struct LlmConfig {
     /// Process timeout in seconds (0 = no timeout).
     #[serde(default = "default_timeout_secs")]
     pub timeout_secs: u64,
+
+    // -- Cline CLI settings (backend = "cline") --
+
+    /// Path to the `cline` binary (default: "cline").
+    /// Can be overridden with the `CLINE_BIN` env var.
+    #[serde(default = "default_cline_bin")]
+    pub cline_bin: String,
+
+    /// Cline model override (e.g. "claude-sonnet-4-20250514").
+    /// Can be overridden with the `CLINE_MODEL` env var.
+    #[serde(default)]
+    pub cline_model: String,
 
     // -- Codex CLI settings (backend = "codex") --
 
@@ -753,6 +765,9 @@ fn default_backend() -> String {
 fn default_claude_bin() -> String {
     "claude".to_string()
 }
+fn default_cline_bin() -> String {
+    "cline".to_string()
+}
 fn default_codex_bin() -> String {
     "codex".to_string()
 }
@@ -837,6 +852,8 @@ impl Default for LlmConfig {
             model: default_model(),
             max_turns: default_max_turns(),
             timeout_secs: default_timeout_secs(),
+            cline_bin: default_cline_bin(),
+            cline_model: String::new(),
             codex_bin: default_codex_bin(),
             codex_model: String::new(),
             codex_profile: String::new(),

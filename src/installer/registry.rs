@@ -129,6 +129,15 @@ pub fn builtin_registry() -> Vec<BinaryDef> {
             },
         },
         BinaryDef {
+            name: "cline".into(),
+            display_name: "Cline CLI".into(),
+            description: "Autonomous coding agent for the terminal".into(),
+            install_method: InstallMethod::Npm {
+                package: "cline".into(),
+                version_args: vec!["--version".into()],
+            },
+        },
+        BinaryDef {
             name: "ollama".into(),
             display_name: "Ollama".into(),
             description: "Run large language models locally".into(),
