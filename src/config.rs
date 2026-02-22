@@ -67,6 +67,9 @@ pub struct Config {
     pub android_sms: AndroidSmsConfig,
 
     #[serde(default)]
+    pub discord: DiscordConfig,
+
+    #[serde(default)]
     pub sessions: SessionsConfig,
 
     #[serde(default)]
@@ -499,6 +502,30 @@ impl Default for AndroidSmsConfig {
             enabled: false,
             bridge_url: default_android_sms_bridge_url(),
             allowed_ids: Vec::new(),
+        }
+    }
+}
+
+// -- Discord -------------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DiscordConfig {
+    #[serde(default)]
+    pub enabled: bool,
+
+    #[serde(default)]
+    pub allowed_guild_ids: Vec<u64>,
+
+    #[serde(default)]
+    pub allowed_channel_ids: Vec<u64>,
+}
+
+impl Default for DiscordConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            allowed_guild_ids: Vec::new(),
+            allowed_channel_ids: Vec::new(),
         }
     }
 }
@@ -945,6 +972,7 @@ impl Default for Config {
             imessage: IMessageConfig::default(),
             twilio: TwilioConfig::default(),
             android_sms: AndroidSmsConfig::default(),
+            discord: DiscordConfig::default(),
             sessions: SessionsConfig::default(),
             tunnel: TunnelConfig::default(),
             tls: TlsConfig::default(),

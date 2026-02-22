@@ -265,6 +265,27 @@ async fn main() {
         info!("Android SMS bridge backend registered");
     }
 
+    // Register Discord backend (if enabled)
+    if config.discord.enabled {
+        match std::env::var("DISCORD_BOT_TOKEN") {
+            Ok(token) => {
+                let http = Arc::new(serenity::all::Http::new(&token));
+                let backend = Arc::new(messaging::discord::DiscordBackend::new(http));
+                let primary_channel = config
+                    .discord
+                    .allowed_channel_ids
+                    .first()
+                    .map(|id| id.to_string())
+                    .unwrap_or_default();
+                msg_manager.register(backend, primary_channel);
+                info!("Discord backend registered");
+            }
+            Err(_) => {
+                error!("DISCORD_BOT_TOKEN not set but discord.enabled = true");
+            }
+        }
+    }
+
     let messaging = Arc::new(msg_manager);
 
     // Initialize PII encryption key (generated on first launch)
@@ -316,6 +337,24 @@ async fn main() {
             }
             Err(e) => {
                 error!("failed to start telegram bot: {e}");
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // Start Discord gateway (if enabled)
+    let _discord_shutdown = if config.discord.enabled
+        && std::env::var("DISCORD_BOT_TOKEN").is_ok()
+    {
+        match messaging::discord::start(config.discord.clone(), agent.clone()).await {
+            Ok(tx) => {
+                info!("discord bot started");
+                Some(tx)
+            }
+            Err(e) => {
+                error!("failed to start discord bot: {e}");
                 None
             }
         }

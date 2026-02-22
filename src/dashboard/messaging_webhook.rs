@@ -58,6 +58,10 @@ pub async fn incoming(
             state.agent.user_manager.get_by_android_sms_id(&body.sender).await
                 .map(|u| crate::users::UserContext::from_user(&u, "android_sms"))
         }
+        "discord" => {
+            state.agent.user_manager.get_by_discord_id(&body.sender).await
+                .map(|u| crate::users::UserContext::from_user(&u, "discord"))
+        }
         _ => None,
     };
 
@@ -248,6 +252,13 @@ pub async fn list_platforms(
         platforms.push(PlatformInfo {
             name: "android_sms".to_string(),
             connected: state.messaging.get("android_sms").is_some(),
+        });
+    }
+
+    if state.config.discord.enabled {
+        platforms.push(PlatformInfo {
+            name: "discord".to_string(),
+            connected: state.messaging.get("discord").is_some(),
         });
     }
 

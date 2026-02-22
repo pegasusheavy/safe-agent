@@ -60,6 +60,9 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 # Telegram bot
 teloxide = { version = "0.13", features = ["macros"] }
 
+# Discord bot
+serenity = { version = "0.12", default-features = false, features = ["client", "gateway", "model", "rustls_backend", "cache"] }
+
 # Cron scheduling
 cron = "0.15"
 dotenvy = "0.15.7"
