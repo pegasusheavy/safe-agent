@@ -8,6 +8,7 @@ mod db;
 mod error;
 mod federation;
 mod goals;
+mod installer;
 mod llm;
 mod memory;
 mod messaging;
