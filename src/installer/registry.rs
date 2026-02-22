@@ -128,5 +128,17 @@ pub fn builtin_registry() -> Vec<BinaryDef> {
                 version_args: vec!["--version".into()],
             },
         },
+        BinaryDef {
+            name: "ollama".into(),
+            display_name: "Ollama".into(),
+            description: "Run large language models locally".into(),
+            install_method: InstallMethod::Download {
+                url_template: "https://ollama.com/download/ollama-linux-{arch}.tgz".into(),
+                archive_format: ArchiveFormat::TarGz,
+                binary_name: "ollama".into(),
+                latest_version_url: None,
+                version_args: vec!["--version".into()],
+            },
+        },
     ]
 }
