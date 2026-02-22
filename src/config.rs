@@ -165,6 +165,12 @@ pub struct LlmConfig {
     #[serde(default = "default_backend")]
     pub backend: String,
 
+    /// Ordered list of backend keys to try on failure.
+    /// e.g. ["claude", "openrouter", "gemini"]
+    /// If empty (default), uses the single `backend` field.
+    #[serde(default)]
+    pub failover_chain: Vec<String>,
+
     // -- Claude CLI settings (backend = "claude") --
 
     /// Path to the `claude` binary (default: "claude").
@@ -825,6 +831,7 @@ impl Default for LlmConfig {
     fn default() -> Self {
         Self {
             backend: default_backend(),
+            failover_chain: Vec::new(),
             claude_bin: default_claude_bin(),
             claude_config_dir: String::new(),
             model: default_model(),

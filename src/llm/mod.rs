@@ -134,10 +134,8 @@ impl LlmBackend for local::LocalEngine {
 ///
 /// Additional backends can be registered at runtime via the plugin registry.
 pub struct LlmEngine {
-    /// The active backend used for generation.
-    active: Arc<dyn LlmBackend>,
-    /// The key identifying the active backend.
-    active_key: String,
+    /// Ordered failover chain: (key, backend). First is primary.
+    chain: Vec<(String, Arc<dyn LlmBackend>)>,
     /// Registry of all available backends (built-in + plugins).
     pub plugins: LlmPluginRegistry,
 }
@@ -145,13 +143,13 @@ pub struct LlmEngine {
 impl LlmEngine {
     /// Build the engine from config.
     ///
-    /// The backend is selected by `config.llm.backend` (overridable with the
-    /// `LLM_BACKEND` environment variable).  Valid values: `"claude"`,
-    /// `"codex"`, `"gemini"`, `"aider"`, `"openrouter"`, `"local"`.
+    /// The failover chain is built from `config.llm.failover_chain` if
+    /// non-empty, otherwise falls back to a single-element chain from
+    /// `config.llm.backend` (overridable with `LLM_BACKEND` env var).
+    ///
+    /// Valid backend keys: `"claude"`, `"codex"`, `"gemini"`, `"aider"`,
+    /// `"openrouter"`, `"local"`.
     pub fn new(config: &Config) -> Result<Self> {
-        let backend = std::env::var("LLM_BACKEND")
-            .unwrap_or_else(|_| config.llm.backend.clone());
-
         let mut plugins = LlmPluginRegistry::new();
 
         // Register all built-in backends that are configurable
@@ -175,34 +173,50 @@ impl LlmEngine {
             plugins.register("local", Arc::new(engine));
         }
 
-        // Select the active backend
-        let active = match plugins.get(&backend) {
-            Some(b) => {
-                info!(backend = %backend, name = b.name(), "LLM backend selected");
-                b
-            }
-            None => {
-                #[cfg(not(feature = "local"))]
-                if backend == "local" {
-                    return Err(SafeAgentError::Config(
-                        "LLM backend \"local\" requested but safe-agent was compiled without \
-                         the `local` feature.  Rebuild with `--features local`."
-                            .into(),
-                    ));
-                }
-
-                return Err(SafeAgentError::Config(format!(
-                    "unknown LLM backend \"{backend}\" — available: [{}]",
-                    plugins.list().join(", "),
-                )));
-            }
+        // Build the failover chain
+        let requested_keys: Vec<String> = if !config.llm.failover_chain.is_empty() {
+            config.llm.failover_chain.clone()
+        } else {
+            let backend = std::env::var("LLM_BACKEND")
+                .unwrap_or_else(|_| config.llm.backend.clone());
+            vec![backend]
         };
 
-        Ok(Self {
-            active,
-            active_key: backend,
-            plugins,
-        })
+        let mut chain: Vec<(String, Arc<dyn LlmBackend>)> = Vec::new();
+        for key in &requested_keys {
+            match plugins.get(key) {
+                Some(b) => chain.push((key.clone(), b)),
+                None => {
+                    #[cfg(not(feature = "local"))]
+                    if key == "local" {
+                        tracing::warn!(
+                            backend = %key,
+                            "LLM backend \"local\" skipped: compiled without `local` feature"
+                        );
+                        continue;
+                    }
+
+                    tracing::warn!(
+                        backend = %key,
+                        available = %plugins.list().join(", "),
+                        "LLM failover chain: unknown backend, skipping"
+                    );
+                }
+            }
+        }
+
+        if chain.is_empty() {
+            return Err(SafeAgentError::Config(format!(
+                "no valid LLM backends in failover chain {:?} — available: [{}]",
+                requested_keys,
+                plugins.list().join(", "),
+            )));
+        }
+
+        let chain_keys: Vec<&str> = chain.iter().map(|(k, _)| k.as_str()).collect();
+        info!(chain = ?chain_keys, "LLM failover chain configured");
+
+        Ok(Self { chain, plugins })
     }
 
     /// List all available backend keys (built-in + plugins).
@@ -210,22 +224,45 @@ impl LlmEngine {
         self.plugins.list()
     }
 
-    /// Generate a response for the given generation context.
+    /// Generate a response by trying each backend in the failover chain.
     ///
-    /// Delegates to the active backend.  The context bundles the message,
-    /// optional tool registry, and any prompt skills for this request.
+    /// Walks the chain in order: on success returns immediately, on failure
+    /// (error or empty response) logs a warning and tries the next backend.
     pub async fn generate(&self, ctx: &GenerateContext<'_>) -> Result<String> {
-        self.active.generate(ctx).await
+        let mut last_err = None;
+        for (key, backend) in &self.chain {
+            match backend.generate(ctx).await {
+                Ok(response) if !response.trim().is_empty() => {
+                    if key != &self.chain[0].0 {
+                        tracing::warn!(
+                            primary = %self.chain[0].0,
+                            fallback = %key,
+                            "LLM failover: primary failed, using fallback"
+                        );
+                    }
+                    return Ok(response);
+                }
+                Ok(_empty) => {
+                    tracing::warn!(backend = %key, "LLM backend returned empty response, trying next");
+                    last_err = Some(SafeAgentError::Llm(format!("{key} returned empty response")));
+                }
+                Err(e) => {
+                    tracing::warn!(backend = %key, err = %e, "LLM backend failed, trying next");
+                    last_err = Some(e);
+                }
+            }
+        }
+        Err(last_err.unwrap_or_else(|| SafeAgentError::Llm("no backends configured".into())))
     }
 
-    /// Return a human-readable description of the active backend.
+    /// Return a human-readable description of the primary backend.
     pub fn backend_info(&self) -> &str {
-        self.active.name()
+        self.chain[0].1.name()
     }
 
-    /// Return the key of the active backend.
+    /// Return the key of the primary backend.
     pub fn active_backend(&self) -> &str {
-        &self.active_key
+        &self.chain[0].0
     }
 }
 
