@@ -10,6 +10,7 @@ use crate::agent::Agent;
 use crate::config::Config;
 use crate::dashboard::authn::PasskeyManager;
 use crate::error::{Result, SafeAgentError};
+use crate::installer::BinaryInstaller;
 use crate::messaging::MessagingManager;
 use crate::skills::ExtensionManager;
 use crate::trash::TrashManager;
@@ -39,6 +40,8 @@ pub struct DashState {
     pub trash: Arc<TrashManager>,
     /// WebAuthn/passkey manager (None if origin not configured).
     pub passkey_manager: Option<Arc<PasskeyManager>>,
+    /// Binary installer for managing tool binaries via dashboard.
+    pub installer: BinaryInstaller,
 }
 
 pub fn build(
@@ -47,6 +50,7 @@ pub fn build(
     db: Arc<Mutex<Connection>>,
     messaging: Arc<MessagingManager>,
     trash: Arc<TrashManager>,
+    installer: BinaryInstaller,
 ) -> Result<Router> {
     let password_required = config.dashboard.password_enabled
         && config.dashboard.sso_providers.is_empty();
@@ -128,6 +132,7 @@ pub fn build(
         messaging,
         trash,
         passkey_manager,
+        installer,
     };
 
     Ok(Router::new()
@@ -246,6 +251,11 @@ pub fn build(
         .route("/api/tool-events", get(handlers::get_tool_events))
         // API — Tunnel
         .route("/api/tunnel/status", get(handlers::tunnel_status))
+        // API — Binaries (install/uninstall tool binaries)
+        .route("/api/binaries", get(super::binaries::list_binaries))
+        .route("/api/binaries/{name}", get(super::binaries::get_binary))
+        .route("/api/binaries/{name}", post(super::binaries::install_binary))
+        .route("/api/binaries/{name}", delete(super::binaries::uninstall_binary))
         // API — Backup & Restore
         .route("/api/backup", get(handlers::create_backup))
         .route("/api/restore", post(handlers::restore_backup))
