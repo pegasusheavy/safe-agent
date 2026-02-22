@@ -100,10 +100,25 @@ impl EventHandler for Handler {
             return;
         }
 
+        // Group message gating: in guild channels, only respond when
+        // @mentioned or when the message is a reply to the bot.
+        let is_group = msg.guild_id.is_some();
+        if is_group {
+            let bot_id = ctx.cache.current_user().id;
+            let is_mentioned = msg.mentions.iter().any(|u| u.id == bot_id);
+            let is_reply_to_bot = msg.referenced_message.as_ref()
+                .map_or(false, |r| r.author.bot);
+
+            if !is_mentioned && !is_reply_to_bot {
+                return;
+            }
+        }
+
         let discord_user_id = msg.author.id.get().to_string();
         info!(
             channel_id = msg.channel_id.get(),
             author = %msg.author.name,
+            is_group,
             "discord message received"
         );
 
@@ -117,7 +132,12 @@ impl EventHandler for Handler {
 
         let agent = self.agent.clone();
         let channel_id = msg.channel_id;
-        let user_text = msg.content.clone();
+        // Strip @mention from text so the agent sees clean input
+        let user_text = if is_group {
+            strip_discord_mention(&msg.content, &ctx.cache.current_user().id.get().to_string())
+        } else {
+            msg.content.clone()
+        };
         let http = ctx.http.clone();
 
         tokio::spawn(async move {
@@ -204,4 +224,16 @@ pub async fn start(
     });
 
     Ok(shutdown_tx)
+}
+
+// ---------------------------------------------------------------------------
+// Mention stripping
+// ---------------------------------------------------------------------------
+
+/// Remove Discord-style `<@BOT_ID>` or `<@!BOT_ID>` mentions from the message
+/// so the agent sees clean input.
+fn strip_discord_mention(text: &str, bot_id: &str) -> String {
+    let mention = format!("<@{bot_id}>");
+    let mention_nick = format!("<@!{bot_id}>");
+    text.replace(&mention, "").replace(&mention_nick, "").trim().to_string()
 }

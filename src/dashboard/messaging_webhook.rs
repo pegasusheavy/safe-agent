@@ -16,6 +16,12 @@ pub struct IncomingMessage {
     pub channel: String,
     pub sender: String,
     pub text: String,
+    /// Whether this message is from a group chat.
+    #[serde(default)]
+    pub is_group: bool,
+    /// Whether the agent was @mentioned or directly replied to.
+    #[serde(default)]
+    pub is_mentioned: bool,
 }
 
 #[derive(Serialize)]
@@ -31,8 +37,18 @@ pub async fn incoming(
         platform = %body.platform,
         channel = %body.channel,
         sender = %body.sender,
+        is_group = body.is_group,
+        is_mentioned = body.is_mentioned,
         "incoming message via webhook"
     );
+
+    // Group message gating: only respond if mentioned or replied to
+    if body.is_group && !body.is_mentioned {
+        return (
+            StatusCode::OK,
+            Json(IncomingResponse { reply: None }),
+        );
+    }
 
     // Look up user by platform identity for multi-user routing
     let user_ctx = match body.platform.as_str() {
@@ -81,8 +97,15 @@ pub async fn incoming(
         user_ctx
     };
 
+    // Strip @mention prefix so the agent sees clean text
+    let clean_text = if body.is_mentioned {
+        strip_mention(&body.text)
+    } else {
+        body.text.clone()
+    };
+
     // Send the message to the agent for processing
-    match state.agent.handle_message_as(&body.text, user_ctx.as_ref()).await {
+    match state.agent.handle_message_as(&clean_text, user_ctx.as_ref()).await {
         Ok(reply) => {
             // Also send the reply back through the platform's backend
             if let Some(backend) = state.messaging.get(&body.platform) {
@@ -113,6 +136,28 @@ pub async fn incoming(
             )
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Mention stripping
+// ---------------------------------------------------------------------------
+
+/// Remove common @mention patterns from the beginning of a message.
+fn strip_mention(text: &str) -> String {
+    let text = text.trim();
+    // Discord-style <@123456789> mention
+    if text.starts_with("<@") {
+        if let Some(end) = text.find('>') {
+            return text[end + 1..].trim_start().to_string();
+        }
+    }
+    // @username mention — strip first word
+    if text.starts_with('@') {
+        if let Some(idx) = text.find(char::is_whitespace) {
+            return text[idx..].trim_start().to_string();
+        }
+    }
+    text.to_string()
 }
 
 // ---------------------------------------------------------------------------

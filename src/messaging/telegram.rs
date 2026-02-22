@@ -176,6 +176,25 @@ async fn handle_message(
             }
         }
         CommandResult::NotACommand => {
+            // Group message gating: in non-private chats, only respond
+            // when the bot is @mentioned or the message is a reply to it.
+            let is_group = !msg.chat.is_private();
+            if is_group {
+                let bot_username = bot.get_me().await.ok()
+                    .and_then(|me| me.username.clone());
+
+                let is_mentioned = bot_username.as_ref().map_or(false, |name| {
+                    text.contains(&format!("@{name}"))
+                });
+                let is_reply_to_bot = msg.reply_to_message().map_or(false, |reply| {
+                    reply.from.as_ref().map_or(false, |u| u.is_bot)
+                });
+
+                if !is_mentioned && !is_reply_to_bot {
+                    return Ok(());
+                }
+            }
+
             // Free-text message → send to agent
             let _ = bot
                 .send_chat_action(msg.chat.id, ChatAction::Typing)
@@ -183,7 +202,11 @@ async fn handle_message(
 
             let agent = state.agent.clone();
             let chat = msg.chat.id;
-            let user_text = text.to_string();
+            let user_text = if is_group {
+                strip_mention_text(text)
+            } else {
+                text.to_string()
+            };
 
             // Look up user by Telegram user ID for multi-user routing
             let telegram_user_id = msg.from.as_ref().map(|u| u.id.0 as i64);
@@ -232,5 +255,21 @@ async fn handle_message(
     }
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Mention stripping
+// ---------------------------------------------------------------------------
+
+/// Strip a leading @username mention from message text so the agent sees
+/// clean input (e.g. "@mybot what time is it" → "what time is it").
+fn strip_mention_text(text: &str) -> String {
+    let text = text.trim();
+    if text.starts_with('@') {
+        if let Some(idx) = text.find(char::is_whitespace) {
+            return text[idx..].trim_start().to_string();
+        }
+    }
+    text.to_string()
 }
 
