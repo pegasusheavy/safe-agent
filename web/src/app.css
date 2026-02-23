@@ -1,0 +1,38 @@
+@import 'tailwindcss';
+@import '@fortawesome/fontawesome-free/css/all.min.css';
+
+@theme {
+	--color-accent: #10b981;
+	--color-accent-light: #34d399;
+	--color-accent-dim: #065f46;
+	--color-surface: #0f172a;
+	--color-surface-raised: #1e293b;
+	--color-surface-overlay: #334155;
+	--color-terminal-bg: #020617;
+	--color-terminal-green: #4ade80;
+	--color-terminal-dim: #94a3b8;
+	--font-sans: 'Inter', 'system-ui', sans-serif;
+	--font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+}
+
+::selection {
+	background-color: var(--color-accent-dim);
+	color: white;
+}
+
+::-webkit-scrollbar {
+	width: 8px;
+}
+
+::-webkit-scrollbar-track {
+	background: var(--color-surface);
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--color-surface-overlay);
+	border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--color-accent-dim);
+}

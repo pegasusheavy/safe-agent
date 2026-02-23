@@ -44,5 +44,11 @@ tarpaulin-report.html
 # === Worktrees ===
 .worktrees/
 
+# === SvelteKit (web/) ===
+web/.svelte-kit/
+web/build/
+
 # === Misc build artifacts ===
 *.log
+
+docs/plans
