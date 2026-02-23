@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { t } from '../lib/i18n';
     import { api } from '../lib/api';
     import { dashboard } from '../lib/state.svelte';
     import { formatRelative } from '../lib/time';
@@ -70,7 +71,7 @@
                 class:active={dashboard.currentMemoryTab === tab.id}
                 onclick={() => switchMemTab(tab.id)}
             >
-                <i class="fa-solid {tab.icon} mr-1"></i> {tab.label}
+                <i class="fa-solid {tab.icon} mr-1"></i> {t('memory.' + tab.id)}
             </button>
         {/each}
     </div>
@@ -81,7 +82,7 @@
                 type="text"
                 bind:value={searchQuery}
                 onkeyup={handleSearchKey}
-                placeholder="Search archival memory..."
+                placeholder={t('memory.search_placeholder')}
                 class="w-full px-2.5 py-1.5 border border-border rounded-md bg-background text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-900 font-sans"
             />
         </div>
@@ -94,7 +95,7 @@
             <div class="whitespace-pre-wrap font-mono text-xs leading-relaxed">{content}</div>
         {:else if dashboard.currentMemoryTab === 'conversation'}
             {#if messages.length === 0}
-                <p class="text-text-subtle text-sm italic text-center py-4">No conversation history</p>
+                <p class="text-text-subtle text-sm italic text-center py-4">{t('memory.empty')}</p>
             {:else}
                 {#each messages as m}
                     <div class="py-1.5 border-b border-border-muted text-sm">
@@ -106,7 +107,7 @@
             {/if}
         {:else if dashboard.currentMemoryTab === 'archival'}
             {#if archivalEntries.length === 0}
-                <p class="text-text-subtle text-sm italic text-center py-4">No archival entries</p>
+                <p class="text-text-subtle text-sm italic text-center py-4">{t('memory.empty')}</p>
             {:else}
                 {#each archivalEntries as e}
                     <div class="py-1.5 border-b border-border-muted text-sm">

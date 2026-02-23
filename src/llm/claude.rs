@@ -21,6 +21,7 @@ pub struct ClaudeEngine {
     personality: String,
     agent_name: String,
     timezone: String,
+    locale: String,
     max_turns: u32,
     timeout_secs: u64,
     /// Working directory for the CLI process.  Set to the data directory so
@@ -65,6 +66,7 @@ impl ClaudeEngine {
             personality: config.core_personality.clone(),
             agent_name: config.agent_name.clone(),
             timezone: config.timezone.clone(),
+            locale: config.locale.clone(),
             max_turns,
             timeout_secs,
             work_dir: Config::data_dir(),
@@ -73,7 +75,7 @@ impl ClaudeEngine {
 
     /// Send a message to Claude and return the plain-text response.
     pub async fn generate(&self, ctx: &GenerateContext<'_>) -> Result<String> {
-        let system_prompt = prompts::system_prompt(&self.personality, &self.agent_name, ctx.tools, Some(&self.timezone), ctx.prompt_skills);
+        let system_prompt = prompts::system_prompt(&self.personality, &self.agent_name, ctx.tools, Some(&self.timezone), Some(&self.locale), ctx.prompt_skills);
         let mut cmd = Command::new(&self.claude_bin);
 
         cmd.arg("-p")

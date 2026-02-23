@@ -29,6 +29,7 @@ pub struct OpenRouterEngine {
     personality: String,
     agent_name: String,
     timezone: String,
+    locale: String,
     max_tokens: usize,
     temperature: f32,
     top_p: f32,
@@ -184,6 +185,7 @@ impl OpenRouterEngine {
             personality: config.core_personality.clone(),
             agent_name: config.agent_name.clone(),
             timezone: config.timezone.clone(),
+            locale: config.locale.clone(),
             max_tokens,
             temperature,
             top_p,
@@ -194,7 +196,7 @@ impl OpenRouterEngine {
 
     /// Send a message to OpenRouter and return the plain-text response.
     pub async fn generate(&self, ctx: &GenerateContext<'_>) -> Result<String> {
-        let system_prompt = prompts::system_prompt(&self.personality, &self.agent_name, ctx.tools, Some(&self.timezone), ctx.prompt_skills);
+        let system_prompt = prompts::system_prompt(&self.personality, &self.agent_name, ctx.tools, Some(&self.timezone), Some(&self.locale), ctx.prompt_skills);
         let url = format!("{}/chat/completions", self.base_url);
 
         let body = ChatRequest {

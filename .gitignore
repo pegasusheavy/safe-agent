@@ -52,3 +52,5 @@ web/build/
 *.log
 
 docs/plans
+.claude
+.cursor

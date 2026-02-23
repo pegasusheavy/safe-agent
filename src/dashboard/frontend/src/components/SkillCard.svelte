@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { t } from '../lib/i18n';
     import { api } from '../lib/api';
     import type { SkillStatus, SkillDetail, ActionResponse } from '../lib/types';
     import CredentialRow from './CredentialRow.svelte';
@@ -85,7 +86,7 @@
             setTimeout(onrefresh, 1000);
         } catch (e) {
             console.error('restartSkill:', e);
-            alert('Failed to restart skill: ' + (e as Error).message);
+            alert(t('skills.restart_failed') + (e as Error).message);
         }
     }
 
@@ -100,7 +101,7 @@
             setTimeout(onrefresh, 500);
         } catch (e) {
             console.error('toggleEnabled:', e);
-            alert('Failed to toggle skill: ' + (e as Error).message);
+            alert(t('skills.toggle_failed') + (e as Error).message);
         }
     }
 
@@ -114,7 +115,7 @@
                 `/api/skills/${encodeURIComponent(skill.name)}/manifest`,
                 { toml: manifestEdit },
             );
-            manifestSuccess = 'Saved. Restart the skill for changes to take effect.';
+            manifestSuccess = t('skills.saved_restart');
             setTimeout(() => { manifestSuccess = ''; }, 5000);
             await loadDetail();
         } catch (e) {
@@ -138,12 +139,12 @@
             newEnvValue = '';
             await loadDetail();
         } catch (e) {
-            alert('Failed to set env var: ' + (e as Error).message);
+            alert(t('skills.env_failed') + (e as Error).message);
         }
     }
 
     async function deleteEnvVar(key: string) {
-        if (!confirm(`Remove env var "${key}" from "${skill.name}"?`)) return;
+        if (!confirm(t('skills.remove_env_confirm', { key, skill: skill.name }))) return;
         try {
             await api<ActionResponse>(
                 'DELETE',
@@ -151,12 +152,12 @@
             );
             await loadDetail();
         } catch (e) {
-            alert('Failed to delete env var: ' + (e as Error).message);
+            alert(t('skills.delete_env_failed') + (e as Error).message);
         }
     }
 
     async function deleteSkill() {
-        if (!confirm(`Permanently delete skill "${skill.name}"? This cannot be undone.`)) return;
+        if (!confirm(t('skills.delete_confirm', { name: skill.name }))) return;
         deleting = true;
         try {
             await api<ActionResponse>(
@@ -166,7 +167,7 @@
             onrefresh();
         } catch (e) {
             console.error('deleteSkill:', e);
-            alert('Failed to delete skill: ' + (e as Error).message);
+            alert(t('skills.delete_failed') + (e as Error).message);
         } finally {
             deleting = false;
         }
@@ -251,16 +252,16 @@
                     class="px-3 py-1.5 text-xs border border-border rounded-md bg-surface transition-colors {skill.enabled ? 'hover:bg-error-500/10 hover:border-error-500 text-error-400' : 'hover:bg-success-500/10 hover:border-success-500 text-success-500'}"
                 >
                     {#if skill.enabled}
-                        <i class="fa-solid fa-power-off mr-1"></i>Disable
+                        <i class="fa-solid fa-power-off mr-1"></i>{t('skills.disable')}
                     {:else}
-                        <i class="fa-solid fa-play mr-1"></i>Enable
+                        <i class="fa-solid fa-play mr-1"></i>{t('skills.enable')}
                     {/if}
                 </button>
                 <button
                     onclick={restart}
                     class="px-3 py-1.5 text-xs border border-border rounded-md bg-surface hover:bg-surface-elevated transition-colors"
                 >
-                    <i class="fa-solid fa-rotate-right mr-1"></i>Restart
+                    <i class="fa-solid fa-rotate-right mr-1"></i>{t('skills.restart')}
                 </button>
                 <button
                     onclick={loadDetail}
@@ -275,16 +276,16 @@
                     class="px-3 py-1.5 text-xs border border-error-500/40 rounded-md bg-surface text-error-400 hover:bg-error-500/10 hover:border-error-500 transition-colors disabled:opacity-50"
                 >
                     {#if deleting}
-                        <i class="fa-solid fa-spinner fa-spin mr-1"></i>Deleting...
+                        <i class="fa-solid fa-spinner fa-spin mr-1"></i>{t('skills.deleting')}
                     {:else}
-                        <i class="fa-solid fa-trash-can mr-1"></i>Delete
+                        <i class="fa-solid fa-trash-can mr-1"></i>{t('skills.delete')}
                     {/if}
                 </button>
             </div>
 
             {#if detailLoading}
                 <div class="p-4 text-sm text-text-subtle italic text-center">
-                    <i class="fa-solid fa-spinner fa-spin mr-1"></i>Loading detail...
+                    <i class="fa-solid fa-spinner fa-spin mr-1"></i>{t('skills.loading_detail')}
                 </div>
             {:else if detailError}
                 <div class="p-4 text-sm text-error-400 italic text-center">{detailError}</div>
@@ -295,26 +296,26 @@
                         onclick={() => switchTab('params')}
                         class="px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors {activeTab === 'params' ? 'text-primary-400 border-b-2 border-primary-400' : 'text-text-muted hover:text-text'}"
                     >
-                        <i class="fa-solid fa-sliders mr-1"></i>Parameters
+                        <i class="fa-solid fa-sliders mr-1"></i>{t('skills.parameters')}
                     </button>
                     <button
                         onclick={() => switchTab('logs')}
                         class="px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors {activeTab === 'logs' ? 'text-primary-400 border-b-2 border-primary-400' : 'text-text-muted hover:text-text'}"
                     >
-                        <i class="fa-solid fa-terminal mr-1"></i>Logs
+                        <i class="fa-solid fa-terminal mr-1"></i>{t('skills.logs')}
                     </button>
                     <button
                         onclick={() => switchTab('manifest')}
                         class="px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors {activeTab === 'manifest' ? 'text-primary-400 border-b-2 border-primary-400' : 'text-text-muted hover:text-text'}"
                     >
-                        <i class="fa-solid fa-file-code mr-1"></i>Manifest
+                        <i class="fa-solid fa-file-code mr-1"></i>{t('skills.manifest')}
                     </button>
                     {#if hasExtension}
                         <button
                             onclick={() => switchTab('plugin')}
                             class="px-4 py-2 text-xs font-semibold uppercase tracking-wider transition-colors {activeTab === 'plugin' ? 'text-violet-400 border-b-2 border-violet-400' : 'text-text-muted hover:text-text'}"
                         >
-                            <i class="fa-solid fa-plug mr-1"></i>Extension
+                            <i class="fa-solid fa-plug mr-1"></i>{t('skills.extension')}
                         </button>
                     {/if}
                 </div>
@@ -324,7 +325,7 @@
                     {#if activeTab === 'params'}
                         <!-- Skill info -->
                         <div class="grid grid-cols-2 gap-x-4 gap-y-1 mb-4 text-xs">
-                            <div class="text-text-muted">Entrypoint</div>
+                            <div class="text-text-muted">{t('skills.entrypoint')}</div>
                             <div class="font-mono text-accent-300">{detail.entrypoint}</div>
                             <div class="text-text-muted">Directory</div>
                             <div class="font-mono text-accent-300 truncate" title={detail.dir}>{detail.dir}</div>
@@ -338,7 +339,7 @@
                         {#if Object.keys(detail.env).length > 0 || true}
                             <div class="border-t border-border pt-3 mb-3">
                                 <div class="text-xs font-semibold uppercase tracking-wider text-primary-400 mb-2">
-                                    <i class="fa-solid fa-gear mr-1"></i> Environment Variables
+                                    <i class="fa-solid fa-gear mr-1"></i> {t('skills.environment_vars')}
                                 </div>
                                 {#each Object.entries(detail.env) as [key, value] (key)}
                                     <div class="flex items-center gap-2 mb-1.5 text-xs">
@@ -346,7 +347,7 @@
                                         <span class="flex-1 font-mono text-text-muted truncate" title={value}>{value}</span>
                                         <button
                                             onclick={() => deleteEnvVar(key)}
-                                            title="Remove"
+                                            title={t('common.delete')}
                                             class="px-2 py-0.5 text-xs border border-border rounded bg-surface text-error-500 hover:bg-error-500/10 hover:border-error-500 transition-colors shrink-0"
                                         >
                                             <i class="fa-solid fa-trash-can"></i>
@@ -372,7 +373,7 @@
                                         onclick={addEnvVar}
                                         class="px-2.5 py-1 text-xs border border-border rounded bg-surface text-success-500 hover:bg-success-500/10 hover:border-success-500 transition-colors shrink-0"
                                     >
-                                        <i class="fa-solid fa-plus mr-1"></i>Add
+                                        <i class="fa-solid fa-plus mr-1"></i>{t('skills.add')}
                                     </button>
                                 </div>
                             </div>
@@ -382,7 +383,7 @@
                         {#if skill.credentials?.length}
                             <div class="border-t border-border pt-3">
                                 <div class="text-xs font-semibold uppercase tracking-wider text-accent-500 mb-2">
-                                    <i class="fa-solid fa-key mr-1"></i> Credentials
+                                    <i class="fa-solid fa-key mr-1"></i> {t('skills.credentials')}
                                 </div>
                                 {#each skill.credentials as cred (cred.name)}
                                     <CredentialRow credential={cred} skillName={skill.name} onchange={onrefresh} />
@@ -394,21 +395,21 @@
                         <div class="relative">
                             <div class="flex justify-between items-center mb-2">
                                 <span class="text-xs text-text-muted">
-                                    Last 300 lines of <span class="font-mono">skill.log</span>
+                                    {t('skills.last_lines')}
                                 </span>
                                 <button
                                     onclick={loadLog}
                                     class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface hover:bg-surface-elevated transition-colors"
                                 >
-                                    <i class="fa-solid fa-arrows-rotate mr-1"></i>Refresh
+                                    <i class="fa-solid fa-arrows-rotate mr-1"></i>{t('common.refresh')}
                                 </button>
                             </div>
                             {#if logLoading}
                                 <div class="p-4 text-sm text-text-subtle italic text-center">
-                                    <i class="fa-solid fa-spinner fa-spin mr-1"></i>Loading...
+                                    <i class="fa-solid fa-spinner fa-spin mr-1"></i>{t('common.loading')}
                                 </div>
                             {:else}
-                                <pre class="bg-background border border-border rounded-md p-3 text-[11px] font-mono text-text-muted max-h-[400px] overflow-auto whitespace-pre-wrap break-all leading-relaxed">{logContent || '(no log output)'}</pre>
+                                <pre class="bg-background border border-border rounded-md p-3 text-[11px] font-mono text-text-muted max-h-[400px] overflow-auto whitespace-pre-wrap break-all leading-relaxed">{logContent || t('skills.no_log')}</pre>
                             {/if}
                         </div>
 
@@ -418,7 +419,7 @@
                             {#if extension.ui.panel}
                                 <div>
                                     <div class="text-xs font-semibold uppercase tracking-wider text-violet-400 mb-2">
-                                        <i class="fa-solid fa-window-maximize mr-1"></i> Skill Panel
+                                        <i class="fa-solid fa-window-maximize mr-1"></i> {t('skills.skill_panel')}
                                     </div>
                                     <div class="bg-background border border-border rounded-md overflow-hidden">
                                         <iframe
@@ -440,7 +441,7 @@
                                         target="_blank"
                                         class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-violet-800/50 bg-violet-900/20 text-violet-400 hover:bg-violet-900/40 transition-colors"
                                     >
-                                        <i class="fa-solid fa-arrow-up-right-from-square"></i> Open full page
+                                        <i class="fa-solid fa-arrow-up-right-from-square"></i> {t('skills.open_full_page')}
                                     </a>
                                 </div>
                             {/if}
@@ -449,7 +450,7 @@
                             {#if extension.route_count > 0}
                                 <div>
                                     <div class="text-xs font-semibold uppercase tracking-wider text-violet-400 mb-2">
-                                        <i class="fa-solid fa-route mr-1"></i> Registered Routes ({extension.route_count})
+                                        <i class="fa-solid fa-route mr-1"></i> {t('skills.registered_routes')} ({extension.route_count})
                                     </div>
                                     <div class="space-y-1">
                                         {#each extension.routes as route}
@@ -466,7 +467,7 @@
 
                             {#if !extension.ui.panel && extension.route_count === 0}
                                 <p class="text-sm text-text-subtle italic text-center py-4">
-                                    This skill has an extension but no UI panel or routes registered.
+                                    {t('skills.no_extension_ui')}
                                 </p>
                             {/if}
                         </div>
@@ -475,7 +476,7 @@
                         <div>
                             <div class="flex justify-between items-center mb-2">
                                 <span class="text-xs text-text-muted">
-                                    Edit <span class="font-mono">skill.toml</span> directly
+                                    {t('skills.edit_manifest')}
                                 </span>
                                 <button
                                     onclick={saveManifest}
@@ -483,9 +484,9 @@
                                     class="px-3 py-1.5 text-xs border border-border rounded-md bg-surface text-success-500 hover:bg-success-500/10 hover:border-success-500 transition-colors disabled:opacity-50"
                                 >
                                     {#if manifestSaving}
-                                        <i class="fa-solid fa-spinner fa-spin mr-1"></i>Saving...
+                                        <i class="fa-solid fa-spinner fa-spin mr-1"></i>{t('common.saving')}
                                     {:else}
-                                        <i class="fa-solid fa-floppy-disk mr-1"></i>Save
+                                        <i class="fa-solid fa-floppy-disk mr-1"></i>{t('common.save')}
                                     {/if}
                                 </button>
                             </div>

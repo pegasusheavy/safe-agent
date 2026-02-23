@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { t } from '../lib/i18n';
     import { api } from '../lib/api';
     import { dashboard } from '../lib/state.svelte';
     import { formatDateTime } from '../lib/time';
@@ -78,7 +79,7 @@
                 loadDetail(goalId);
             }
         } catch (e) {
-            alert('Failed to update status: ' + (e as Error).message);
+            alert(t('goals.status_update_failed') + (e as Error).message);
         }
     }
 
@@ -131,7 +132,7 @@
 <section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden">
     <div class="flex justify-between items-center border-b border-border">
         <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
-            <i class="fa-solid fa-bullseye mr-1.5"></i> Goals &amp; Tasks
+            <i class="fa-solid fa-bullseye mr-1.5"></i> {t('goals.title')}
         </h2>
         <div class="flex items-center gap-2 pr-3">
             <select
@@ -139,31 +140,31 @@
                 onchange={() => load()}
                 class="text-xs px-2 py-1 border border-border rounded-md bg-surface text-text outline-none focus:border-primary-500"
             >
-                <option value="">All statuses</option>
-                <option value="active">Active</option>
-                <option value="paused">Paused</option>
-                <option value="completed">Completed</option>
-                <option value="failed">Failed</option>
-                <option value="cancelled">Cancelled</option>
+                <option value="">{t('goals.all_statuses')}</option>
+                <option value="active">{t('goals.active')}</option>
+                <option value="paused">{t('goals.paused')}</option>
+                <option value="completed">{t('goals.completed')}</option>
+                <option value="failed">{t('goals.failed')}</option>
+                <option value="cancelled">{t('goals.cancelled')}</option>
             </select>
             <span class="text-xs text-text-muted">
-                {goals.length} goal{goals.length !== 1 ? 's' : ''}
+                {t('goals.count', { count: goals.length })}
             </span>
             <button
                 onclick={load}
                 class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface hover:bg-surface-elevated transition-colors"
             >
-                <i class="fa-solid fa-arrows-rotate mr-1"></i> Refresh
+                <i class="fa-solid fa-arrows-rotate mr-1"></i> {t('common.refresh')}
             </button>
         </div>
     </div>
 
     <div class="p-3">
         {#if error}
-            <p class="text-text-subtle text-sm italic text-center py-4">Error loading goals</p>
+            <p class="text-text-subtle text-sm italic text-center py-4">{t('goals.error_loading')}</p>
         {:else if goals.length === 0}
             <p class="text-text-subtle text-sm italic text-center py-4">
-                No goals yet. The agent will create goals when you assign background tasks.
+                {t('goals.no_goals')}
             </p>
         {:else}
             {#each goals as goal (goal.id)}
@@ -220,40 +221,40 @@
                                         onclick={() => updateStatus(goal.id, 'paused')}
                                         class="px-3 py-1.5 text-xs border border-border rounded-md bg-surface text-warning-500 hover:bg-warning-500/10 hover:border-warning-500 transition-colors"
                                     >
-                                        <i class="fa-solid fa-pause mr-1"></i>Pause
+                                        <i class="fa-solid fa-pause mr-1"></i>{t('goals.pause')}
                                     </button>
                                     <button
                                         onclick={() => updateStatus(goal.id, 'cancelled')}
                                         class="px-3 py-1.5 text-xs border border-border rounded-md bg-surface text-error-400 hover:bg-error-500/10 hover:border-error-500 transition-colors"
                                     >
-                                        <i class="fa-solid fa-ban mr-1"></i>Cancel
+                                        <i class="fa-solid fa-ban mr-1"></i>{t('common.cancel')}
                                     </button>
                                 {:else if goal.status === 'paused'}
                                     <button
                                         onclick={() => updateStatus(goal.id, 'active')}
                                         class="px-3 py-1.5 text-xs border border-border rounded-md bg-surface text-success-500 hover:bg-success-500/10 hover:border-success-500 transition-colors"
                                     >
-                                        <i class="fa-solid fa-play mr-1"></i>Resume
+                                        <i class="fa-solid fa-play mr-1"></i>{t('goals.resume')}
                                     </button>
                                     <button
                                         onclick={() => updateStatus(goal.id, 'cancelled')}
                                         class="px-3 py-1.5 text-xs border border-border rounded-md bg-surface text-error-400 hover:bg-error-500/10 hover:border-error-500 transition-colors"
                                     >
-                                        <i class="fa-solid fa-ban mr-1"></i>Cancel
+                                        <i class="fa-solid fa-ban mr-1"></i>{t('common.cancel')}
                                     </button>
                                 {/if}
                             </div>
 
                             {#if detailLoading}
                                 <div class="p-4 text-sm text-text-subtle italic text-center">
-                                    <i class="fa-solid fa-spinner fa-spin mr-1"></i>Loading...
+                                    <i class="fa-solid fa-spinner fa-spin mr-1"></i>{t('common.loading')}
                                 </div>
                             {:else if goalDetail}
                                 <!-- Reflection -->
                                 {#if goalDetail.goal.reflection}
                                     <div class="mx-4 mt-3 p-3 bg-primary-950/40 border border-primary-800/30 rounded-md">
                                         <div class="text-[11px] font-semibold uppercase tracking-wider text-primary-400 mb-1">
-                                            <i class="fa-solid fa-brain mr-1"></i> Self-Reflection
+                                            <i class="fa-solid fa-brain mr-1"></i> {t('goals.self_reflection')}
                                         </div>
                                         <div class="text-xs text-text-muted leading-relaxed">
                                             {goalDetail.goal.reflection}
@@ -265,12 +266,12 @@
                                 <div class="p-4">
                                     <div class="text-xs font-semibold uppercase tracking-wider text-text-muted mb-3">
                                         <i class="fa-solid fa-list-check mr-1"></i>
-                                        Tasks ({goalDetail.tasks.length})
+                                        {t('goals.tasks')} ({goalDetail.tasks.length})
                                     </div>
 
                                     {#if goalDetail.tasks.length === 0}
                                         <p class="text-text-subtle text-sm italic text-center py-2">
-                                            No tasks defined yet.
+                                            {t('goals.no_tasks')}
                                         </p>
                                     {:else}
                                         <div class="space-y-2">
@@ -293,7 +294,7 @@
                                                         {/if}
                                                         {#if task.depends_on.length > 0}
                                                             <div class="text-[10px] text-text-subtle">
-                                                                Depends on: {task.depends_on.join(', ')}
+                                                                {t('goals.depends_on')} {task.depends_on.join(', ')}
                                                             </div>
                                                         {/if}
                                                         {#if task.result}
@@ -303,7 +304,7 @@
                                                         {/if}
                                                         {#if task.tool_call}
                                                             <div class="mt-1 text-[10px] text-accent-300 font-mono">
-                                                                Tool: {JSON.stringify(task.tool_call)}
+                                                                {t('goals.tool')} {JSON.stringify(task.tool_call)}
                                                             </div>
                                                         {/if}
                                                     </div>
@@ -316,15 +317,15 @@
                                 <!-- Metadata -->
                                 <div class="px-4 pb-4">
                                     <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
-                                        <span class="text-text-subtle">Created</span>
+                                        <span class="text-text-subtle">{t('goals.created')}</span>
                                         <span class="text-text-muted font-mono">{formatDateTime(goalDetail.goal.created_at)}</span>
-                                        <span class="text-text-subtle">Updated</span>
+                                        <span class="text-text-subtle">{t('goals.updated')}</span>
                                         <span class="text-text-muted font-mono">{formatDateTime(goalDetail.goal.updated_at)}</span>
                                         {#if goalDetail.goal.completed_at}
-                                            <span class="text-text-subtle">Completed</span>
+                                            <span class="text-text-subtle">{t('goals.completed_at')}</span>
                                             <span class="text-text-muted font-mono">{formatDateTime(goalDetail.goal.completed_at)}</span>
                                         {/if}
-                                        <span class="text-text-subtle">ID</span>
+                                        <span class="text-text-subtle">{t('goals.id')}</span>
                                         <span class="text-text-muted font-mono truncate" title={goalDetail.goal.id}>{goalDetail.goal.id}</span>
                                     </div>
                                 </div>

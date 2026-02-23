@@ -1,5 +1,6 @@
 <script lang="ts">
     import { api } from '../lib/api';
+    import { t, i18n, setLocale, SUPPORTED_LOCALES } from '../lib/i18n';
     import { dashboard, auth } from '../lib/state.svelte';
     import { formatDateTime } from '../lib/time';
     import UsersPanel from './UsersPanel.svelte';
@@ -122,7 +123,7 @@
     }
 
     async function disconnect(providerId: string, account: string, email: string) {
-        if (!confirm(`Disconnect ${email} from ${providerId}?`)) return;
+        if (!confirm(t('settings.disconnect_confirm', { email, provider: providerId }))) return;
         try {
             await api('POST', `/api/oauth/${providerId}/disconnect/${encodeURIComponent(account)}`);
             await loadOAuth();
@@ -194,11 +195,11 @@
                 timezone: selectedTimezone || undefined,
                 locale: selectedLocale || undefined,
             });
-            tzMessage = data?.ok ? 'Saved' : (data?.message ?? 'Failed');
+            tzMessage = data?.ok ? t('common.saved') : (data?.message ?? t('common.failed'));
             await loadTimezone();
             setTimeout(() => { tzMessage = ''; }, 3000);
         } catch (e) {
-            tzMessage = 'Network error';
+            tzMessage = t('common.network_error');
         } finally {
             tzSaving = false;
         }
@@ -246,18 +247,18 @@
 <section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden mb-4">
     <div class="flex justify-between items-center border-b border-border">
         <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
-            <i class="fa-solid fa-tower-broadcast mr-1.5"></i> Messaging Platforms
+            <i class="fa-solid fa-tower-broadcast mr-1.5"></i> {t('settings.messaging')}
         </h2>
         <button
             onclick={loadConfig}
             class="mr-3 px-2.5 py-1 text-xs border border-border rounded-md bg-surface hover:bg-surface-elevated transition-colors"
         >
-            <i class="fa-solid fa-arrows-rotate mr-1"></i> Refresh
+            <i class="fa-solid fa-arrows-rotate mr-1"></i> {t('common.refresh')}
         </button>
     </div>
     <div class="p-4 space-y-4">
         {#if !msgConfig}
-            <p class="text-text-subtle text-sm italic text-center py-2">Loading...</p>
+            <p class="text-text-subtle text-sm italic text-center py-2">{t('common.loading')}</p>
         {:else}
             <!-- Telegram -->
             <div class="rounded-lg border border-border overflow-hidden">
@@ -265,47 +266,47 @@
                     <div class="flex items-center gap-2.5">
                         <i class="fa-brands fa-telegram text-blue-400 text-lg"></i>
                         <div>
-                            <span class="text-sm font-medium text-text">Telegram</span>
-                            <p class="text-xs text-text-subtle mt-0.5">Long-polling bot via teloxide</p>
+                            <span class="text-sm font-medium text-text">{t('settings.telegram')}</span>
+                            <p class="text-xs text-text-subtle mt-0.5">{t('settings.telegram_desc')}</p>
                         </div>
                     </div>
                     {#if msgConfig.telegram.enabled && msgConfig.telegram.connected}
-                        <span class="text-xs px-2 py-0.5 rounded-full border bg-green-900/40 text-green-400 border-green-800/50">Connected</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full border bg-green-900/40 text-green-400 border-green-800/50">{t('common.connected')}</span>
                     {:else if msgConfig.telegram.enabled}
-                        <span class="text-xs px-2 py-0.5 rounded-full border bg-red-900/40 text-red-400 border-red-800/50">Disconnected</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full border bg-red-900/40 text-red-400 border-red-800/50">{t('common.disconnected')}</span>
                     {:else}
-                        <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">Disabled</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">{t('common.disabled')}</span>
                     {/if}
                 </div>
                 <div class="p-3 space-y-2 text-sm">
                     <div class="flex justify-between">
-                        <span class="text-text-muted">Enabled</span>
-                        <span class="text-text">{msgConfig.telegram.enabled ? 'Yes' : 'No'}</span>
+                        <span class="text-text-muted">{t('common.enabled')}</span>
+                        <span class="text-text">{msgConfig.telegram.enabled ? t('common.yes') : t('common.no')}</span>
                     </div>
                     <div class="flex justify-between">
-                        <span class="text-text-muted">Bot Token</span>
+                        <span class="text-text-muted">{t('settings.bot_token')}</span>
                         <span class="{msgConfig.telegram.has_token ? 'text-green-400' : 'text-red-400'}">
-                            {msgConfig.telegram.has_token ? 'Set (TELEGRAM_BOT_TOKEN)' : 'Not set'}
+                            {msgConfig.telegram.has_token ? t('settings.bot_token_set') : t('settings.bot_token_not_set')}
                         </span>
                     </div>
                     {#if msgConfig.telegram.allowed_chat_ids.length > 0}
                         <div class="flex justify-between">
-                            <span class="text-text-muted">Allowed Chat IDs</span>
+                            <span class="text-text-muted">{t('settings.allowed_chat_ids')}</span>
                             <span class="text-text font-mono text-xs">
                                 {msgConfig.telegram.allowed_chat_ids.join(', ')}
                             </span>
                         </div>
                     {:else}
                         <div class="flex justify-between">
-                            <span class="text-text-muted">Allowed Chat IDs</span>
+                            <span class="text-text-muted">{t('settings.allowed_chat_ids')}</span>
                             <span class="text-amber-400 text-xs">
-                                <i class="fa-solid fa-triangle-exclamation mr-1"></i> None (all denied)
+                                <i class="fa-solid fa-triangle-exclamation mr-1"></i> {t('settings.none_all_denied')}
                             </span>
                         </div>
                     {/if}
                     {#if msgConfig.telegram.primary_channel}
                         <div class="flex justify-between">
-                            <span class="text-text-muted">Primary Channel</span>
+                            <span class="text-text-muted">{t('settings.primary_channel')}</span>
                             <span class="text-text font-mono text-xs">{msgConfig.telegram.primary_channel}</span>
                         </div>
                     {/if}
@@ -313,7 +314,7 @@
                         <div class="mt-2 p-2 rounded bg-zinc-800/40 border border-border/50">
                             <p class="text-xs text-text-subtle">
                                 <i class="fa-solid fa-circle-info mr-1"></i>
-                                Enable Telegram by setting <code class="px-1 py-0.5 bg-zinc-900 rounded text-text-muted">telegram.enabled = true</code> in your config and providing a <code class="px-1 py-0.5 bg-zinc-900 rounded text-text-muted">TELEGRAM_BOT_TOKEN</code> env var.
+                                {t('settings.enable_telegram_hint')}
                             </p>
                         </div>
                     {/if}
@@ -326,52 +327,52 @@
                     <div class="flex items-center gap-2.5">
                         <i class="fa-brands fa-whatsapp text-green-400 text-lg"></i>
                         <div>
-                            <span class="text-sm font-medium text-text">WhatsApp</span>
-                            <p class="text-xs text-text-subtle mt-0.5">Baileys bridge (Node.js)</p>
+                            <span class="text-sm font-medium text-text">{t('settings.whatsapp')}</span>
+                            <p class="text-xs text-text-subtle mt-0.5">{t('settings.whatsapp_desc')}</p>
                         </div>
                     </div>
                     {#if !msgConfig.whatsapp.enabled}
-                        <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">Disabled</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">{t('common.disabled')}</span>
                     {:else if msgConfig.whatsapp.bridge_status === 'connected'}
-                        <span class="text-xs px-2 py-0.5 rounded-full border bg-green-900/40 text-green-400 border-green-800/50">Connected</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full border bg-green-900/40 text-green-400 border-green-800/50">{t('common.connected')}</span>
                     {:else if msgConfig.whatsapp.bridge_status === 'pairing'}
-                        <span class="text-xs px-2 py-0.5 rounded-full border bg-amber-900/40 text-amber-400 border-amber-800/50">Pairing</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full border bg-amber-900/40 text-amber-400 border-amber-800/50">{t('settings.pairing')}</span>
                     {:else}
                         <span class="text-xs px-2 py-0.5 rounded-full border bg-red-900/40 text-red-400 border-red-800/50">{msgConfig.whatsapp.bridge_status}</span>
                     {/if}
                 </div>
                 <div class="p-3 space-y-2 text-sm">
                     <div class="flex justify-between">
-                        <span class="text-text-muted">Enabled</span>
-                        <span class="text-text">{msgConfig.whatsapp.enabled ? 'Yes' : 'No'}</span>
+                        <span class="text-text-muted">{t('common.enabled')}</span>
+                        <span class="text-text">{msgConfig.whatsapp.enabled ? t('common.yes') : t('common.no')}</span>
                     </div>
                     {#if msgConfig.whatsapp.enabled}
                         <div class="flex justify-between">
-                            <span class="text-text-muted">Bridge Port</span>
+                            <span class="text-text-muted">{t('settings.bridge_port')}</span>
                             <span class="text-text font-mono text-xs">{msgConfig.whatsapp.bridge_port}</span>
                         </div>
                         <div class="flex justify-between">
-                            <span class="text-text-muted">Webhook Port</span>
+                            <span class="text-text-muted">{t('settings.webhook_port')}</span>
                             <span class="text-text font-mono text-xs">{msgConfig.whatsapp.webhook_port}</span>
                         </div>
                         {#if msgConfig.whatsapp.allowed_numbers.length > 0}
                             <div class="flex justify-between">
-                                <span class="text-text-muted">Allowed Numbers</span>
+                                <span class="text-text-muted">{t('settings.allowed_numbers')}</span>
                                 <span class="text-text font-mono text-xs">
                                     {msgConfig.whatsapp.allowed_numbers.join(', ')}
                                 </span>
                             </div>
                         {:else}
                             <div class="flex justify-between">
-                                <span class="text-text-muted">Allowed Numbers</span>
+                                <span class="text-text-muted">{t('settings.allowed_numbers')}</span>
                                 <span class="text-amber-400 text-xs">
-                                    <i class="fa-solid fa-triangle-exclamation mr-1"></i> None (all denied)
+                                    <i class="fa-solid fa-triangle-exclamation mr-1"></i> {t('settings.none_all_denied')}
                                 </span>
                             </div>
                         {/if}
                         {#if msgConfig.whatsapp.connected_number}
                             <div class="flex justify-between">
-                                <span class="text-text-muted">Connected Number</span>
+                                <span class="text-text-muted">{t('settings.connected_number')}</span>
                                 <span class="text-green-400 font-mono text-xs">{msgConfig.whatsapp.connected_number}</span>
                             </div>
                         {/if}
@@ -380,20 +381,20 @@
                         {#if msgConfig.whatsapp.bridge_status === 'pairing'}
                             <div class="mt-3 p-4 rounded-lg bg-surface border border-amber-800/50 text-center">
                                 <p class="text-sm text-amber-400 mb-3">
-                                    <i class="fa-solid fa-qrcode mr-1.5"></i> Scan this QR code with WhatsApp to pair
+                                    <i class="fa-solid fa-qrcode mr-1.5"></i> {t('settings.scan_qr')}
                                 </p>
                                 {#if waQrImage}
                                     <img src={waQrImage} alt="WhatsApp QR Code" class="mx-auto w-52 h-52 rounded-lg shadow-lg" />
                                 {:else}
                                     <div class="w-52 h-52 mx-auto bg-zinc-800 rounded-lg flex items-center justify-center">
-                                        <span class="text-text-subtle text-sm">Waiting for QR...</span>
+                                        <span class="text-text-subtle text-sm">{t('settings.waiting_qr')}</span>
                                     </div>
                                 {/if}
                                 <button
                                     onclick={loadConfig}
                                     class="mt-3 px-4 py-1.5 text-xs border border-border rounded-md bg-surface hover:bg-surface-elevated transition-colors"
                                 >
-                                    <i class="fa-solid fa-arrows-rotate mr-1"></i> Refresh QR
+                                    <i class="fa-solid fa-arrows-rotate mr-1"></i> {t('settings.refresh_qr')}
                                 </button>
                             </div>
                         {/if}
@@ -401,8 +402,7 @@
                         <div class="mt-2 p-2 rounded bg-zinc-800/40 border border-border/50">
                             <p class="text-xs text-text-subtle">
                                 <i class="fa-solid fa-circle-info mr-1"></i>
-                                Enable WhatsApp by setting <code class="px-1 py-0.5 bg-zinc-900 rounded text-text-muted">whatsapp.enabled = true</code> in your config and adding allowed numbers.
-                                The Baileys bridge requires Node.js in the container.
+                                {t('settings.enable_whatsapp_hint')}
                             </p>
                         </div>
                     {/if}
@@ -413,11 +413,11 @@
             <div class="flex items-center gap-3 p-2.5 rounded-lg bg-surface-elevated border border-border/50">
                 <i class="fa-solid fa-circle-info text-text-subtle"></i>
                 <span class="text-xs text-text-subtle">
-                    {msgConfig.active_platforms.length} active platform{msgConfig.active_platforms.length !== 1 ? 's' : ''}
+                    {t('settings.active_platforms', { count: msgConfig.active_platforms.length })}
                     {#if msgConfig.active_platforms.length > 0}
                         ({msgConfig.active_platforms.join(', ')})
                     {/if}
-                    — the primary messaging backend is used by the <code class="px-1 py-0.5 bg-zinc-900 rounded">message</code> tool.
+                    — {t('settings.active_platforms_detail')}
                 </span>
             </div>
         {/if}
@@ -428,12 +428,12 @@
 <section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden mb-4">
     <div class="border-b border-border">
         <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
-            <i class="fa-solid fa-shield-halved mr-1.5"></i> Dashboard Authentication
+            <i class="fa-solid fa-shield-halved mr-1.5"></i> {t('settings.dashboard_auth')}
         </h2>
     </div>
     <div class="p-4 space-y-4">
         {#if !authInfo}
-            <p class="text-text-subtle text-sm italic text-center py-2">Loading...</p>
+            <p class="text-text-subtle text-sm italic text-center py-2">{t('common.loading')}</p>
         {:else}
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <!-- Password Login -->
@@ -441,19 +441,19 @@
                     <div class="flex items-center justify-between p-3 bg-surface-elevated">
                         <div class="flex items-center gap-2.5">
                             <i class="fa-solid fa-key text-amber-400"></i>
-                            <span class="text-sm font-medium text-text">Password Login</span>
+                            <span class="text-sm font-medium text-text">{t('settings.password_login')}</span>
                         </div>
                         {#if authInfo.password_enabled}
-                            <span class="text-xs px-2 py-0.5 rounded-full border bg-green-900/40 text-green-400 border-green-800/50">Enabled</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full border bg-green-900/40 text-green-400 border-green-800/50">{t('common.enabled')}</span>
                         {:else}
-                            <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">Disabled</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">{t('common.disabled')}</span>
                         {/if}
                     </div>
                     <div class="p-3 text-sm text-text-subtle">
                         {#if authInfo.password_enabled}
-                            <p>Password authentication is active via the <code class="px-1 py-0.5 bg-zinc-900 rounded text-text-muted">DASHBOARD_PASSWORD</code> env var.</p>
+                            <p>{t('settings.password_active')}</p>
                         {:else}
-                            <p>Password login is disabled. Users must sign in via SSO.</p>
+                            <p>{t('settings.password_disabled')}</p>
                         {/if}
                     </div>
                 </div>
@@ -463,14 +463,14 @@
                     <div class="flex items-center justify-between p-3 bg-surface-elevated">
                         <div class="flex items-center gap-2.5">
                             <i class="fa-solid fa-right-to-bracket text-primary-400"></i>
-                            <span class="text-sm font-medium text-text">SSO Providers</span>
+                            <span class="text-sm font-medium text-text">{t('settings.sso_providers')}</span>
                         </div>
                         {#if authInfo.sso_providers.length > 0}
                             <span class="text-xs px-2 py-0.5 rounded-full border bg-green-900/40 text-green-400 border-green-800/50">
-                                {authInfo.sso_providers.length} configured
+                                {t('settings.sso_configured', { count: authInfo.sso_providers.length })}
                             </span>
                         {:else}
-                            <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">None</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">{t('common.none')}</span>
                         {/if}
                     </div>
                     <div class="p-3">
@@ -486,7 +486,7 @@
                             </div>
                         {:else}
                             <p class="text-sm text-text-subtle">
-                                No SSO providers configured. Add providers to <code class="px-1 py-0.5 bg-zinc-900 rounded text-text-muted">[dashboard].sso_providers</code> in config.
+                                {t('settings.no_sso')}
                             </p>
                         {/if}
                     </div>
@@ -497,7 +497,7 @@
                 <div class="p-3 rounded-lg bg-red-900/20 border border-red-800/40">
                     <p class="text-sm text-red-400">
                         <i class="fa-solid fa-triangle-exclamation mr-1"></i>
-                        Password login is disabled and no SSO providers are configured. You may be locked out after your session expires.
+                        {t('settings.lockout_warning')}
                     </p>
                 </div>
             {/if}
@@ -523,7 +523,7 @@ sso_allowed_emails = ["you@example.com"]</code>
 <section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden mb-4">
     <div class="border-b border-border">
         <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
-            <i class="fa-solid fa-lock mr-1.5"></i> Two-Factor Authentication
+            <i class="fa-solid fa-lock mr-1.5"></i> {t('settings.twofa')}
         </h2>
     </div>
     <div class="p-4">
@@ -535,7 +535,7 @@ sso_allowed_emails = ["you@example.com"]</code>
 <section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden mb-4">
     <div class="flex justify-between items-center border-b border-border">
         <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
-            <i class="fa-solid fa-link mr-1.5"></i> Connected Accounts (OAuth)
+            <i class="fa-solid fa-link mr-1.5"></i> {t('settings.oauth')}
         </h2>
         {#if oauth}
             <span class="text-xs text-text-muted pr-3">
@@ -545,7 +545,7 @@ sso_allowed_emails = ["you@example.com"]</code>
     </div>
     <div class="p-3">
         {#if oauth === null}
-            <p class="text-text-subtle text-sm italic text-center py-2">Loading...</p>
+            <p class="text-text-subtle text-sm italic text-center py-2">{t('common.loading')}</p>
         {:else}
             <!-- Connected providers -->
             {#each connectedProviders(oauth.providers) as provider (provider.id)}
@@ -570,7 +570,7 @@ sso_allowed_emails = ["you@example.com"]</code>
                                     onclick={(e) => { e.stopPropagation(); refreshToken(provider.id); }}
                                     disabled={refreshing !== null}
                                     class="px-2 py-0.5 text-xs border border-border rounded bg-surface hover:bg-surface-elevated transition-colors disabled:opacity-50"
-                                    title="Refresh all"
+                                    title={t('settings.refresh_all')}
                                 >
                                     <i class="fa-solid fa-arrows-rotate" class:fa-spin={refreshing === `${provider.id}:all`}></i>
                                 </button>
@@ -579,7 +579,7 @@ sso_allowed_emails = ["you@example.com"]</code>
                                 href={provider.authorize_url}
                                 onclick={(e) => e.stopPropagation()}
                                 class="px-2 py-0.5 text-xs border border-border rounded bg-surface hover:bg-surface-elevated transition-colors text-text-muted"
-                                title="Add account"
+                                title={t('settings.add_account')}
                             >
                                 <i class="fa-solid fa-plus"></i>
                             </a>
@@ -595,11 +595,11 @@ sso_allowed_emails = ["you@example.com"]</code>
                                         <div class="text-sm text-text truncate">{acct.email}</div>
                                         <div class="flex items-center gap-2 text-xs text-text-subtle">
                                             {#if acct.updated_at}
-                                                <span>Updated: {formatDateTime(acct.updated_at)}</span>
+                                                <span>{t('settings.updated')} {formatDateTime(acct.updated_at)}</span>
                                             {/if}
                                             {#if !acct.has_refresh_token}
                                                 <span class="text-amber-400">
-                                                    <i class="fa-solid fa-triangle-exclamation"></i> No refresh token
+                                                    <i class="fa-solid fa-triangle-exclamation"></i> {t('settings.no_refresh_token')}
                                                 </span>
                                             {/if}
                                         </div>
@@ -609,7 +609,7 @@ sso_allowed_emails = ["you@example.com"]</code>
                                             onclick={() => refreshToken(provider.id, acct.account)}
                                             disabled={refreshing !== null}
                                             class="px-2 py-1 text-xs border border-border rounded bg-surface hover:bg-surface-elevated transition-colors disabled:opacity-50"
-                                            title="Refresh"
+                                            title={t('common.refresh')}
                                         >
                                             <i class="fa-solid fa-arrows-rotate" class:fa-spin={refreshing === acct.account}></i>
                                         </button>
@@ -631,7 +631,7 @@ sso_allowed_emails = ["you@example.com"]</code>
             <!-- Available providers (not connected yet) -->
             {#if availableProviders(oauth.providers).length > 0}
                 <div class="mt-3 pt-3 border-t border-border/50">
-                    <p class="text-xs text-text-subtle mb-2 uppercase tracking-wider">Available Integrations</p>
+                    <p class="text-xs text-text-subtle mb-2 uppercase tracking-wider">{t('settings.available_integrations')}</p>
                     <div class="flex flex-wrap gap-2">
                         {#each availableProviders(oauth.providers) as provider (provider.id)}
                             {#if provider.configured}
@@ -655,9 +655,46 @@ sso_allowed_emails = ["you@example.com"]</code>
             {/if}
 
             {#if oauth.providers.length === 0}
-                <p class="text-text-subtle text-sm italic text-center py-2">No OAuth providers available.</p>
+                <p class="text-text-subtle text-sm italic text-center py-2">{t('settings.no_oauth')}</p>
             {/if}
         {/if}
+    </div>
+</section>
+
+<!-- Language -->
+<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden mb-4">
+    <div class="border-b border-border">
+        <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
+            <i class="fa-solid fa-language mr-1.5"></i> {t('settings.language')}
+        </h2>
+    </div>
+    <div class="p-4 space-y-3">
+        <p class="text-xs text-text-subtle">{t('settings.language_hint')}</p>
+        <div class="flex items-center gap-3">
+            <select
+                value={i18n.locale}
+                onchange={(e) => {
+                    const val = (e.target as HTMLSelectElement).value;
+                    setLocale(val);
+                    if (auth.userId) {
+                        const localeMap: Record<string, string> = {
+                            en: 'en-US', es: 'es-ES', fr: 'fr-FR', de: 'de-DE',
+                            ja: 'ja-JP', 'zh-CN': 'zh-CN', 'pt-BR': 'pt-BR',
+                        };
+                        api('POST', '/api/timezone', {
+                            user_id: auth.userId,
+                            locale: localeMap[val] ?? val,
+                        }).catch(() => {});
+                    }
+                }}
+                class="px-3 py-2 rounded-md border border-border bg-surface-elevated text-text text-sm
+                       focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+            >
+                {#each Object.entries(SUPPORTED_LOCALES) as [code, name]}
+                    <option value={code}>{name}</option>
+                {/each}
+            </select>
+        </div>
     </div>
 </section>
 
@@ -665,23 +702,23 @@ sso_allowed_emails = ["you@example.com"]</code>
 <section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden mb-4">
     <div class="border-b border-border">
         <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
-            <i class="fa-solid fa-clock mr-1.5"></i> Timezone & Locale
+            <i class="fa-solid fa-clock mr-1.5"></i> {t('settings.timezone_locale')}
         </h2>
     </div>
     <div class="p-4 space-y-4">
         {#if tzInfo}
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div class="p-3 rounded-lg bg-surface-elevated border border-border">
-                    <span class="text-text-muted text-xs uppercase tracking-wide">Current Time</span>
+                    <span class="text-text-muted text-xs uppercase tracking-wide">{t('settings.current_time')}</span>
                     <p class="text-text font-medium mt-1">{tzInfo.current_time_formatted}</p>
                 </div>
                 <div class="p-3 rounded-lg bg-surface-elevated border border-border">
-                    <span class="text-text-muted text-xs uppercase tracking-wide">Effective Timezone</span>
+                    <span class="text-text-muted text-xs uppercase tracking-wide">{t('settings.effective_timezone')}</span>
                     <p class="text-text font-medium mt-1">{tzInfo.effective_timezone}</p>
                     {#if tzInfo.user_timezone}
-                        <span class="text-xs text-text-subtle">(per-user override)</span>
+                        <span class="text-xs text-text-subtle">{t('settings.per_user_override')}</span>
                     {:else}
-                        <span class="text-xs text-text-subtle">(system default)</span>
+                        <span class="text-xs text-text-subtle">{t('settings.system_default')}</span>
                     {/if}
                 </div>
             </div>
@@ -689,12 +726,12 @@ sso_allowed_emails = ["you@example.com"]</code>
             <div class="space-y-3">
                 <div>
                     <div class="flex items-center gap-2 mb-1">
-                        <span class="text-xs font-medium text-text-muted uppercase tracking-wide">Timezone</span>
+                        <span class="text-xs font-medium text-text-muted uppercase tracking-wide">{t('settings.timezone')}</span>
                         <button
                             onclick={detectBrowserTimezone}
                             class="text-[10px] px-1.5 py-0.5 rounded border border-border bg-surface-elevated text-text-muted hover:text-text transition-colors"
                         >
-                            <i class="fa-solid fa-crosshairs mr-0.5"></i> Detect
+                            <i class="fa-solid fa-crosshairs mr-0.5"></i> {t('settings.detect')}
                         </button>
                     </div>
                     <div class="relative">
@@ -715,17 +752,17 @@ sso_allowed_emails = ["you@example.com"]</code>
                             {/each}
                         </datalist>
                     </div>
-                    <p class="text-xs text-text-subtle mt-1">IANA timezone name. Leave empty to use system default ({tzInfo.system_timezone}).</p>
+                    <p class="text-xs text-text-subtle mt-1">{t('settings.timezone_hint', { default: tzInfo.system_timezone })}</p>
                 </div>
 
                 <div>
                     <div class="flex items-center gap-2 mb-1">
-                        <span class="text-xs font-medium text-text-muted uppercase tracking-wide">Locale</span>
+                        <span class="text-xs font-medium text-text-muted uppercase tracking-wide">{t('settings.locale')}</span>
                         <button
                             onclick={detectBrowserLocale}
                             class="text-[10px] px-1.5 py-0.5 rounded border border-border bg-surface-elevated text-text-muted hover:text-text transition-colors"
                         >
-                            <i class="fa-solid fa-crosshairs mr-0.5"></i> Detect
+                            <i class="fa-solid fa-crosshairs mr-0.5"></i> {t('settings.detect')}
                         </button>
                     </div>
                     <input
@@ -735,7 +772,7 @@ sso_allowed_emails = ["you@example.com"]</code>
                         class="w-full px-3 py-2 rounded-md border border-border bg-surface-elevated text-text text-sm
                                placeholder-text-muted/50 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
                     />
-                    <p class="text-xs text-text-subtle mt-1">BCP 47 locale tag (e.g. en-US, de-DE, ja-JP). Leave empty to use system default ({tzInfo.system_locale}).</p>
+                    <p class="text-xs text-text-subtle mt-1">{t('settings.locale_hint', { default: tzInfo.system_locale })}</p>
                 </div>
 
                 <div class="flex items-center gap-3">
@@ -746,18 +783,18 @@ sso_allowed_emails = ["you@example.com"]</code>
                                hover:bg-primary-500 transition-colors disabled:opacity-50"
                     >
                         {#if tzSaving}
-                            <i class="fa-solid fa-spinner fa-spin mr-1"></i> Saving...
+                            <i class="fa-solid fa-spinner fa-spin mr-1"></i> {t('common.saving')}
                         {:else}
-                            <i class="fa-solid fa-floppy-disk mr-1"></i> Save
+                            <i class="fa-solid fa-floppy-disk mr-1"></i> {t('common.save')}
                         {/if}
                     </button>
                     {#if tzMessage}
-                        <span class="text-xs {tzMessage === 'Saved' ? 'text-green-400' : 'text-red-400'}">{tzMessage}</span>
+                        <span class="text-xs {tzMessage === t('common.saved') ? 'text-green-400' : 'text-red-400'}">{tzMessage}</span>
                     {/if}
                 </div>
             </div>
         {:else}
-            <p class="text-text-subtle text-sm italic text-center py-2">Loading...</p>
+            <p class="text-text-subtle text-sm italic text-center py-2">{t('common.loading')}</p>
         {/if}
     </div>
 </section>
@@ -766,11 +803,11 @@ sso_allowed_emails = ["you@example.com"]</code>
 <section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden">
     <div class="border-b border-border">
         <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
-            <i class="fa-solid fa-circle-info mr-1.5"></i> Configuration Reference
+            <i class="fa-solid fa-circle-info mr-1.5"></i> {t('settings.config_reference')}
         </h2>
     </div>
     <div class="p-4 space-y-3 text-xs text-text-subtle">
-        <p>Messaging and OAuth configuration is done via the TOML config file and environment variables. Changes require a container restart.</p>
+        <p>{t('settings.config_hint')}</p>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div class="p-3 rounded bg-surface-elevated border border-border/50">
                 <p class="font-medium text-text-muted mb-1.5">Telegram</p>

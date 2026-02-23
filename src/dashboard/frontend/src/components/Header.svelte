@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { t } from '../lib/i18n';
     import { api } from '../lib/api';
     import { dashboard, auth, refreshAll } from '../lib/state.svelte';
     import type { AgentStatus, ActionResponse } from '../lib/types';
@@ -7,7 +8,7 @@
     let toolsCount = $state(0);
     let statusClass = $state('');
     let statusIcon = $state('fa-spinner fa-spin');
-    let statusText = $state('loading...');
+    let statusText = $state(t('header.loading'));
     let disconnected = $state(false);
 
     async function loadStatus() {
@@ -20,17 +21,17 @@
             if (status.paused) {
                 statusClass = 'badge-paused';
                 statusIcon = 'fa-circle-pause';
-                statusText = 'paused';
+                statusText = t('header.paused');
             } else {
                 statusClass = 'badge-running';
                 statusIcon = 'fa-circle-check';
-                statusText = 'running';
+                statusText = t('header.running');
             }
         } catch {
             disconnected = true;
             statusClass = 'text-error-500';
             statusIcon = 'fa-circle-xmark';
-            statusText = 'disconnected';
+            statusText = t('header.disconnected');
         }
     }
 
@@ -65,13 +66,13 @@
 <header class="flex justify-between items-center px-6 py-4 border-b border-border bg-surface">
     <div class="flex items-center gap-3">
         <h1 class="text-lg font-semibold tracking-tight text-primary-400">
-            <i class="fa-solid fa-robot mr-1"></i> safe-agent
+            <i class="fa-solid fa-robot mr-1"></i> {t('header.title')}
         </h1>
         <span class="text-xs px-2 py-0.5 rounded-full font-medium {statusClass}">
             <i class="fa-solid {statusIcon} mr-1"></i>{statusText}
         </span>
         <span class="text-xs px-2 py-0.5 rounded-full font-medium bg-primary-950 text-primary-400">
-            <i class="fa-solid fa-screwdriver-wrench mr-1"></i>{toolsCount} tools
+            <i class="fa-solid fa-screwdriver-wrench mr-1"></i>{t('header.tools_count', { count: toolsCount })}
         </span>
     </div>
     <div class="flex gap-2">
@@ -80,14 +81,14 @@
                 onclick={resume}
                 class="px-4 py-2 border border-border rounded-md bg-surface text-sm hover:bg-surface-elevated transition-colors"
             >
-                <i class="fa-solid fa-play mr-1"></i> Resume
+                <i class="fa-solid fa-play mr-1"></i> {t('header.resume')}
             </button>
         {:else}
             <button
                 onclick={pause}
                 class="px-4 py-2 border border-border rounded-md bg-surface text-sm hover:bg-surface-elevated transition-colors"
             >
-                <i class="fa-solid fa-pause mr-1"></i> Pause
+                <i class="fa-solid fa-pause mr-1"></i> {t('header.pause')}
             </button>
         {/if}
 
@@ -95,7 +96,7 @@
             onclick={forceTick}
             class="px-4 py-2 border border-border rounded-md bg-surface text-sm hover:bg-surface-elevated transition-colors"
         >
-            <i class="fa-solid fa-bolt mr-1"></i> Force Tick
+            <i class="fa-solid fa-bolt mr-1"></i> {t('header.force_tick')}
         </button>
 
         {#if auth.subject}
@@ -111,7 +112,7 @@
         <button
             onclick={logout}
             class="px-4 py-2 border border-border rounded-md bg-surface text-sm hover:bg-surface-elevated transition-colors text-text-muted"
-            title="Sign out"
+            title={t('header.sign_out')}
         >
             <i class="fa-solid fa-right-from-bracket"></i>
         </button>

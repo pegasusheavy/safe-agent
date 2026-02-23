@@ -8,11 +8,15 @@ use crate::tools::ToolRegistry;
 /// `timezone` is the IANA timezone name for the user (e.g. "America/New_York").
 /// When provided, the current local time in that timezone is injected into the
 /// prompt so the LLM can give time-aware responses.
+///
+/// `locale` is a BCP 47 locale tag (e.g. "en-US", "ja-JP"). When provided and
+/// not English, instructs the LLM to respond in the user's preferred language.
 pub fn system_prompt(
     personality: &str,
     agent_name: &str,
     tools: Option<&ToolRegistry>,
     timezone: Option<&str>,
+    locale: Option<&str>,
     prompt_skills: &[crate::skills::PromptSkill],
 ) -> String {
     let base = if personality.is_empty() {
@@ -27,6 +31,7 @@ pub fn system_prompt(
     };
 
     let time_section = build_time_section(timezone);
+    let locale_section = build_locale_section(locale);
     let skills_section = build_prompt_skills_section(prompt_skills);
 
     format!(
@@ -36,6 +41,7 @@ You are communicating with the user via Telegram.
 Keep replies concise and conversational.
 Do not use markdown formatting unless the user asks for it.
 {time_section}
+{locale_section}
 {tool_section}
 {skills_section}== SKILL SYSTEM ==
 
@@ -231,6 +237,34 @@ fn build_time_section(timezone: Option<&str>) -> String {
     )
 }
 
+fn build_locale_section(locale: Option<&str>) -> String {
+    let code = match locale {
+        Some(l) if !l.is_empty() => l,
+        _ => return String::new(),
+    };
+
+    let lang = match code.split('-').next().unwrap_or(code) {
+        "en" => return String::new(),
+        "es" => "Spanish",
+        "fr" => "French",
+        "de" => "German",
+        "ja" => "Japanese",
+        "zh" => "Chinese (Simplified)",
+        "pt" => "Portuguese (Brazilian)",
+        "ko" => "Korean",
+        "it" => "Italian",
+        "ru" => "Russian",
+        "ar" => "Arabic",
+        "hi" => "Hindi",
+        other => other,
+    };
+
+    format!(
+        "The user's preferred language is {lang} ({code}). \
+         Always respond in {lang} unless the user explicitly writes in or asks for a different language.\n"
+    )
+}
+
 /// Build the section that injects loaded prompt-skill bodies into the system
 /// prompt.  Returns an empty string when no skills are loaded so the prompt
 /// stays clean for the default (no-plugin) case.
@@ -359,7 +393,7 @@ mod tests {
 
     #[test]
     fn test_system_prompt_empty_personality() {
-        let prompt = system_prompt("", "TestAgent", None, None, &[]);
+        let prompt = system_prompt("", "TestAgent", None, None, None, &[]);
         assert!(prompt.contains("You are TestAgent, a helpful AI assistant."));
         assert!(!prompt.contains("== AVAILABLE TOOLS =="));
     }
@@ -367,14 +401,14 @@ mod tests {
     #[test]
     fn test_system_prompt_with_personality() {
         let personality = "You are a specialized coding assistant.";
-        let prompt = system_prompt(personality, "TestAgent", None, None, &[]);
+        let prompt = system_prompt(personality, "TestAgent", None, None, None, &[]);
         assert!(prompt.contains("You are a specialized coding assistant."));
         assert!(!prompt.contains("You are TestAgent, a helpful AI assistant."));
     }
 
     #[test]
     fn test_system_prompt_none_tools() {
-        let prompt = system_prompt("", "Agent", None, None, &[]);
+        let prompt = system_prompt("", "Agent", None, None, None, &[]);
         assert!(!prompt.contains("== AVAILABLE TOOLS =="));
         assert!(!prompt.contains("== TOOL CALLING =="));
     }
@@ -382,7 +416,7 @@ mod tests {
     #[test]
     fn test_system_prompt_empty_registry() {
         let reg = ToolRegistry::new();
-        let prompt = system_prompt("", "Agent", Some(&reg), None, &[]);
+        let prompt = system_prompt("", "Agent", Some(&reg), None, None, &[]);
         assert!(!prompt.contains("test_tool"));
         assert!(prompt.contains("== SKILL SYSTEM =="));
     }
@@ -390,7 +424,7 @@ mod tests {
     #[test]
     fn test_system_prompt_with_registry_containing_tool() {
         let reg = registry_with_mock_tool();
-        let prompt = system_prompt("", "Agent", Some(&reg), None, &[]);
+        let prompt = system_prompt("", "Agent", Some(&reg), None, None, &[]);
 
         assert!(prompt.contains("== AVAILABLE TOOLS =="));
         assert!(prompt.contains("test_tool"));
@@ -402,7 +436,7 @@ mod tests {
     #[test]
     fn test_build_tool_section_indirect() {
         let reg = registry_with_mock_tool();
-        let prompt = system_prompt("", "Agent", Some(&reg), None, &[]);
+        let prompt = system_prompt("", "Agent", Some(&reg), None, None, &[]);
 
         assert!(prompt.contains("### test_tool"));
         assert!(prompt.contains("A tool for testing"));
@@ -411,14 +445,14 @@ mod tests {
 
     #[test]
     fn test_system_prompt_includes_timezone() {
-        let prompt = system_prompt("", "Agent", None, Some("America/New_York"), &[]);
+        let prompt = system_prompt("", "Agent", None, Some("America/New_York"), None, &[]);
         assert!(prompt.contains("America/New_York"));
         assert!(prompt.contains("current date and time"));
     }
 
     #[test]
     fn test_system_prompt_utc_fallback() {
-        let prompt = system_prompt("", "Agent", None, Some("UTC"), &[]);
+        let prompt = system_prompt("", "Agent", None, Some("UTC"), None, &[]);
         assert!(prompt.contains("UTC"));
     }
 
@@ -436,7 +470,7 @@ mod tests {
             references: HashMap::new(),
         }];
 
-        let prompt = system_prompt("", "Agent", None, None, &skills);
+        let prompt = system_prompt("", "Agent", None, None, None, &skills);
         assert!(prompt.contains("== LOADED SKILLS =="));
         assert!(prompt.contains("### test-skill"));
         assert!(prompt.contains("Always be helpful and concise."));
@@ -444,7 +478,7 @@ mod tests {
 
     #[test]
     fn test_system_prompt_no_skills_section_when_empty() {
-        let prompt = system_prompt("", "Agent", None, None, &[]);
+        let prompt = system_prompt("", "Agent", None, None, None, &[]);
         assert!(!prompt.contains("== LOADED SKILLS =="));
     }
 
@@ -466,7 +500,7 @@ mod tests {
             references: refs,
         }];
 
-        let prompt = system_prompt("", "Agent", None, None, &skills);
+        let prompt = system_prompt("", "Agent", None, None, None, &skills);
         assert!(prompt.contains("#### References"));
         assert!(prompt.contains("##### a-rules.md"));
         assert!(prompt.contains("No globals allowed."));

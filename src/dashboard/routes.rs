@@ -275,6 +275,13 @@ pub fn build(
         .route("/api/timezone/convert", get(handlers::convert_time))
         // API — LLM Backends (plugin architecture)
         .route("/api/llm/backends", get(handlers::llm_backends))
+        // API — LLM Advisor & Ollama Management
+        .route("/api/llm/advisor/system", get(handlers::llm_system_specs))
+        .route("/api/llm/advisor/recommend", get(handlers::llm_recommend))
+        .route("/api/llm/ollama/status", get(handlers::ollama_status))
+        .route("/api/llm/ollama/pull", post(handlers::ollama_pull))
+        .route("/api/llm/ollama/models/{tag}", delete(handlers::ollama_delete))
+        .route("/api/llm/ollama/configure", post(handlers::ollama_configure))
         // API — Federation
         .route("/api/federation/status", get(handlers::federation_status))
         .route("/api/federation/peers", get(handlers::federation_peers))

@@ -2198,6 +2198,167 @@ pub async fn convert_time(
     }
 }
 
+// -- LLM Advisor & Ollama Management ----------------------------------------
+
+pub async fn llm_system_specs() -> Json<serde_json::Value> {
+    let report = crate::llm::advisor::detect_system();
+    Json(serde_json::json!(report))
+}
+
+#[derive(Deserialize)]
+pub struct RecommendQuery {
+    #[serde(default)]
+    pub use_case: Option<String>,
+    #[serde(default = "default_recommend_limit")]
+    pub limit: usize,
+}
+fn default_recommend_limit() -> usize { 20 }
+
+pub async fn llm_recommend(
+    Query(params): Query<RecommendQuery>,
+) -> Json<serde_json::Value> {
+    let recommendations = crate::llm::advisor::recommend_models(
+        params.use_case.as_deref(),
+        params.limit,
+    );
+    Json(serde_json::json!({ "models": recommendations }))
+}
+
+pub async fn ollama_status() -> Json<serde_json::Value> {
+    let status = crate::llm::advisor::check_ollama();
+    Json(serde_json::json!(status))
+}
+
+#[derive(Deserialize)]
+pub struct OllamaPullRequest {
+    pub tag: String,
+}
+
+pub async fn ollama_pull(
+    Json(body): Json<OllamaPullRequest>,
+) -> impl IntoResponse {
+    use llmfit_core::providers::{ModelProvider, OllamaProvider, PullEvent};
+
+    let provider = OllamaProvider::default();
+    if !provider.is_available() {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "ok": false, "error": "Ollama is not running" })),
+        );
+    }
+
+    match provider.start_pull(&body.tag) {
+        Ok(handle) => {
+            let mut last_status = String::new();
+            let mut last_percent: Option<f64> = None;
+            loop {
+                match handle.receiver.recv() {
+                    Ok(PullEvent::Progress { status, percent }) => {
+                        last_status = status;
+                        last_percent = percent;
+                    }
+                    Ok(PullEvent::Done) => {
+                        return (
+                            StatusCode::OK,
+                            Json(serde_json::json!({
+                                "ok": true,
+                                "tag": body.tag,
+                                "status": "complete",
+                            })),
+                        );
+                    }
+                    Ok(PullEvent::Error(msg)) => {
+                        return (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(serde_json::json!({
+                                "ok": false,
+                                "error": msg,
+                            })),
+                        );
+                    }
+                    Err(_) => {
+                        if last_status.is_empty() {
+                            return (
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                Json(serde_json::json!({
+                                    "ok": false,
+                                    "error": "Pull channel closed unexpectedly",
+                                })),
+                            );
+                        }
+                        return (
+                            StatusCode::OK,
+                            Json(serde_json::json!({
+                                "ok": true,
+                                "tag": body.tag,
+                                "status": last_status,
+                                "percent": last_percent,
+                            })),
+                        );
+                    }
+                }
+            }
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(serde_json::json!({ "ok": false, "error": e })),
+        ),
+    }
+}
+
+pub async fn ollama_delete(
+    Path(tag): Path<String>,
+) -> impl IntoResponse {
+    let host = std::env::var("OLLAMA_HOST")
+        .unwrap_or_else(|_| "http://localhost:11434".to_string());
+
+    let client = reqwest::Client::new();
+    let resp = client
+        .delete(format!("{}/api/delete", host))
+        .json(&serde_json::json!({ "name": tag }))
+        .send()
+        .await;
+
+    match resp {
+        Ok(r) if r.status().is_success() => (
+            StatusCode::OK,
+            Json(serde_json::json!({ "ok": true, "deleted": tag })),
+        ),
+        Ok(r) => {
+            let msg = r.text().await.unwrap_or_default();
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({ "ok": false, "error": msg })),
+            )
+        }
+        Err(e) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+        ),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct OllamaConfigureRequest {
+    pub model: String,
+}
+
+pub async fn ollama_configure(
+    State(_state): State<DashState>,
+    Json(body): Json<OllamaConfigureRequest>,
+) -> Json<serde_json::Value> {
+    info!(model = %body.model, "setting Ollama as active backend");
+    unsafe { std::env::set_var("OLLAMA_MODEL", &body.model); }
+    unsafe { std::env::set_var("LLM_BACKEND", "ollama"); }
+
+    Json(serde_json::json!({
+        "ok": true,
+        "backend": "ollama",
+        "model": body.model,
+        "note": "Backend switch takes effect on next LLM request. For persistence, update config.toml.",
+    }))
+}
+
 /// Return a human-friendly label like "Today", "Yesterday", or the date.
 fn relative_day_label(utc_dt: &chrono::DateTime<chrono::Utc>, tz: &chrono_tz::Tz) -> String {
     let local = utc_dt.with_timezone(tz);

@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import { t } from '../lib/i18n';
     import { auth } from '../lib/state.svelte';
 
     interface PasskeyInfo {
@@ -47,7 +48,7 @@
             const pkData = await passkeysRes.json();
             passkeys = pkData.passkeys || [];
         } catch {
-            setMessage('Failed to load 2FA status', 'error');
+            setMessage(t('twofa.load_failed'), 'error');
         }
         loading = false;
     }
@@ -242,12 +243,12 @@
     <div class="card">
         <p class="text-text-muted text-sm">
             <i class="fa-solid fa-circle-info mr-1"></i>
-            Two-factor authentication is only available for multi-user accounts.
+            {t('twofa.multi_user_only')}
         </p>
     </div>
 {:else if loading}
     <div class="card">
-        <p class="text-text-muted text-sm"><i class="fa-solid fa-spinner fa-spin mr-1"></i> Loading 2FA status...</p>
+        <p class="text-text-muted text-sm"><i class="fa-solid fa-spinner fa-spin mr-1"></i> {t('twofa.loading_status')}</p>
     </div>
 {:else if status}
     <div class="space-y-4">
@@ -264,25 +265,25 @@
                 <div class="flex items-center gap-2.5">
                     <i class="fa-solid fa-clock text-primary-400"></i>
                     <div>
-                        <span class="text-sm font-medium text-text">Authenticator App (TOTP)</span>
-                        <p class="text-xs text-text-subtle mt-0.5">Use an app like Google Authenticator or Authy</p>
+                        <span class="text-sm font-medium text-text">{t('twofa.authenticator_app')}</span>
+                        <p class="text-xs text-text-subtle mt-0.5">{t('twofa.authenticator_hint')}</p>
                     </div>
                 </div>
                 {#if status.totp_enabled}
-                    <span class="text-xs px-2 py-0.5 rounded-full border bg-green-900/40 text-green-400 border-green-800/50">Enabled</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full border bg-green-900/40 text-green-400 border-green-800/50">{t('twofa.enabled_badge')}</span>
                 {:else}
-                    <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">Disabled</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">{t('twofa.disabled_badge')}</span>
                 {/if}
             </div>
             <div class="p-4">
                 {#if status.totp_enabled}
                     <!-- Disable TOTP -->
                     <p class="text-sm text-text-subtle mb-3">
-                        TOTP two-factor authentication is active. Enter your current code to disable it.
+                        {t('twofa.totp_enabled')}
                     </p>
                     <div class="flex gap-2 items-end">
                         <div>
-                            <label class="text-xs text-text-muted block mb-1">TOTP Code</label>
+                            <label class="text-xs text-text-muted block mb-1">{t('twofa.totp_code')}</label>
                             <input
                                 type="text"
                                 bind:value={disableCode}
@@ -299,25 +300,25 @@
                             {#if disabling}
                                 <i class="fa-solid fa-spinner fa-spin mr-1"></i>
                             {/if}
-                            Disable 2FA
+                            {t('twofa.disable_2fa')}
                         </button>
                     </div>
                 {:else if setupStep === 'idle'}
                     <!-- Start setup -->
                     <p class="text-sm text-text-subtle mb-3">
-                        Add an extra layer of security by requiring a time-based code from your phone when signing in.
+                        {t('twofa.setup_desc')}
                     </p>
                     <button
                         onclick={startTotpSetup}
                         class="px-4 py-2 text-sm rounded bg-primary-600 text-white hover:bg-primary-500 transition-colors"
                     >
-                        <i class="fa-solid fa-shield-halved mr-1"></i> Set Up Authenticator
+                        <i class="fa-solid fa-shield-halved mr-1"></i> {t('twofa.setup_authenticator')}
                     </button>
                 {:else if setupStep === 'showing_secret'}
                     <!-- Show secret + verify -->
                     <div class="space-y-4">
                         <div class="p-4 rounded-lg bg-surface border border-border">
-                            <p class="text-sm text-text mb-2 font-medium">1. Scan with your authenticator app:</p>
+                            <p class="text-sm text-text mb-2 font-medium">{t('twofa.scan_step')}</p>
                             <div class="bg-white p-4 rounded-lg inline-block">
                                 <!-- QR code rendered via otpauth URI — using a simple text fallback -->
                                 <img
@@ -326,22 +327,22 @@
                                     class="w-48 h-48"
                                 />
                             </div>
-                            <p class="text-xs text-text-muted mt-3">Or enter this key manually:</p>
+                            <p class="text-xs text-text-muted mt-3">{t('twofa.manual_key')}</p>
                             <code class="block mt-1 px-3 py-2 rounded bg-bg border border-border text-sm font-mono break-all select-all">
                                 {totpSecret}
                             </code>
                         </div>
 
                         <div class="p-4 rounded-lg bg-surface border border-border">
-                            <p class="text-sm text-text mb-2 font-medium">2. Save your recovery codes:</p>
+                            <p class="text-sm text-text mb-2 font-medium">{t('twofa.save_recovery')}</p>
                             <p class="text-xs text-text-subtle mb-2">
-                                Store these codes somewhere safe. Each code can only be used once.
+                                {t('twofa.recovery_hint')}
                             </p>
                             <button
                                 onclick={() => showRecoveryCodes = !showRecoveryCodes}
                                 class="text-xs text-primary-400 hover:text-primary-300 mb-2"
                             >
-                                {showRecoveryCodes ? 'Hide' : 'Show'} recovery codes
+                                {showRecoveryCodes ? t('twofa.hide_codes') : t('twofa.show_codes')}
                             </button>
                             {#if showRecoveryCodes}
                                 <div class="grid grid-cols-2 gap-1 font-mono text-xs">
@@ -355,8 +356,8 @@
                         </div>
 
                         <div class="p-4 rounded-lg bg-surface border border-border">
-                            <p class="text-sm text-text mb-2 font-medium">3. Verify your setup:</p>
-                            <p class="text-xs text-text-subtle mb-2">Enter a code from your authenticator to confirm.</p>
+                            <p class="text-sm text-text mb-2 font-medium">{t('twofa.verify_step')}</p>
+                            <p class="text-xs text-text-subtle mb-2">{t('twofa.verify_hint')}</p>
                             <div class="flex gap-2">
                                 <input
                                     type="text"
@@ -371,13 +372,13 @@
                                     disabled={verifyCode.trim().length !== 6}
                                     class="px-4 py-1.5 text-sm rounded bg-green-600 text-white hover:bg-green-500 transition-colors disabled:opacity-50"
                                 >
-                                    <i class="fa-solid fa-check mr-1"></i> Verify &amp; Enable
+                                    <i class="fa-solid fa-check mr-1"></i> {t('twofa.verify_enable')}
                                 </button>
                                 <button
                                     onclick={() => { setupStep = 'idle'; totpSecret = ''; otpauthUri = ''; }}
                                     class="px-3 py-1.5 text-sm rounded border border-border text-text-muted hover:bg-surface-elevated transition-colors"
                                 >
-                                    Cancel
+                                    {t('common.cancel')}
                                 </button>
                             </div>
                         </div>
@@ -393,16 +394,16 @@
                     <div class="flex items-center gap-2.5">
                         <i class="fa-solid fa-fingerprint text-amber-400"></i>
                         <div>
-                            <span class="text-sm font-medium text-text">Passkeys</span>
-                            <p class="text-xs text-text-subtle mt-0.5">Use biometrics, security keys, or your device's screen lock</p>
+                        <span class="text-sm font-medium text-text">{t('twofa.passkeys')}</span>
+                        <p class="text-xs text-text-subtle mt-0.5">{t('twofa.passkeys_desc')}</p>
                         </div>
                     </div>
                     {#if status.passkey_count > 0}
                         <span class="text-xs px-2 py-0.5 rounded-full border bg-green-900/40 text-green-400 border-green-800/50">
-                            {status.passkey_count} registered
+                            {t('twofa.registered', { count: status.passkey_count })}
                         </span>
                     {:else}
-                        <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">None</span>
+                        <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">{t('twofa.none_badge')}</span>
                     {/if}
                 </div>
                 <div class="p-4">
@@ -415,13 +416,13 @@
                                         <i class="fa-solid fa-key text-text-muted"></i>
                                         <div>
                                             <span class="text-sm text-text">{pk.name}</span>
-                                            <span class="text-xs text-text-subtle ml-2">Added {timeAgo(pk.created_at)}</span>
+                                            <span class="text-xs text-text-subtle ml-2">{t('twofa.added_label')} {timeAgo(pk.created_at)}</span>
                                         </div>
                                     </div>
                                     <button
                                         onclick={() => deletePasskey(pk)}
                                         class="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
-                                        title="Delete passkey"
+                                        title={t('twofa.delete_passkey')}
                                     >
                                         <i class="fa-solid fa-trash"></i>
                                     </button>
@@ -433,11 +434,11 @@
                     <!-- Register new passkey -->
                     <div class="flex items-end gap-2">
                         <div class="flex-1">
-                            <label class="text-xs text-text-muted block mb-1">Passkey Name</label>
+                            <label class="text-xs text-text-muted block mb-1">{t('twofa.passkey_name')}</label>
                             <input
                                 type="text"
                                 bind:value={passkeyName}
-                                placeholder="e.g. MacBook Touch ID"
+                                placeholder={t('twofa.passkey_placeholder')}
                                 class="w-full bg-bg border border-border rounded px-3 py-1.5 text-sm"
                             />
                         </div>
@@ -447,9 +448,9 @@
                             class="px-4 py-1.5 text-sm rounded bg-primary-600 text-white hover:bg-primary-500 transition-colors disabled:opacity-50 whitespace-nowrap"
                         >
                             {#if registeringPasskey}
-                                <i class="fa-solid fa-spinner fa-spin mr-1"></i> Registering...
+                                <i class="fa-solid fa-spinner fa-spin mr-1"></i> {t('twofa.registering')}
                             {:else}
-                                <i class="fa-solid fa-plus mr-1"></i> Add Passkey
+                                <i class="fa-solid fa-plus mr-1"></i> {t('twofa.add_passkey')}
                             {/if}
                         </button>
                     </div>
@@ -457,7 +458,7 @@
                     {#if passkeys.length === 0}
                         <p class="text-xs text-text-subtle mt-3">
                             <i class="fa-solid fa-circle-info mr-1"></i>
-                            Passkeys use your device's biometric sensor, security key, or screen lock for passwordless 2FA.
+                            {t('twofa.passkey_info')}
                         </p>
                     {/if}
                 </div>
@@ -468,9 +469,9 @@
         <div class="p-3 rounded-lg bg-surface-elevated border border-border/50">
             <p class="text-xs text-text-subtle">
                 <i class="fa-solid fa-circle-info mr-1"></i>
-                When 2FA is enabled, you'll need to provide a second factor (authenticator code or passkey) after entering your password.
+                {t('twofa.info_box')}
                 {#if status.totp_enabled && status.passkey_count > 0}
-                    You can use either your authenticator app or a passkey.
+                    {t('twofa.info_both')}
                 {/if}
             </p>
         </div>

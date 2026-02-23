@@ -14,7 +14,23 @@
       "Bash(sudo cp:*)",
       "Bash(sudo systemctl start:*)",
       "Bash(systemctl status:*)",
-      "Bash(sudo kill:*)"
+      "Bash(sudo kill:*)",
+      "Bash(rustc:*)",
+      "Bash(cargo test:*)",
+      "Bash(grep:*)",
+      "Bash(wc:*)",
+      "Bash(find:*)",
+      "Bash(tail:*)",
+      "Bash(grep ^warning::*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git config:*)",
+      "Bash(git add:*)",
+      "Bash(git reset:*)",
+      "Bash(cd:*)",
+      "Bash(git:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)"
     ]
   }
 }

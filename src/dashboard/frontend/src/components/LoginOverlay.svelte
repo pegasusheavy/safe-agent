@@ -1,5 +1,6 @@
 <script lang="ts">
     import { auth } from '../lib/state.svelte';
+    import { t } from '../lib/i18n';
 
     interface SsoProvider {
         id: string;
@@ -75,10 +76,10 @@
             } else if (res.ok && data.ok) {
                 completeLogin(data);
             } else {
-                error = data.error || 'Login failed';
+                error = data.error || t('login.login_failed');
             }
         } catch {
-            error = 'Connection failed';
+            error = t('common.connection_failed');
         } finally {
             loading = false;
         }
@@ -106,10 +107,10 @@
             if (res.ok && data.ok) {
                 completeLogin(data);
             } else {
-                error = data.error || 'Verification failed';
+                error = data.error || t('login.verification_failed');
             }
         } catch {
-            error = 'Connection failed';
+            error = t('common.connection_failed');
         } finally {
             loading = false;
         }
@@ -128,7 +129,7 @@
             });
             const startData = await startRes.json();
             if (!startData.ok) {
-                error = startData.error || 'Failed to start passkey authentication';
+                error = startData.error || t('login.passkey_start_failed');
                 passkeyLoading = false;
                 return;
             }
@@ -144,7 +145,7 @@
 
             const credential = await navigator.credentials.get(options) as PublicKeyCredential;
             if (!credential) {
-                error = 'Passkey authentication was cancelled';
+                error = t('login.passkey_cancelled');
                 passkeyLoading = false;
                 return;
             }
@@ -178,13 +179,13 @@
             if (finishRes.ok && finishData.ok) {
                 completeLogin(finishData);
             } else {
-                error = finishData.error || 'Passkey verification failed';
+                error = finishData.error || t('login.passkey_verify_failed');
             }
         } catch (e: any) {
             if (e.name === 'NotAllowedError') {
-                error = 'Passkey authentication was cancelled or timed out';
+                error = t('login.passkey_cancelled_timeout');
             } else {
-                error = `Passkey authentication failed: ${e.message}`;
+                error = t('login.passkey_failed', { message: e.message });
             }
         } finally {
             passkeyLoading = false;
@@ -243,16 +244,16 @@
     <div class="w-full max-w-sm mx-4 p-8 rounded-xl border border-border bg-surface shadow-2xl">
         <div class="text-center mb-6">
             <i class="fa-solid fa-robot text-3xl text-primary-400 mb-3"></i>
-            <h2 class="text-lg font-semibold text-text">safe-agent</h2>
+            <h2 class="text-lg font-semibold text-text">{t('login.title')}</h2>
             <p class="text-sm text-text-muted mt-1">
                 {#if twoFaRequired}
-                    Two-factor authentication required
+                    {t('login.2fa_required')}
                 {:else if passwordEnabled && ssoProviders.length > 0}
-                    Sign in to continue
+                    {t('login.sign_in_continue')}
                 {:else if ssoProviders.length > 0}
-                    Sign in with your account
+                    {t('login.sign_in_account')}
                 {:else}
-                    Enter the dashboard password to continue
+                    {t('login.enter_password')}
                 {/if}
             </p>
         </div>
@@ -281,9 +282,9 @@
                                disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {#if passkeyLoading}
-                            <i class="fa-solid fa-spinner fa-spin"></i> Waiting for passkey...
+                            <i class="fa-solid fa-spinner fa-spin"></i> {t('login.waiting_passkey')}
                         {:else}
-                            <i class="fa-solid fa-fingerprint text-amber-400"></i> Use Passkey
+                            <i class="fa-solid fa-fingerprint text-amber-400"></i> {t('login.use_passkey')}
                         {/if}
                     </button>
                 {/if}
@@ -294,7 +295,7 @@
                             <div class="w-full border-t border-border"></div>
                         </div>
                         <div class="relative flex justify-center text-xs uppercase">
-                            <span class="bg-surface px-3 text-text-muted tracking-wider">or</span>
+                            <span class="bg-surface px-3 text-text-muted tracking-wider">{t('common.or')}</span>
                         </div>
                     </div>
                 {/if}
@@ -303,7 +304,7 @@
                     {#if !showRecoveryInput}
                         <div>
                             <label class="block mb-3">
-                                <span class="text-xs font-medium text-text-muted uppercase tracking-wide">Authenticator Code</span>
+                                <span class="text-xs font-medium text-text-muted uppercase tracking-wide">{t('login.authenticator_code')}</span>
                                 <input
                                     type="text"
                                     bind:value={totpCode}
@@ -326,9 +327,9 @@
                                        hover:bg-primary-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {#if loading}
-                                    <i class="fa-solid fa-spinner fa-spin mr-1"></i> Verifying...
+                                    <i class="fa-solid fa-spinner fa-spin mr-1"></i> {t('common.verifying')}
                                 {:else}
-                                    <i class="fa-solid fa-check mr-1"></i> Verify
+                                    <i class="fa-solid fa-check mr-1"></i> {t('common.verify')}
                                 {/if}
                             </button>
                         </div>
@@ -337,12 +338,12 @@
                             onclick={() => { showRecoveryInput = true; error = ''; }}
                             class="w-full text-xs text-text-muted hover:text-primary-400 transition-colors"
                         >
-                            Use a recovery code instead
+                            {t('login.use_recovery')}
                         </button>
                     {:else}
                         <div>
                             <label class="block mb-3">
-                                <span class="text-xs font-medium text-text-muted uppercase tracking-wide">Recovery Code</span>
+                                <span class="text-xs font-medium text-text-muted uppercase tracking-wide">{t('login.recovery_code')}</span>
                                 <input
                                     type="text"
                                     bind:value={recoveryCode}
@@ -364,9 +365,9 @@
                                        hover:bg-primary-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {#if loading}
-                                    <i class="fa-solid fa-spinner fa-spin mr-1"></i> Verifying...
+                                    <i class="fa-solid fa-spinner fa-spin mr-1"></i> {t('common.verifying')}
                                 {:else}
-                                    <i class="fa-solid fa-check mr-1"></i> Verify Recovery Code
+                                    <i class="fa-solid fa-check mr-1"></i> {t('login.verify_recovery')}
                                 {/if}
                             </button>
                         </div>
@@ -375,7 +376,7 @@
                             onclick={() => { showRecoveryInput = false; error = ''; }}
                             class="w-full text-xs text-text-muted hover:text-primary-400 transition-colors"
                         >
-                            Use authenticator code instead
+                            {t('login.use_authenticator')}
                         </button>
                     {/if}
                 {/if}
@@ -385,7 +386,7 @@
                     onclick={backToLogin}
                     class="w-full text-xs text-text-muted hover:text-text transition-colors mt-2"
                 >
-                    <i class="fa-solid fa-arrow-left mr-1"></i> Back to login
+                    <i class="fa-solid fa-arrow-left mr-1"></i> {t('login.back_to_login')}
                 </button>
             </div>
         {:else}
@@ -401,7 +402,7 @@
                                    hover:bg-surface hover:border-primary-500/40 transition-colors"
                         >
                             <i class="{provider.icon} text-base"></i>
-                            Continue with {provider.name}
+                            {t('login.continue_with', { provider: provider.name })}
                         </button>
                     {/each}
                 </div>
@@ -412,7 +413,7 @@
                             <div class="w-full border-t border-border"></div>
                         </div>
                         <div class="relative flex justify-center text-xs uppercase">
-                            <span class="bg-surface px-3 text-text-muted tracking-wider">or</span>
+                            <span class="bg-surface px-3 text-text-muted tracking-wider">{t('common.or')}</span>
                         </div>
                     </div>
                 {/if}
@@ -422,7 +423,7 @@
                 <form onsubmit={handleLogin}>
                     {#if multiUserMode}
                         <label class="block mb-3">
-                            <span class="text-xs font-medium text-text-muted uppercase tracking-wide">Username</span>
+                            <span class="text-xs font-medium text-text-muted uppercase tracking-wide">{t('login.username')}</span>
                             <input
                                 type="text"
                                 bind:value={username}
@@ -432,12 +433,12 @@
                                 class="mt-1 w-full px-3 py-2 rounded-md border border-border bg-surface-elevated text-text
                                        placeholder-text-muted/50 focus:outline-none focus:ring-2 focus:ring-primary-500/50
                                        disabled:opacity-50"
-                                placeholder="Enter username"
+                                placeholder={t('login.enter_username')}
                             />
                         </label>
                     {/if}
                     <label class="block mb-4">
-                        <span class="text-xs font-medium text-text-muted uppercase tracking-wide">Password</span>
+                        <span class="text-xs font-medium text-text-muted uppercase tracking-wide">{t('login.password')}</span>
                         <input
                             type="password"
                             bind:value={password}
@@ -447,7 +448,7 @@
                             class="mt-1 w-full px-3 py-2 rounded-md border border-border bg-surface-elevated text-text
                                    placeholder-text-muted/50 focus:outline-none focus:ring-2 focus:ring-primary-500/50
                                    disabled:opacity-50"
-                            placeholder="Enter password"
+                            placeholder={t('login.enter_password_placeholder')}
                         />
                     </label>
 
@@ -458,9 +459,9 @@
                                hover:bg-primary-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {#if loading}
-                            <i class="fa-solid fa-spinner fa-spin mr-1"></i> Signing in...
+                            <i class="fa-solid fa-spinner fa-spin mr-1"></i> {t('login.signing_in')}
                         {:else}
-                            <i class="fa-solid fa-right-to-bracket mr-1"></i> Sign In
+                            <i class="fa-solid fa-right-to-bracket mr-1"></i> {t('login.sign_in')}
                         {/if}
                     </button>
                 </form>

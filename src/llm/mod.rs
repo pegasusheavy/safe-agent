@@ -1,3 +1,4 @@
+pub mod advisor;
 pub mod context;
 pub mod prompts;
 
@@ -6,6 +7,7 @@ mod claude;
 mod cline;
 mod codex;
 mod gemini;
+mod ollama;
 mod openrouter;
 #[cfg(feature = "local")]
 mod local;
@@ -120,6 +122,14 @@ impl LlmBackend for openrouter::OpenRouterEngine {
     }
 }
 
+#[async_trait::async_trait]
+impl LlmBackend for ollama::OllamaEngine {
+    fn name(&self) -> &str { "Ollama" }
+    async fn generate(&self, ctx: &GenerateContext<'_>) -> Result<String> {
+        self.generate(ctx).await
+    }
+}
+
 #[cfg(feature = "local")]
 #[async_trait::async_trait]
 impl LlmBackend for local::LocalEngine {
@@ -140,6 +150,7 @@ impl LlmBackend for local::LocalEngine {
 /// - **Gemini**      -- Google Gemini CLI
 /// - **Aider**       -- Aider multi-provider AI pair-programmer
 /// - **OpenRouter**  -- OpenRouter API (hundreds of models via one API key)
+/// - **Ollama**      -- Ollama local model server (HTTP chat API)
 /// - **Local**       -- local GGUF model via llama-gguf (requires `local` feature)
 ///
 /// Additional backends can be registered at runtime via the plugin registry.
@@ -158,7 +169,7 @@ impl LlmEngine {
     /// `config.llm.backend` (overridable with `LLM_BACKEND` env var).
     ///
     /// Valid backend keys: `"claude"`, `"cline"`, `"codex"`, `"gemini"`,
-    /// `"aider"`, `"openrouter"`, `"local"`.
+    /// `"aider"`, `"openrouter"`, `"ollama"`, `"local"`.
     pub fn new(config: &Config) -> Result<Self> {
         let mut plugins = LlmPluginRegistry::new();
 
@@ -180,6 +191,9 @@ impl LlmEngine {
         }
         if let Ok(engine) = openrouter::OpenRouterEngine::new(config) {
             plugins.register("openrouter", Arc::new(engine));
+        }
+        if let Ok(engine) = ollama::OllamaEngine::new(config) {
+            plugins.register("ollama", Arc::new(engine));
         }
         #[cfg(feature = "local")]
         if let Ok(engine) = local::LocalEngine::new(config) {

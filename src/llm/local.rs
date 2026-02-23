@@ -19,6 +19,7 @@ pub struct LocalEngine {
     personality: String,
     agent_name: String,
     timezone: String,
+    locale: String,
 }
 
 impl LocalEngine {
@@ -59,6 +60,7 @@ impl LocalEngine {
             &config.agent_name,
             None,
             Some(&config.timezone),
+            Some(&config.locale),
             &[],
         );
 
@@ -77,6 +79,7 @@ impl LocalEngine {
             personality: config.core_personality.clone(),
             agent_name: config.agent_name.clone(),
             timezone: config.timezone.clone(),
+            locale: config.locale.clone(),
         })
     }
 

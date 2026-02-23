@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { t } from '../lib/i18n';
     import { api } from '../lib/api';
     import { dashboard, refreshAll } from '../lib/state.svelte';
     import type { PendingAction, ActionResponse } from '../lib/types';
@@ -47,22 +48,22 @@
 <section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden">
     <div class="flex justify-between items-center border-b border-border">
         <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
-            <i class="fa-solid fa-clock-rotate-left mr-1.5"></i> Pending Actions
+            <i class="fa-solid fa-clock-rotate-left mr-1.5"></i> {t('pending.title')}
         </h2>
         <div class="flex gap-1.5 pr-3">
             <button
                 onclick={approveAll}
                 class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface text-success-500 hover:bg-success-500/10 hover:border-success-500 transition-colors"
-            >Approve All</button>
+            >{t('pending.approve_all')}</button>
             <button
                 onclick={rejectAll}
                 class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface text-error-500 hover:bg-error-500/10 hover:border-error-500 transition-colors"
-            >Reject All</button>
+            >{t('pending.reject_all')}</button>
         </div>
     </div>
     <div class="p-3 max-h-96 overflow-y-auto custom-scroll">
         {#if actions.length === 0}
-            <p class="text-text-subtle text-sm italic text-center py-4">No pending actions</p>
+            <p class="text-text-subtle text-sm italic text-center py-4">{t('pending.no_pending')}</p>
         {:else}
             {#each actions as a (a.id)}
                 <div class="p-3 border border-border rounded-md mb-2 bg-surface-muted">
@@ -77,13 +78,13 @@
                             onclick={() => approve(a.id)}
                             class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface text-success-500 hover:bg-success-500/10 hover:border-success-500 transition-colors"
                         >
-                            <i class="fa-solid fa-check mr-1"></i>Approve
+                            <i class="fa-solid fa-check mr-1"></i>{t('pending.approve')}
                         </button>
                         <button
                             onclick={() => reject(a.id)}
                             class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface text-error-500 hover:bg-error-500/10 hover:border-error-500 transition-colors"
                         >
-                            <i class="fa-solid fa-xmark mr-1"></i>Reject
+                            <i class="fa-solid fa-xmark mr-1"></i>{t('pending.reject')}
                         </button>
                     </div>
                 </div>

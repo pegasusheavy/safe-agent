@@ -160,7 +160,7 @@ pub struct SecurityConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct LlmConfig {
     /// Backend to use: "claude" (default), "cline", "codex", "gemini",
-    /// "aider", "openrouter", or "local".
+    /// "aider", "openrouter", "ollama", or "local".
     /// Can be overridden with the `LLM_BACKEND` env var.
     #[serde(default = "default_backend")]
     pub backend: String,
@@ -280,6 +280,18 @@ pub struct LlmConfig {
     /// Can be overridden with `OPENROUTER_APP_NAME` env var.
     #[serde(default)]
     pub openrouter_app_name: String,
+
+    // -- Ollama settings (backend = "ollama") --
+
+    /// Ollama API base URL (default: "http://localhost:11434").
+    /// Can be overridden with `OLLAMA_HOST` env var.
+    #[serde(default)]
+    pub ollama_host: String,
+
+    /// Ollama model tag (e.g. "llama3.1:8b", "qwen2.5-coder:14b").
+    /// Can be overridden with `OLLAMA_MODEL` env var.
+    #[serde(default)]
+    pub ollama_model: String,
 
     // -- Local model settings (backend = "local") --
 
@@ -867,6 +879,8 @@ impl Default for LlmConfig {
             openrouter_max_tokens: 0,
             openrouter_site_url: String::new(),
             openrouter_app_name: String::new(),
+            ollama_host: String::new(),
+            ollama_model: String::new(),
             model_path: String::new(),
             temperature: default_temperature(),
             top_p: default_top_p(),

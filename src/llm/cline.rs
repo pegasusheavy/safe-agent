@@ -21,6 +21,7 @@ pub struct ClineEngine {
     personality: String,
     agent_name: String,
     timezone: String,
+    locale: String,
     timeout_secs: u64,
     work_dir: std::path::PathBuf,
 }
@@ -55,6 +56,7 @@ impl ClineEngine {
             personality: config.core_personality.clone(),
             agent_name: config.agent_name.clone(),
             timezone: config.timezone.clone(),
+            locale: config.locale.clone(),
             timeout_secs,
             work_dir: Config::data_dir(),
         })
@@ -67,6 +69,7 @@ impl ClineEngine {
             &self.agent_name,
             ctx.tools,
             Some(&self.timezone),
+            Some(&self.locale),
             ctx.prompt_skills,
         );
         let prompt = format!(

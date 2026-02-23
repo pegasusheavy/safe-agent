@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { t } from '../lib/i18n';
     import { api } from '../lib/api';
     import { dashboard } from '../lib/state.svelte';
     import { formatDateTime } from '../lib/time';
@@ -47,7 +48,7 @@
                 `/api/knowledge/nodes/${id}/neighbors`,
             );
             if (!data.length) {
-                alert('No neighbors for this node.');
+                alert(t('knowledge.no_neighbors'));
                 return;
             }
             neighbors = data;
@@ -76,11 +77,11 @@
 <section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden">
     <div class="flex justify-between items-center border-b border-border">
         <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
-            <i class="fa-solid fa-diagram-project mr-1.5"></i> Knowledge Graph
+            <i class="fa-solid fa-diagram-project mr-1.5"></i> {t('knowledge.title')}
         </h2>
         <div class="flex items-center gap-2 pr-3">
             <span class="text-xs text-text-muted">
-                <i class="fa-solid fa-circle-nodes mr-1"></i>{stats.nodes} nodes, {stats.edges} edges
+                <i class="fa-solid fa-circle-nodes mr-1"></i>{t('knowledge.summary', { nodes: stats.nodes, edges: stats.edges })}
             </span>
         </div>
     </div>
@@ -89,7 +90,7 @@
             type="text"
             bind:value={searchQuery}
             onkeyup={handleSearchKey}
-            placeholder="Search knowledge graph..."
+            placeholder={t('knowledge.search_placeholder')}
             class="w-full px-2.5 py-1.5 border border-border rounded-md bg-background text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-900 font-sans"
         />
     </div>
@@ -99,7 +100,7 @@
                 onclick={backToNodes}
                 class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface hover:bg-surface-elevated transition-colors mb-3"
             >
-                <i class="fa-solid fa-arrow-left mr-1"></i> Back
+                <i class="fa-solid fa-arrow-left mr-1"></i> {t('knowledge.back')}
             </button>
             {#each neighbors as n}
                 <div class="p-3 border border-border rounded-md mb-2 bg-surface-muted">
@@ -113,7 +114,7 @@
                 </div>
             {/each}
         {:else if nodes.length === 0}
-            <p class="text-text-subtle text-sm italic text-center py-4">No knowledge nodes</p>
+            <p class="text-text-subtle text-sm italic text-center py-4">{t('knowledge.no_nodes')}</p>
         {:else}
             {#each nodes as n (n.id)}
                 <button
@@ -126,7 +127,7 @@
                     <div class="text-sm font-semibold mb-1">{n.label}</div>
                     <div class="text-xs text-text-muted">{n.content.slice(0, 200)}</div>
                     <div class="text-[11px] text-text-subtle mt-1">
-                        confidence: {(n.confidence ?? 1).toFixed(2)} &middot; {formatDateTime(n.updated_at)}
+                        {t('knowledge.confidence')} {(n.confidence ?? 1).toFixed(2)} &middot; {formatDateTime(n.updated_at)}
                     </div>
                 </button>
             {/each}

@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { t } from '../lib/i18n';
     import { api } from '../lib/api';
     import { dashboard } from '../lib/state.svelte';
 
@@ -44,7 +45,7 @@
             items = data.items;
             stats = data.stats;
         } catch (e: any) {
-            error = e?.message || 'Failed to load trash';
+            error = e?.message || t('trash.load_failed');
             console.error('loadTrash:', e);
         } finally {
             loading = false;
@@ -54,35 +55,35 @@
     async function restore(id: string) {
         try {
             const res = await api<ActionResponse>('POST', `/api/trash/${id}/restore`);
-            successMsg = res.message || 'Restored';
+            successMsg = res.message || t('trash.restored');
             await load();
             setTimeout(() => successMsg = '', 3000);
         } catch (e: any) {
-            error = e?.message || 'Failed to restore';
+            error = e?.message || t('trash.restore_failed');
         }
     }
 
     async function permanentDelete(id: string, name: string) {
-        if (!confirm(`Permanently delete "${name}"? This cannot be undone.`)) return;
+        if (!confirm(t('trash.permanent_confirm', { name }))) return;
         try {
             const res = await api<ActionResponse>('DELETE', `/api/trash/${id}`);
-            successMsg = res.message || 'Deleted';
+            successMsg = res.message || t('trash.deleted');
             await load();
             setTimeout(() => successMsg = '', 3000);
         } catch (e: any) {
-            error = e?.message || 'Failed to delete';
+            error = e?.message || t('trash.delete_failed');
         }
     }
 
     async function emptyTrash() {
         try {
             const res = await api<ActionResponse>('POST', '/api/trash/empty');
-            successMsg = res.message || 'Trash emptied';
+            successMsg = res.message || t('trash.emptied');
             confirmEmpty = false;
             await load();
             setTimeout(() => successMsg = '', 3000);
         } catch (e: any) {
-            error = e?.message || 'Failed to empty trash';
+            error = e?.message || t('trash.empty_failed');
         }
     }
 
@@ -144,10 +145,10 @@
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <h2 class="text-xs font-semibold uppercase tracking-wider text-text-muted">
-                    <i class="fa-solid fa-trash-can mr-1.5"></i> Trash
+                    <i class="fa-solid fa-trash-can mr-1.5"></i> {t('trash.title')}
                 </h2>
                 <span class="text-xs text-text-subtle bg-surface-muted px-2 py-0.5 rounded-full">
-                    {stats.count} item{stats.count !== 1 ? 's' : ''} &middot; {formatSize(stats.total_bytes)}
+                    {t('trash.items_count', { count: stats.count })} &middot; {formatSize(stats.total_bytes)}
                 </span>
             </div>
             <div class="flex items-center gap-2">
@@ -156,7 +157,7 @@
                     onclick={load}
                     disabled={loading}
                 >
-                    <i class="fa-solid fa-arrows-rotate mr-1" class:fa-spin={loading}></i> Refresh
+                    <i class="fa-solid fa-arrows-rotate mr-1" class:fa-spin={loading}></i> {t('common.refresh')}
                 </button>
                 {#if stats.count > 0}
                     {#if !confirmEmpty}
@@ -164,11 +165,11 @@
                             class="text-xs px-3 py-1.5 rounded bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 transition-colors"
                             onclick={() => confirmEmpty = true}
                         >
-                            <i class="fa-solid fa-trash mr-1"></i> Empty Trash
+                            <i class="fa-solid fa-trash mr-1"></i> {t('trash.empty_trash')}
                         </button>
                     {:else}
                         <div class="flex items-center gap-1.5">
-                            <span class="text-xs text-red-400">Delete all?</span>
+                            <span class="text-xs text-red-400">{t('trash.delete_all')}</span>
                             <button
                                 class="text-xs px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white transition-colors"
                                 onclick={emptyTrash}
@@ -203,7 +204,7 @@
             <input
                 type="text"
                 bind:value={searchQuery}
-                placeholder="Search by name, path, or source..."
+                placeholder={t('trash.search_placeholder')}
                 class="w-full pl-9 pr-3 py-2 text-sm bg-surface border border-border rounded-lg text-text placeholder:text-text-subtle focus:outline-none focus:ring-1 focus:ring-primary-500 focus:border-primary-500"
             />
         </div>
@@ -213,17 +214,17 @@
     <div class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden">
         {#if loading && items.length === 0}
             <div class="p-8 text-center text-text-subtle text-sm">
-                <i class="fa-solid fa-spinner fa-spin mr-1.5"></i> Loading...
+                <i class="fa-solid fa-spinner fa-spin mr-1.5"></i> {t('common.loading')}
             </div>
         {:else if filtered.length === 0}
             <div class="p-8 text-center text-text-subtle text-sm">
                 {#if searchQuery.trim()}
-                    <i class="fa-solid fa-search mr-1.5"></i> No items matching "{searchQuery}"
+                    <i class="fa-solid fa-search mr-1.5"></i> {t('trash.no_match', { query: searchQuery })}
                 {:else}
                     <i class="fa-solid fa-trash-can mr-1.5 opacity-40"></i>
-                    <p class="mt-1">Trash is empty</p>
+                    <p class="mt-1">{t('trash.empty')}</p>
                     <p class="text-xs mt-1 text-text-subtle opacity-70">
-                        Deleted files and directories will appear here for recovery.
+                        {t('trash.empty_hint')}
                     </p>
                 {/if}
             </div>
@@ -255,14 +256,14 @@
                             <div class="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button
                                     class="text-xs px-2.5 py-1.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:text-emerald-300 transition-colors"
-                                    title="Restore to original location"
+                                    title={t('trash.restore_title')}
                                     onclick={() => restore(entry.id)}
                                 >
-                                    <i class="fa-solid fa-rotate-left mr-1"></i> Restore
+                                    <i class="fa-solid fa-rotate-left mr-1"></i> {t('trash.restore')}
                                 </button>
                                 <button
                                     class="text-xs px-2.5 py-1.5 rounded bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 transition-colors"
-                                    title="Permanently delete"
+                                    title={t('trash.delete_permanent_title')}
                                     onclick={() => permanentDelete(entry.id, entry.name)}
                                 >
                                     <i class="fa-solid fa-xmark"></i>

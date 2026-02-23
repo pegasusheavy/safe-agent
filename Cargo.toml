@@ -1,6 +1,6 @@
 [package]
 name = "safe-agent"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "Sandboxed autonomous AI agent with tool execution, knowledge graph, and multi-interface control"
 
@@ -13,6 +13,9 @@ local-cuda = ["local", "llama-gguf/cuda"]
 
 # Local LLM inference (optional — enabled with --features local)
 llama-gguf = { git = "https://github.com/Lexmata/llama-gguf.git", branch = "main", default-features = false, features = ["cpu"], optional = true }
+
+# Hardware-aware local LLM model recommendations
+llmfit-core = "0.4"
 # Async runtime
 tokio = { version = "1", features = ["full"] }
 async-trait = "0.1"

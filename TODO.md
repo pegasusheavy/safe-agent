@@ -270,8 +270,21 @@ tool is a scaffold.
       on other skills.
 - [ ] **Community skill registry** — a central catalog of shareable
       skills with install-from-URL.
-- [ ] **TypeScript/Node.js skills** — support Node.js skill entrypoints
-      alongside Python.
+- [x] **TypeScript/Node.js skills** — Node.js skill entrypoints (`.js`,
+      `.mjs`, `.cjs`) with automatic `npm install` / `pnpm install` when a
+      `package.json` is present.
+- [x] **Rhai embedded skills** — `.rhai` entrypoints run in-process via
+      `tokio::task::spawn_blocking` with a sandboxed API surface (HTTP,
+      file I/O, env vars, Telegram, JSON, logging). Zero-overhead for
+      lightweight automation.
+- [x] **Python virtual environments** — `venv` field in `skill.toml`
+      (`"auto"` | `"always"` | `"never"`). When enabled, the skill manager
+      creates a `.venv/`, upgrades pip, installs `requirements.txt`, and
+      runs the skill with the venv Python. `PYTHONUNBUFFERED=1` set by default.
+- [x] **Skill lifecycle API** — `POST /api/skills/{name}/stop`,
+      `/api/skills/{name}/start`, `/api/skills/{name}/restart`. Manually
+      stopped skills are tracked and excluded from auto-reconciliation
+      until explicitly restarted.
 - [ ] **Skill sandboxing** — per-skill filesystem and network isolation
       (currently all skills share the same sandbox).
 - [ ] **Skill health monitoring** — dashboard widget showing uptime,
@@ -360,6 +373,31 @@ tool is a scaffold.
       `GET /api/timezone/convert` (server-side conversion).  Crate: `chrono-tz`.
 - [ ] **i18n** — multi-language support for the dashboard and agent
       responses.
+
+---
+
+## 13. Website & Documentation
+
+- [x] **GitHub Pages landing site** — Svelte 5 + SvelteKit static site
+      in `web/` with Tailwind CSS 4 and FontAwesome 6. Sections: hero
+      with `docker pull` command, features grid, 3-step quick start guide,
+      architecture overview, skill system showcase, and get-involved links.
+      Dark theme (slate-950/emerald accent). Docker-first messaging
+      throughout. Deployed via `actions/deploy-pages@v4` on push to
+      `develop` or `main`.
+- [x] **GHCR container images** — GitHub Actions workflow builds and
+      pushes multi-arch Docker images (amd64 + arm64) to
+      `ghcr.io/pegasusheavy/safe-agent` on version tags (`v*`).
+- [x] **Comprehensive Docker README** — full Quick Start section covering
+      directory setup, `.env` configuration, `docker run` command with
+      mount explanations, Docker Compose example, optional mounts (Claude
+      CLI, ngrok, ACME), build-from-source, UID/GID matching, and ARM64.
+- [x] **AI co-authorship policy** — `CONTRIBUTING.md` requires attestation
+      of the AI model used and `Co-authored-by` git trailer for all
+      AI-assisted contributions.
+- [ ] **API reference** — auto-generated docs for all REST endpoints.
+- [ ] **Skill authoring guide** — tutorial for writing Python, Node.js,
+      Rhai, and shell skills with `skill.toml` examples.
 
 ---
 

@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount, untrack } from 'svelte';
+    import { t, initLocale } from './lib/i18n';
     import { dashboard, auth, refreshAll, pushToolEvent, clearLiveFeed } from './lib/state.svelte';
     import type { ToolEvent } from './lib/types';
     import LoginOverlay from './components/LoginOverlay.svelte';
@@ -70,6 +71,7 @@
     }
 
     onMount(() => {
+        initLocale();
         checkOnboarding();
         checkAuth();
         window.addEventListener('onboarding-complete', handleOnboardingComplete);
@@ -142,7 +144,7 @@
                     class:active={dashboard.currentTab === tab.id}
                     onclick={() => switchTab(tab.id)}
                 >
-                    <i class="fa-solid {tab.icon} mr-1.5"></i> {tab.label}
+                    <i class="fa-solid {tab.icon} mr-1.5"></i> {t('nav.' + tab.id)}
                 </button>
             {/each}
         </div>

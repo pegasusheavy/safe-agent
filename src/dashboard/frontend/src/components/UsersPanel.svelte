@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from 'svelte';
+    import { t } from '../lib/i18n';
     import { auth } from '../lib/state.svelte';
 
     interface User {
@@ -61,16 +62,16 @@
                 body: JSON.stringify(body),
             });
             if (res.ok) {
-                message = `User "${newUsername}" created`;
+                message = t('users.created', { username: newUsername });
                 newUsername = ''; newDisplayName = ''; newRole = 'user';
                 newPassword = ''; newEmail = ''; newTelegramId = ''; newWhatsappId = '';
                 showCreateForm = false;
                 fetchUsers();
             } else {
-                message = 'Failed to create user (username may already exist)';
+                message = t('users.failed_create');
             }
         } catch {
-            message = 'Error creating user';
+            message = t('users.error_create');
         }
     }
 
@@ -83,7 +84,7 @@
             });
             fetchUsers();
         } catch {
-            message = 'Failed to update user';
+            message = t('users.failed_update');
         }
     }
 
@@ -96,17 +97,17 @@
             });
             fetchUsers();
         } catch {
-            message = 'Failed to update role';
+            message = t('users.failed_role');
         }
     }
 
     async function deleteUser(user: User) {
-        if (!confirm(`Delete user "${user.username}"? This cannot be undone.`)) return;
+        if (!confirm(t('users.delete_confirm', { username: user.username }))) return;
         try {
             await fetch(`/api/users/${user.id}`, { method: 'DELETE' });
             fetchUsers();
         } catch {
-            message = 'Failed to delete user';
+            message = t('users.failed_delete');
         }
     }
 
@@ -119,10 +120,10 @@
     }
 
     function timeAgo(date: string | null): string {
-        if (!date) return 'Never';
+        if (!date) return t('users.never');
         const d = new Date(date + 'Z');
         const diff = Date.now() - d.getTime();
-        if (diff < 60000) return 'Just now';
+        if (diff < 60000) return t('users.just_now');
         if (diff < 3600000) return `${Math.floor(diff/60000)}m ago`;
         if (diff < 86400000) return `${Math.floor(diff/3600000)}h ago`;
         return `${Math.floor(diff/86400000)}d ago`;
@@ -136,11 +137,11 @@
 <div class="card">
     <div class="flex items-center justify-between mb-4">
         <h3 class="text-lg font-semibold">
-            <i class="fa-solid fa-users mr-1"></i> Users
+            <i class="fa-solid fa-users mr-1"></i> {t('users.title')}
         </h3>
         {#if isAdmin}
             <button class="btn-primary text-sm" onclick={() => showCreateForm = !showCreateForm}>
-                <i class="fa-solid fa-plus mr-1"></i> New User
+                <i class="fa-solid fa-plus mr-1"></i> {t('users.add_user')}
             </button>
         {/if}
     </div>
@@ -152,18 +153,18 @@
     <!-- Create User Form -->
     {#if showCreateForm && isAdmin}
         <div class="bg-surface rounded p-4 mb-4 space-y-3">
-            <h4 class="text-sm font-medium">Create User</h4>
+            <h4 class="text-sm font-medium">{t('users.create_user')}</h4>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                    <label class="text-xs text-muted block mb-1">Username *</label>
+                    <label class="text-xs text-muted block mb-1">{t('users.username')} *</label>
                     <input type="text" bind:value={newUsername} placeholder="jdoe" class="w-full bg-bg border border-border rounded px-3 py-1.5 text-sm" />
                 </div>
                 <div>
-                    <label class="text-xs text-muted block mb-1">Display Name</label>
+                    <label class="text-xs text-muted block mb-1">{t('users.display_name')}</label>
                     <input type="text" bind:value={newDisplayName} placeholder="Jane Doe" class="w-full bg-bg border border-border rounded px-3 py-1.5 text-sm" />
                 </div>
                 <div>
-                    <label class="text-xs text-muted block mb-1">Role</label>
+                    <label class="text-xs text-muted block mb-1">{t('users.role')}</label>
                     <select bind:value={newRole} class="w-full bg-bg border border-border rounded px-3 py-1.5 text-sm">
                         <option value="admin">Admin</option>
                         <option value="user">User</option>
@@ -171,36 +172,36 @@
                     </select>
                 </div>
                 <div>
-                    <label class="text-xs text-muted block mb-1">Password</label>
+                    <label class="text-xs text-muted block mb-1">{t('users.password')}</label>
                     <input type="password" bind:value={newPassword} class="w-full bg-bg border border-border rounded px-3 py-1.5 text-sm" />
                 </div>
                 <div>
-                    <label class="text-xs text-muted block mb-1">Email</label>
+                    <label class="text-xs text-muted block mb-1">{t('users.email')}</label>
                     <input type="email" bind:value={newEmail} placeholder="jane@example.com" class="w-full bg-bg border border-border rounded px-3 py-1.5 text-sm" />
                 </div>
                 <div>
-                    <label class="text-xs text-muted block mb-1">Telegram User ID</label>
+                    <label class="text-xs text-muted block mb-1">{t('users.telegram_id')}</label>
                     <input type="text" bind:value={newTelegramId} placeholder="123456789" class="w-full bg-bg border border-border rounded px-3 py-1.5 text-sm" />
                 </div>
                 <div>
-                    <label class="text-xs text-muted block mb-1">WhatsApp Number</label>
+                    <label class="text-xs text-muted block mb-1">{t('users.whatsapp_id')}</label>
                     <input type="text" bind:value={newWhatsappId} placeholder="+15551234567" class="w-full bg-bg border border-border rounded px-3 py-1.5 text-sm" />
                 </div>
             </div>
             <div class="flex gap-2">
                 <button class="btn-primary text-sm" onclick={createUser} disabled={!newUsername.trim()}>
-                    <i class="fa-solid fa-check mr-1"></i> Create
+                    <i class="fa-solid fa-check mr-1"></i> {t('users.create')}
                 </button>
-                <button class="btn-secondary text-sm" onclick={() => showCreateForm = false}>Cancel</button>
+                <button class="btn-secondary text-sm" onclick={() => showCreateForm = false}>{t('common.cancel')}</button>
             </div>
         </div>
     {/if}
 
     <!-- Users List -->
     {#if loading}
-        <p class="text-muted text-sm">Loading users...</p>
+        <p class="text-muted text-sm">{t('users.loading')}</p>
     {:else if users.length === 0}
-        <p class="text-muted text-sm">No users configured. The agent operates in single-user mode.</p>
+        <p class="text-muted text-sm">{t('users.no_users_desc')}</p>
     {:else}
         <div class="space-y-2">
             {#each users as user}
@@ -215,7 +216,7 @@
                                 <span class="text-xs text-muted font-mono">@{user.username}</span>
                                 <span class="px-1.5 py-0.5 rounded text-xs font-semibold {roleColor(user.role)}">{user.role}</span>
                                 {#if !user.enabled}
-                                    <span class="px-1.5 py-0.5 rounded text-xs bg-red-500/20 text-red-400">disabled</span>
+                                    <span class="px-1.5 py-0.5 rounded text-xs bg-red-500/20 text-red-400">{t('users.disabled')}</span>
                                 {/if}
                             </div>
                             <div class="flex gap-3 text-xs text-muted mt-0.5">
@@ -228,7 +229,7 @@
                                 {#if user.whatsapp_id}
                                     <span><i class="fa-brands fa-whatsapp mr-0.5"></i> {user.whatsapp_id}</span>
                                 {/if}
-                                <span>Last seen: {timeAgo(user.last_seen_at)}</span>
+                                <span>{t('users.last_seen')} {timeAgo(user.last_seen_at)}</span>
                             </div>
                         </div>
                     </div>
@@ -247,14 +248,14 @@
                             <button
                                 class="text-xs px-2 py-1 rounded {user.enabled ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30' : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'}"
                                 onclick={() => toggleEnabled(user)}
-                                title={user.enabled ? 'Disable user' : 'Enable user'}
+                                title={user.enabled ? t('users.disable_user') : t('users.enable_user')}
                             >
-                                {user.enabled ? 'Disable' : 'Enable'}
+                                {user.enabled ? t('users.disable') : t('users.enable')}
                             </button>
                             <button
                                 class="text-xs px-2 py-1 rounded bg-red-500/20 text-red-400 hover:bg-red-500/30"
                                 onclick={() => deleteUser(user)}
-                                title="Delete user"
+                                title={t('users.delete_user')}
                             >
                                 <i class="fa-solid fa-trash"></i>
                             </button>

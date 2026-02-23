@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { t } from '../lib/i18n';
     import { dashboard } from '../lib/state.svelte';
     import { formatDateTime } from '../lib/time';
 
@@ -190,17 +191,17 @@
 
 <div class="space-y-4">
     <div class="flex items-center gap-3 mb-4">
-        <h2 class="text-xl font-bold text-heading"><i class="fa-solid fa-shield-halved mr-2"></i>Security & Trust</h2>
+        <h2 class="text-xl font-bold text-heading"><i class="fa-solid fa-shield-halved mr-2"></i>{t('security.title')}</h2>
     </div>
 
     <!-- Sub-nav -->
     <div class="flex gap-1 border-b border-border pb-1 mb-4">
         {#each [
-            { id: 'overview' as const, label: 'Overview', icon: 'fa-chart-pie' },
-            { id: 'audit' as const, label: 'Audit Trail', icon: 'fa-scroll' },
-            { id: 'cost' as const, label: 'Cost Tracking', icon: 'fa-dollar-sign' },
-            { id: 'rate' as const, label: 'Rate Limits', icon: 'fa-gauge-high' },
-            { id: '2fa' as const, label: '2FA', icon: 'fa-lock' },
+            { id: 'overview' as const, label: t('security.overview'), icon: 'fa-chart-pie' },
+            { id: 'audit' as const, label: t('security.audit_trail'), icon: 'fa-scroll' },
+            { id: 'cost' as const, label: t('security.cost_tracking'), icon: 'fa-dollar-sign' },
+            { id: 'rate' as const, label: t('security.rate_limits'), icon: 'fa-gauge-high' },
+            { id: '2fa' as const, label: t('security.twofa'), icon: 'fa-lock' },
         ] as section}
             <button
                 class="px-3 py-1.5 text-sm rounded-t transition-colors"
@@ -221,18 +222,18 @@
             <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
                 <div class="card p-3 text-center">
                     <div class="text-2xl font-bold text-heading">{auditSummary.total_events}</div>
-                    <div class="text-xs text-muted">Total Events</div>
+                    <div class="text-xs text-muted">{t('security.total_events')}</div>
                 </div>
                 <div class="card p-3 text-center">
                     <div class="text-2xl font-bold text-blue-400">{auditSummary.tool_calls}</div>
-                    <div class="text-xs text-muted">Tool Calls</div>
+                    <div class="text-xs text-muted">{t('security.tool_calls')}</div>
                 </div>
                 <div class="card p-3 text-center">
                     <div class="text-2xl font-bold" class:text-red-400={costSummary.limit_exceeded} class:text-green-400={!costSummary.limit_exceeded}>
                         {formatUsd(costSummary.today_usd)}
                     </div>
                     <div class="text-xs text-muted">
-                        Today's Cost
+                        {t('security.todays_cost')}
                         {#if costSummary.daily_limit_usd > 0}
                             / {formatUsd(costSummary.daily_limit_usd)}
                         {/if}
@@ -242,26 +243,26 @@
                     <div class="text-2xl font-bold" class:text-orange-400={rateStatus.is_limited} class:text-green-400={!rateStatus.is_limited}>
                         {rateStatus.calls_last_minute}/{rateStatus.limit_per_minute || '∞'}
                     </div>
-                    <div class="text-xs text-muted">Calls/min</div>
+                    <div class="text-xs text-muted">{t('security.calls_per_min')}</div>
                 </div>
             </div>
 
             <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
                 <div class="card p-3 text-center">
                     <div class="text-lg font-bold text-green-400">{auditSummary.approvals}</div>
-                    <div class="text-xs text-muted">Approvals</div>
+                    <div class="text-xs text-muted">{t('security.approvals')}</div>
                 </div>
                 <div class="card p-3 text-center">
                     <div class="text-lg font-bold text-red-400">{auditSummary.rejections}</div>
-                    <div class="text-xs text-muted">Rejections</div>
+                    <div class="text-xs text-muted">{t('security.rejections')}</div>
                 </div>
                 <div class="card p-3 text-center">
                     <div class="text-lg font-bold text-orange-400">{auditSummary.rate_limits}</div>
-                    <div class="text-xs text-muted">Rate Limits</div>
+                    <div class="text-xs text-muted">{t('security.rate_limits')}</div>
                 </div>
                 <div class="card p-3 text-center">
                     <div class="text-lg font-bold text-red-500">{auditSummary.pii_detections}</div>
-                    <div class="text-xs text-muted">PII Detected</div>
+                    <div class="text-xs text-muted">{t('security.pii_detections')}</div>
                 </div>
             </div>
 
@@ -269,11 +270,11 @@
                 <div class="card p-4">
                     <h3 class="text-sm font-semibold text-heading mb-2"><i class="fa-solid fa-dollar-sign mr-1"></i>Cost Summary</h3>
                     <div class="space-y-1 text-sm">
-                        <div class="flex justify-between"><span class="text-muted">Today</span><span>{formatUsd(costSummary.today_usd)}</span></div>
-                        <div class="flex justify-between"><span class="text-muted">This Month</span><span>{formatUsd(costSummary.month_usd)}</span></div>
-                        <div class="flex justify-between"><span class="text-muted">All-time</span><span>{formatUsd(costSummary.total_usd)}</span></div>
-                        <div class="flex justify-between"><span class="text-muted">Tokens Today</span><span>{formatTokens(costSummary.today_tokens)}</span></div>
-                        <div class="flex justify-between"><span class="text-muted">Total Tokens</span><span>{formatTokens(costSummary.total_tokens)}</span></div>
+                        <div class="flex justify-between"><span class="text-muted">{t('security.todays_cost')}</span><span>{formatUsd(costSummary.today_usd)}</span></div>
+                        <div class="flex justify-between"><span class="text-muted">{t('security.month_cost')}</span><span>{formatUsd(costSummary.month_usd)}</span></div>
+                        <div class="flex justify-between"><span class="text-muted">{t('security.total_cost')}</span><span>{formatUsd(costSummary.total_usd)}</span></div>
+                        <div class="flex justify-between"><span class="text-muted">{t('security.tokens')}</span><span>{formatTokens(costSummary.today_tokens)}</span></div>
+                        <div class="flex justify-between"><span class="text-muted">{t('security.total_tokens')}</span><span>{formatTokens(costSummary.total_tokens)}</span></div>
                         <div class="flex justify-between"><span class="text-muted">Requests Today</span><span>{costSummary.today_requests}</span></div>
                     </div>
                 </div>
@@ -294,14 +295,14 @@
                 </div>
             </div>
         {:else}
-            <p class="text-muted text-sm">Loading security data...</p>
+            <p class="text-muted text-sm">{t('common.loading')}</p>
         {/if}
 
     <!-- Audit Trail Section -->
     {:else if activeSection === 'audit'}
         <div class="flex gap-2 mb-3">
             <select class="bg-bg border border-border rounded px-2 py-1 text-sm" bind:value={auditFilter.event_type} onchange={() => loadAudit()}>
-                <option value="">All Events</option>
+                <option value="">{t('security.all_types')}</option>
                 <option value="tool_call">Tool Calls</option>
                 <option value="approval">Approvals</option>
                 <option value="rate_limit">Rate Limits</option>
@@ -311,18 +312,18 @@
             </select>
             <input
                 type="text"
-                placeholder="Filter by tool name..."
+                placeholder={t('security.filter')}
                 class="bg-bg border border-border rounded px-2 py-1 text-sm flex-1"
                 bind:value={auditFilter.tool}
                 onkeyup={(e) => { if ((e as KeyboardEvent).key === 'Enter') loadAudit(); }}
             />
             <button class="btn btn-sm" onclick={() => loadAudit()}>
-                <i class="fa-solid fa-rotate mr-1"></i>Refresh
+                <i class="fa-solid fa-rotate mr-1"></i>{t('common.refresh')}
             </button>
         </div>
 
         {#if auditEntries.length === 0}
-            <p class="text-muted text-sm">No audit entries found.</p>
+            <p class="text-muted text-sm">{t('security.no_events')}</p>
         {:else}
             <div class="space-y-1">
                 {#each auditEntries as entry}
@@ -353,7 +354,7 @@
                             <div class="text-xs text-muted mt-0.5 flex justify-between">
                                 <span>{formatDateTime(entry.created_at)}</span>
                                 <button class="text-blue-400 hover:text-blue-300" onclick={() => explain(entry.id)} title="Explain this action">
-                                    <i class="fa-solid fa-magnifying-glass"></i> Why?
+                                    <i class="fa-solid fa-magnifying-glass"></i> {t('security.why')}
                                 </button>
                             </div>
                         </div>
@@ -367,13 +368,13 @@
             <div class="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onclick={() => showExplanation = false} role="dialog">
                 <div class="card p-4 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto" onclick={(e) => e.stopPropagation()} role="document">
                     <div class="flex justify-between items-center mb-3">
-                        <h3 class="text-lg font-bold text-heading"><i class="fa-solid fa-lightbulb mr-2"></i>Action Explanation</h3>
-                        <button class="text-muted hover:text-heading" onclick={() => showExplanation = false}>
+                        <h3 class="text-lg font-bold text-heading"><i class="fa-solid fa-lightbulb mr-2"></i>{t('security.action_explanation')}</h3>
+                        <button class="text-muted hover:text-heading" onclick={() => showExplanation = false} title={t('common.close')}>
                             <i class="fa-solid fa-xmark"></i>
                         </button>
                     </div>
                     {#if explanationChain.length === 0}
-                        <p class="text-muted text-sm">No reasoning chain found for this action.</p>
+                        <p class="text-muted text-sm">{t('security.no_explanation')}</p>
                     {:else}
                         <div class="space-y-2">
                             {#each explanationChain as step, i}
@@ -408,7 +409,7 @@
                     <div class="text-3xl font-bold" class:text-red-400={costSummary.limit_exceeded} class:text-green-400={!costSummary.limit_exceeded}>
                         {formatUsd(costSummary.today_usd)}
                     </div>
-                    <div class="text-xs text-muted">Today</div>
+                    <div class="text-xs text-muted">{t('security.todays_cost')}</div>
                     {#if costSummary.daily_limit_usd > 0}
                         <div class="mt-2 w-full bg-bg rounded-full h-2">
                             <div
@@ -423,21 +424,21 @@
                 </div>
                 <div class="card p-4 text-center">
                     <div class="text-3xl font-bold text-heading">{formatUsd(costSummary.month_usd)}</div>
-                    <div class="text-xs text-muted">This Month</div>
+                    <div class="text-xs text-muted">{t('security.month_cost')}</div>
                 </div>
                 <div class="card p-4 text-center">
                     <div class="text-3xl font-bold text-heading">{formatUsd(costSummary.total_usd)}</div>
-                    <div class="text-xs text-muted">All-time</div>
+                    <div class="text-xs text-muted">{t('security.total_cost')}</div>
                 </div>
             </div>
             <div class="grid grid-cols-3 gap-3">
                 <div class="card p-3 text-center">
                     <div class="text-xl font-bold">{formatTokens(costSummary.today_tokens)}</div>
-                    <div class="text-xs text-muted">Tokens Today</div>
+                    <div class="text-xs text-muted">{t('security.tokens')}</div>
                 </div>
                 <div class="card p-3 text-center">
                     <div class="text-xl font-bold">{formatTokens(costSummary.total_tokens)}</div>
-                    <div class="text-xs text-muted">Total Tokens</div>
+                    <div class="text-xs text-muted">{t('security.total_tokens')}</div>
                 </div>
                 <div class="card p-3 text-center">
                     <div class="text-xl font-bold">{costSummary.today_requests}</div>
@@ -445,7 +446,7 @@
                 </div>
             </div>
         {:else}
-            <p class="text-muted text-sm">Loading cost data...</p>
+            <p class="text-muted text-sm">{t('common.loading')}</p>
         {/if}
 
     <!-- Rate Limits Section -->
@@ -496,23 +497,23 @@
                 </div>
             </div>
         {:else}
-            <p class="text-muted text-sm">Loading rate limit data...</p>
+            <p class="text-muted text-sm">{t('common.loading')}</p>
         {/if}
 
     <!-- 2FA Section -->
     {:else if activeSection === '2fa'}
         <div class="space-y-3">
             <div class="flex items-center justify-between mb-2">
-                <h3 class="text-lg font-bold text-heading"><i class="fa-solid fa-lock mr-2"></i>2FA Challenges</h3>
+                <h3 class="text-lg font-bold text-heading"><i class="fa-solid fa-lock mr-2"></i>{t('security.pending_challenges')}</h3>
                 <button class="btn btn-sm" onclick={() => load2FA()}>
-                    <i class="fa-solid fa-rotate mr-1"></i>Refresh
+                    <i class="fa-solid fa-rotate mr-1"></i>{t('common.refresh')}
                 </button>
             </div>
 
             {#if challenges.length === 0}
                 <div class="card p-6 text-center">
                     <i class="fa-solid fa-shield-check text-3xl text-green-400 mb-2"></i>
-                    <p class="text-muted">No pending 2FA challenges.</p>
+                    <p class="text-muted">{t('security.no_challenges')}</p>
                     <p class="text-xs text-muted mt-1">
                         When the agent attempts a dangerous operation (like executing shell commands),
                         a 2FA challenge will appear here for your confirmation.
@@ -532,10 +533,10 @@
                                 <p class="text-sm text-muted mt-1">{challenge.description}</p>
                                 <div class="flex gap-2 mt-2">
                                     <button class="btn btn-sm bg-green-600 hover:bg-green-500 text-white" onclick={() => confirm2FA(challenge.id)}>
-                                        <i class="fa-solid fa-check mr-1"></i>Confirm
+                                        <i class="fa-solid fa-check mr-1"></i>{t('common.confirm')}
                                     </button>
                                     <button class="btn btn-sm bg-red-600 hover:bg-red-500 text-white" onclick={() => reject2FA(challenge.id)}>
-                                        <i class="fa-solid fa-xmark mr-1"></i>Reject
+                                        <i class="fa-solid fa-xmark mr-1"></i>{t('security.reject')}
                                     </button>
                                 </div>
                             </div>

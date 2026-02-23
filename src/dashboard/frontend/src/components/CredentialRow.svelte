@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { t } from '../lib/i18n';
     import { api } from '../lib/api';
     import type { CredentialStatus, ActionResponse } from '../lib/types';
 
@@ -17,13 +18,13 @@
     }
 
     function statusLabel(): string {
-        if (credential.configured) return 'Configured';
-        return credential.required ? 'Required' : 'Optional';
+        if (credential.configured) return t('cred.configured');
+        return credential.required ? t('cred.required') : t('cred.optional');
     }
 
     function placeholder(): string {
-        if (credential.configured) return '(configured - enter new value to update)';
-        return credential.description || 'Enter value...';
+        if (credential.configured) return t('cred.configured_placeholder');
+        return credential.description || t('cred.enter_value');
     }
 
     async function save() {
@@ -40,12 +41,12 @@
             onchange();
         } catch (e) {
             console.error('saveCredential:', e);
-            alert('Failed to save credential: ' + (e as Error).message);
+            alert(t('cred.save_failed') + (e as Error).message);
         }
     }
 
     async function remove() {
-        if (!confirm(`Remove credential "${credential.name}" from "${skillName}"?`)) return;
+        if (!confirm(t('cred.remove_confirm', { name: credential.name, skill: skillName }))) return;
         try {
             await api<ActionResponse>(
                 'DELETE',
@@ -54,7 +55,7 @@
             onchange();
         } catch (e) {
             console.error('deleteCredential:', e);
-            alert('Failed to remove credential: ' + (e as Error).message);
+            alert(t('cred.remove_failed') + (e as Error).message);
         }
     }
 
@@ -81,7 +82,7 @@
     <div class="flex gap-1 shrink-0">
         <button
             onclick={save}
-            title="Save"
+            title={t('common.save')}
             class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface text-success-500 hover:bg-success-500/10 hover:border-success-500 transition-colors"
         >
             <i class="fa-solid fa-floppy-disk"></i>
@@ -89,7 +90,7 @@
         {#if credential.configured}
             <button
                 onclick={remove}
-                title="Remove"
+                title={t('common.delete')}
                 class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface text-error-500 hover:bg-error-500/10 hover:border-error-500 transition-colors"
             >
                 <i class="fa-solid fa-trash-can"></i>

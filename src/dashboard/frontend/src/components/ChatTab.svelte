@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount, tick } from 'svelte';
+    import { t } from '../lib/i18n';
     import { api } from '../lib/api';
     import { dashboard, liveFeed, auth } from '../lib/state.svelte';
     import { formatTime } from '../lib/time';
@@ -52,7 +53,7 @@
             // Replace optimistic history with real data
             await loadHistory();
         } catch (e: any) {
-            error = e?.message || 'Failed to send message';
+            error = e?.message || t('chat.send_failed');
             // Reload to get accurate state
             await loadHistory();
         } finally {
@@ -92,7 +93,7 @@
             <div class="flex items-center justify-center h-full">
                 <div class="text-center text-text-subtle">
                     <i class="fa-solid fa-comments text-3xl mb-3 block text-text-subtle"></i>
-                    <p class="text-sm">No messages yet. Say something to the agent.</p>
+                    <p class="text-sm">{t('chat.no_messages')}</p>
                 </div>
             </div>
         {:else}
@@ -140,7 +141,7 @@
                             {:else if liveFeed.isThinking}
                                 <i class="fa-solid fa-brain mr-1.5 text-info-500 animate-pulse"></i>Thinking…
                             {:else}
-                                <i class="fa-solid fa-circle-notch fa-spin mr-1.5"></i>Processing…
+                                <i class="fa-solid fa-circle-notch fa-spin mr-1.5"></i>{t('chat.processing')}
                             {/if}
                         </div>
                     </div>

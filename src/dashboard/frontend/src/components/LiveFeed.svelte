@@ -123,7 +123,7 @@
             {:else}
                 <i class="fa-solid fa-bolt"></i>
             {/if}
-            Tool Activity
+            {t('feed.title')}
             {#if hasEvents}
                 <span class="text-[10px] bg-surface-muted text-text-subtle px-1.5 py-0.5 rounded-full normal-case tracking-normal font-normal">
                     {liveFeed.events.length}
@@ -139,7 +139,7 @@
             {/if}
             {#if liveFeed.isThinking && !liveFeed.activeTool}
                 <span class="text-[11px] text-info-400 animate-pulse">
-                    <i class="fa-solid fa-brain mr-1"></i>thinking…
+                    <i class="fa-solid fa-brain mr-1"></i>{t('feed.thinking')}…
                 </span>
             {/if}
             {#if hasEvents}
@@ -158,7 +158,7 @@
         <div class="max-h-72 overflow-y-auto custom-scroll">
             {#if !hasEvents}
                 <p class="text-text-subtle text-sm italic text-center py-6">
-                    No recent tool activity — events appear here in real time as the agent works.
+                    {t('feed.no_events')}
                 </p>
             {:else}
                 <div class="divide-y divide-border-muted">
