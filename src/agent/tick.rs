@@ -26,8 +26,43 @@ impl Agent {
             error!(err = %e, "background goal processing failed");
         }
 
+        // Memory consolidation: periodically summarize old memories
+        if let Err(e) = self.consolidate_memories().await {
+            error!(err = %e, "memory consolidation failed");
+        }
+
         // Record tick
         self.memory.record_tick().await?;
+
+        Ok(())
+    }
+
+    /// Run memory consolidation: summarize old archival memories to keep context manageable.
+    async fn consolidate_memories(&self) -> crate::error::Result<()> {
+        let age_days = self.config.memory.consolidation_age_days;
+        let batch = self.config.memory.consolidation_batch_size;
+
+        let pending = crate::memory::consolidation::pending_consolidation_count(
+            self.memory.db(),
+            age_days,
+        ).await?;
+
+        if pending == 0 {
+            return Ok(());
+        }
+
+        debug!(pending, age_days, "old memories pending consolidation");
+
+        let consolidated = crate::memory::consolidation::consolidate_old_memories(
+            self.memory.db(),
+            &self.llm,
+            age_days,
+            batch,
+        ).await?;
+
+        if consolidated > 0 {
+            info!(consolidated, "archival memories consolidated");
+        }
 
         Ok(())
     }

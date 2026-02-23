@@ -1,8 +1,9 @@
 <script lang="ts">
     import { onMount, untrack } from 'svelte';
     import { t, initLocale } from './lib/i18n';
-    import { dashboard, auth, refreshAll, pushToolEvent, clearLiveFeed } from './lib/state.svelte';
-    import type { ToolEvent } from './lib/types';
+    import { dashboard, auth, refreshAll, pushToolEvent, clearLiveFeed, initTheme, sendApprovalNotification } from './lib/state.svelte';
+    import type { TabId } from './lib/state.svelte';
+    import type { ToolEvent, ApprovalNeededEvent } from './lib/types';
     import LoginOverlay from './components/LoginOverlay.svelte';
     import OnboardingWizard from './components/OnboardingWizard.svelte';
     import Header from './components/Header.svelte';
@@ -23,21 +24,22 @@
 
     const POLL_INTERVAL_MS = 30_000;
 
-    const tabs = [
-        { id: 'overview' as const, label: 'Overview', icon: 'fa-chart-line' },
-        { id: 'chat' as const, label: 'Chat', icon: 'fa-comments' },
-        { id: 'goals' as const, label: 'Goals', icon: 'fa-bullseye' },
-        { id: 'skills' as const, label: 'Skills', icon: 'fa-puzzle-piece' },
-        { id: 'knowledge' as const, label: 'Knowledge', icon: 'fa-diagram-project' },
-        { id: 'tools' as const, label: 'Tools', icon: 'fa-screwdriver-wrench' },
-        { id: 'trash' as const, label: 'Trash', icon: 'fa-trash-can' },
-        { id: 'security' as const, label: 'Security', icon: 'fa-shield-halved' },
-        { id: 'operations' as const, label: 'Ops', icon: 'fa-server' },
-        { id: 'settings' as const, label: 'Settings', icon: 'fa-gear' },
+    const tabs: { id: TabId; label: string; icon: string }[] = [
+        { id: 'overview', label: 'Overview', icon: 'fa-chart-line' },
+        { id: 'chat', label: 'Chat', icon: 'fa-comments' },
+        { id: 'goals', label: 'Goals', icon: 'fa-bullseye' },
+        { id: 'skills', label: 'Skills', icon: 'fa-puzzle-piece' },
+        { id: 'knowledge', label: 'Knowledge', icon: 'fa-diagram-project' },
+        { id: 'tools', label: 'Tools', icon: 'fa-screwdriver-wrench' },
+        { id: 'trash', label: 'Trash', icon: 'fa-trash-can' },
+        { id: 'security', label: 'Security', icon: 'fa-shield-halved' },
+        { id: 'operations', label: 'Ops', icon: 'fa-server' },
+        { id: 'settings', label: 'Settings', icon: 'fa-gear' },
     ];
 
-    function switchTab(id: typeof dashboard.currentTab) {
+    function switchTab(id: TabId) {
         dashboard.currentTab = id;
+        dashboard.mobileMenuOpen = false;
     }
 
     async function checkAuth() {
@@ -61,7 +63,6 @@
             const data = await res.json();
             auth.onboardingCompleted = data.completed === true;
         } catch {
-            // If the endpoint fails, assume onboarding is done so we don't block
             auth.onboardingCompleted = true;
         }
     }
@@ -70,42 +71,79 @@
         auth.onboardingCompleted = true;
     }
 
+    let deferredPrompt: Event & { prompt?: () => void } | null = $state(null);
+    let showInstallBanner = $state(false);
+
     onMount(() => {
         initLocale();
+        initTheme();
         checkOnboarding();
         checkAuth();
         window.addEventListener('onboarding-complete', handleOnboardingComplete);
+
+        // PWA install prompt
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e as Event & { prompt: () => void };
+            if (!localStorage.getItem('safe-agent-pwa-dismissed')) {
+                showInstallBanner = true;
+            }
+        });
+
+        // Register service worker
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/sw.js').catch(() => {});
+        }
+
+        // Check if notifications were previously granted
+        if ('Notification' in window && Notification.permission === 'granted') {
+            dashboard.notificationsEnabled = true;
+        }
+
         return () => {
             window.removeEventListener('onboarding-complete', handleOnboardingComplete);
         };
     });
+
+    function installPwa() {
+        if (deferredPrompt?.prompt) {
+            deferredPrompt.prompt();
+            deferredPrompt = null;
+            showInstallBanner = false;
+        }
+    }
+
+    function dismissInstall() {
+        showInstallBanner = false;
+        localStorage.setItem('safe-agent-pwa-dismissed', '1');
+    }
 
     let evtSource: EventSource | undefined;
     let interval: ReturnType<typeof setInterval> | undefined;
 
     $effect(() => {
         if (auth.authenticated) {
-            // untrack so the refreshCounter++ read doesn't become a dependency
             untrack(() => refreshAll());
 
             evtSource = new EventSource('/api/events');
             evtSource.onmessage = (e) => {
                 const data = e.data;
-                // Try to parse as a structured tool event
                 if (data && data.startsWith('{')) {
                     try {
                         const evt = JSON.parse(data) as ToolEvent;
                         if (evt.type) {
                             pushToolEvent(evt);
-                            // Also trigger a data refresh on turn_complete
                             if (evt.type === 'turn_complete' || evt.type === 'approval_needed') {
                                 refreshAll();
+                            }
+                            if (evt.type === 'approval_needed') {
+                                const ae = evt as ApprovalNeededEvent;
+                                sendApprovalNotification(ae.tool, ae.id);
                             }
                             return;
                         }
                     } catch { /* not JSON, fall through */ }
                 }
-                // Backward-compatible: plain "update" string
                 refreshAll();
             };
             evtSource.onerror = () => {
@@ -127,6 +165,40 @@
     });
 </script>
 
+<!-- Mobile menu overlay -->
+{#if dashboard.mobileMenuOpen}
+    <div
+        class="mobile-menu-overlay open"
+        onclick={() => dashboard.mobileMenuOpen = false}
+        role="presentation"
+    ></div>
+    <nav class="mobile-menu open">
+        <div class="flex items-center justify-between px-4 py-3 border-b border-border">
+            <span class="text-sm font-semibold text-primary-400">
+                <i class="fa-solid fa-robot mr-1"></i> {t('header.title')}
+            </span>
+            <button
+                onclick={() => dashboard.mobileMenuOpen = false}
+                class="p-1 text-text-muted hover:text-text"
+            >
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div class="py-2">
+            {#each tabs as tab}
+                <button
+                    class="mobile-nav-item"
+                    class:active={dashboard.currentTab === tab.id}
+                    onclick={() => switchTab(tab.id)}
+                >
+                    <i class="fa-solid {tab.icon} w-5 text-center"></i>
+                    {t('nav.' + tab.id)}
+                </button>
+            {/each}
+        </div>
+    </nav>
+{/if}
+
 {#if !auth.checked}
     <!-- Loading: waiting for auth check -->
 {:else if auth.onboardingCompleted === false}
@@ -136,8 +208,33 @@
 {:else}
     <Header />
 
-    <main class="p-6">
-        <div class="flex border-b border-border mb-4">
+    <!-- PWA install banner -->
+    {#if showInstallBanner}
+        <div class="flex items-center justify-between gap-3 px-4 py-2.5 bg-primary-900/30 border-b border-primary-800/40">
+            <div class="flex items-center gap-2 text-sm text-primary-300">
+                <i class="fa-solid fa-download"></i>
+                <span>{t('pwa.install_hint')}</span>
+            </div>
+            <div class="flex gap-2">
+                <button
+                    onclick={installPwa}
+                    class="px-3 py-1 text-xs font-medium rounded bg-primary-600 text-white hover:bg-primary-500 transition-colors"
+                >
+                    {t('pwa.install')}
+                </button>
+                <button
+                    onclick={dismissInstall}
+                    class="px-2 py-1 text-xs text-text-muted hover:text-text transition-colors"
+                >
+                    {t('pwa.dismiss')}
+                </button>
+            </div>
+        </div>
+    {/if}
+
+    <main class="p-3 sm:p-6">
+        <!-- Desktop tab bar (hidden on small screens) -->
+        <div class="hidden sm:flex border-b border-border mb-4 tab-scroll">
             {#each tabs as tab}
                 <button
                     class="main-tab"
@@ -147,6 +244,12 @@
                     <i class="fa-solid {tab.icon} mr-1.5"></i> {t('nav.' + tab.id)}
                 </button>
             {/each}
+        </div>
+
+        <!-- Mobile: current tab indicator (visible on small screens) -->
+        <div class="flex sm:hidden items-center gap-2 mb-3 text-sm text-text-muted">
+            <i class="fa-solid {tabs.find(t => t.id === dashboard.currentTab)?.icon} text-primary-500"></i>
+            <span class="font-medium text-text">{t('nav.' + dashboard.currentTab)}</span>
         </div>
 
         {#if dashboard.currentTab === 'overview'}

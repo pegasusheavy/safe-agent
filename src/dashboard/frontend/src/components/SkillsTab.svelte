@@ -4,6 +4,7 @@
     import { dashboard } from '../lib/state.svelte';
     import type { SkillStatus, ActionResponse } from '../lib/types';
     import SkillCard from './SkillCard.svelte';
+    import SkillMarketplace from './SkillMarketplace.svelte';
 
     interface SkillExtInfo {
         skill_name: string;
@@ -204,3 +205,5 @@
         {/if}
     </div>
 </section>
+
+<SkillMarketplace />

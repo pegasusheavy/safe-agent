@@ -2,10 +2,15 @@ import type { ToolEvent } from './types';
 
 const MAX_FEED_EVENTS = 100;
 
+export type TabId = 'overview' | 'chat' | 'goals' | 'skills' | 'knowledge' | 'tools' | 'trash' | 'security' | 'operations' | 'settings';
+
 export const dashboard = $state({
     refreshCounter: 0,
-    currentTab: 'overview' as 'overview' | 'chat' | 'goals' | 'skills' | 'knowledge' | 'tools' | 'trash' | 'security' | 'operations' | 'settings',
+    currentTab: 'overview' as TabId,
     currentMemoryTab: 'core' as 'core' | 'conversation' | 'archival',
+    mobileMenuOpen: false,
+    theme: 'dark' as 'dark' | 'light',
+    notificationsEnabled: false,
 });
 
 export const auth = $state({
@@ -16,6 +21,52 @@ export const auth = $state({
     subject: null as string | null,
     onboardingCompleted: null as boolean | null,
 });
+
+export function initTheme(): void {
+    const stored = localStorage.getItem('safe-agent-theme');
+    if (stored === 'light' || stored === 'dark') {
+        dashboard.theme = stored;
+    }
+    applyTheme(dashboard.theme);
+}
+
+export function toggleTheme(): void {
+    dashboard.theme = dashboard.theme === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('safe-agent-theme', dashboard.theme);
+    applyTheme(dashboard.theme);
+}
+
+function applyTheme(theme: 'dark' | 'light'): void {
+    document.documentElement.setAttribute('data-theme', theme);
+}
+
+export function requestNotifications(): void {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'granted') {
+        dashboard.notificationsEnabled = true;
+        return;
+    }
+    if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then((perm) => {
+            dashboard.notificationsEnabled = perm === 'granted';
+        });
+    }
+}
+
+export function sendApprovalNotification(tool: string, id: string): void {
+    if (!dashboard.notificationsEnabled) return;
+    if (document.hasFocus()) return;
+    const n = new Notification('Approval Required', {
+        body: `${tool} needs your approval`,
+        icon: '/manifest-icon-192.png',
+        tag: `approval-${id}`,
+    });
+    n.onclick = () => {
+        window.focus();
+        dashboard.currentTab = 'overview';
+        n.close();
+    };
+}
 
 /** Live feed of streaming tool progress events. */
 export const liveFeed = $state({

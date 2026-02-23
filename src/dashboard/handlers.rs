@@ -298,6 +298,132 @@ pub async fn search_archival_memory(
         })
 }
 
+#[derive(Deserialize)]
+pub struct ConversationHistoryQuery {
+    #[serde(default)]
+    pub q: String,
+    #[serde(default = "default_history_limit")]
+    pub limit: usize,
+    #[serde(default)]
+    pub offset: usize,
+}
+
+fn default_history_limit() -> usize {
+    50
+}
+
+/// Search and paginate ALL conversation history (not just the window).
+pub async fn conversation_history(
+    State(state): State<DashState>,
+    Query(params): Query<ConversationHistoryQuery>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    let db = state.db.lock().await;
+
+    let result = if params.q.is_empty() {
+        let mut stmt = db
+            .prepare(
+                "SELECT id, role, content, user_id, created_at FROM conversation_history ORDER BY id DESC LIMIT ?1 OFFSET ?2",
+            )
+            .map_err(|e| {
+                error!("conversation history: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+        let rows: Vec<serde_json::Value> = stmt
+            .query_map(rusqlite::params![params.limit as i64, params.offset as i64], |row| {
+                Ok(serde_json::json!({
+                    "id": row.get::<_, i64>(0)?,
+                    "role": row.get::<_, String>(1)?,
+                    "content": row.get::<_, String>(2)?,
+                    "user_id": row.get::<_, Option<String>>(3)?,
+                    "created_at": row.get::<_, String>(4)?
+                }))
+            })
+            .map_err(|e| {
+                error!("conversation history: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let total: i64 = db
+            .query_row("SELECT COUNT(*) FROM conversation_history", [], |r| r.get(0))
+            .unwrap_or(0);
+
+        serde_json::json!({ "messages": rows, "total": total })
+    } else {
+        let pattern = format!("%{}%", params.q);
+        let mut stmt = db
+            .prepare(
+                "SELECT id, role, content, user_id, created_at FROM conversation_history WHERE content LIKE ?1 ORDER BY id DESC LIMIT ?2 OFFSET ?3",
+            )
+            .map_err(|e| {
+                error!("conversation history: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?;
+
+        let rows: Vec<serde_json::Value> = stmt
+            .query_map(
+                rusqlite::params![&pattern, params.limit as i64, params.offset as i64],
+                |row| {
+                    Ok(serde_json::json!({
+                        "id": row.get::<_, i64>(0)?,
+                        "role": row.get::<_, String>(1)?,
+                        "content": row.get::<_, String>(2)?,
+                        "user_id": row.get::<_, Option<String>>(3)?,
+                        "created_at": row.get::<_, String>(4)?
+                    }))
+                },
+            )
+            .map_err(|e| {
+                error!("conversation history: {e}");
+                StatusCode::INTERNAL_SERVER_ERROR
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
+
+        let total: i64 = db
+            .query_row(
+                "SELECT COUNT(*) FROM conversation_history WHERE content LIKE ?1",
+                rusqlite::params![&pattern],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+
+        serde_json::json!({ "messages": rows, "total": total })
+    };
+
+    Ok(Json(result))
+}
+
+// -- Persona ---------------------------------------------------------------
+
+/// Get the agent's core personality.
+pub async fn get_persona(State(state): State<DashState>) -> Json<serde_json::Value> {
+    let personality = state.agent.memory.core.get().await.unwrap_or_default();
+    Json(serde_json::json!({ "personality": personality }))
+}
+
+#[derive(Deserialize)]
+pub struct PersonaUpdate {
+    pub personality: String,
+}
+
+/// Update the agent's core personality.
+pub async fn update_persona(
+    State(state): State<DashState>,
+    Json(body): Json<PersonaUpdate>,
+) -> Json<serde_json::Value> {
+    let db = state.db.lock().await;
+    match db.execute(
+        "UPDATE core_memory SET personality = ?1, updated_at = datetime('now') WHERE id = 1",
+        [&body.personality],
+    ) {
+        Ok(_) => Json(serde_json::json!({ "ok": true })),
+        Err(e) => Json(serde_json::json!({ "ok": false, "error": e.to_string() })),
+    }
+}
+
 // -- Knowledge Graph -----------------------------------------------------
 
 pub async fn get_knowledge_nodes(

@@ -79,6 +79,26 @@
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.6);
 }
 
+/* Light theme overrides */
+[data-theme="light"] {
+    --color-background: #f8f6f3;
+    --color-foreground: #1a1410;
+    --color-surface: #ffffff;
+    --color-surface-elevated: #f0ece7;
+    --color-surface-muted: #ebe6e0;
+    --color-border: #d4cfc8;
+    --color-border-muted: #e0dbd5;
+    --color-text: #1a1410;
+    --color-text-muted: #6b6158;
+    --color-text-subtle: #9a9088;
+    --color-text-inverse: #f5f0eb;
+    --color-primary-950: #fff3e0;
+    --color-error-950: #fef2f2;
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.08);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+}
+
 /* Custom scrollbar */
 .custom-scroll::-webkit-scrollbar {
     width: 6px;
@@ -116,6 +136,7 @@
     font-weight: 500;
     cursor: pointer;
     transition: color 0.15s;
+    white-space: nowrap;
 }
 
 .main-tab.active {
@@ -159,4 +180,93 @@
 
 .animate-subtle-pulse {
     animation: subtle-pulse 2s ease-in-out infinite;
+}
+
+/* Mobile responsive tab bar */
+.tab-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+.tab-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+/* Mobile hamburger menu overlay */
+.mobile-menu-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 40;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+}
+.mobile-menu-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.mobile-menu {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 280px;
+    max-width: 85vw;
+    background: var(--color-surface);
+    border-right: 1px solid var(--color-border);
+    z-index: 50;
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    overflow-y: auto;
+}
+.mobile-menu.open {
+    transform: translateX(0);
+}
+
+/* Mobile tab items in sidebar */
+.mobile-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1.25rem;
+    font-size: 0.9375rem;
+    color: var(--color-text-muted);
+    transition: color 0.15s, background 0.15s;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    width: 100%;
+    text-align: left;
+}
+.mobile-nav-item:hover {
+    color: var(--color-text);
+    background: var(--color-surface-elevated);
+}
+.mobile-nav-item.active {
+    color: var(--color-primary-500);
+    background: var(--color-surface-muted);
+    border-left: 3px solid var(--color-primary-500);
+}
+
+/* Knowledge graph canvas */
+.kg-canvas {
+    width: 100%;
+    height: 500px;
+    border-radius: var(--radius-lg);
+    cursor: grab;
+}
+.kg-canvas:active {
+    cursor: grabbing;
+}
+
+/* Token health indicators */
+.token-health-good { color: var(--color-success-500); }
+.token-health-warning { color: var(--color-warning-500); }
+.token-health-expired { color: var(--color-error-500); }
+
+/* PWA install banner */
+.pwa-install-btn {
+    animation: subtle-pulse 3s ease-in-out 2;
 }

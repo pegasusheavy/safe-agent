@@ -352,7 +352,7 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
         ",
     )?;
 
-    // --- Metadata key-value store (onboarding state, app-level flags) ---
+    // -        -- Metadata key-value store (onboarding state, app-level flags) ---
     conn.execute_batch(
         "
         CREATE TABLE IF NOT EXISTS metadata (
@@ -361,6 +361,63 @@ pub(crate) fn migrate(conn: &Connection) -> Result<()> {
         );
         ",
     )?;
+
+    // --- Episodic memory (what happened during each interaction) ---
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS episodes (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            trigger     TEXT NOT NULL,
+            summary     TEXT NOT NULL DEFAULT '',
+            actions     TEXT NOT NULL DEFAULT '[]',
+            outcome     TEXT NOT NULL DEFAULT '',
+            user_id     TEXT,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_episodes_created ON episodes(created_at);
+        CREATE INDEX IF NOT EXISTS idx_episodes_user ON episodes(user_id) WHERE user_id IS NOT NULL;
+        ",
+    )?;
+
+    // --- User profiles (structured key-value user preferences) ---
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS user_profiles (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     TEXT,
+            key         TEXT NOT NULL,
+            value       TEXT NOT NULL,
+            confidence  REAL NOT NULL DEFAULT 1.0,
+            source      TEXT NOT NULL DEFAULT '',
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(user_id, key)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_user_profiles_user ON user_profiles(user_id);
+        ",
+    )?;
+
+    // --- Memory embeddings (vector representations for semantic search) ---
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS memory_embeddings (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_table TEXT NOT NULL,
+            source_id    INTEGER NOT NULL,
+            embedding    BLOB NOT NULL,
+            model        TEXT NOT NULL DEFAULT '',
+            created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(source_table, source_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_embeddings_source ON memory_embeddings(source_table, source_id);
+        ",
+    )?;
+
+    // --- consolidated flag on archival_memory for decay tracking ---
+    add_column_if_missing(conn, "archival_memory", "consolidated", "INTEGER NOT NULL DEFAULT 0");
 
     // Migrate oauth_tokens from single-account to multi-account schema.
     // Check if the 'account' column exists; if not, recreate the table.
@@ -468,6 +525,9 @@ mod tests {
             "users",
             "passkeys",
             "metadata",
+            "episodes",
+            "user_profiles",
+            "memory_embeddings",
         ];
 
         for table in tables {

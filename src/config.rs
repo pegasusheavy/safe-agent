@@ -89,6 +89,9 @@ pub struct Config {
 
     #[serde(default)]
     pub plugins: PluginsConfig,
+
+    #[serde(default)]
+    pub memory: MemoryConfig,
 }
 
 // -- Federation --------------------------------------------------------------
@@ -737,6 +740,45 @@ pub struct TailscaleConfig {
     pub url: String,
 }
 
+// -- Memory --------------------------------------------------------------
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct MemoryConfig {
+    /// Ollama model used for generating embeddings (default: "nomic-embed-text").
+    /// Set to empty string to disable embeddings and fall back to FTS5.
+    #[serde(default = "default_embedding_model")]
+    pub embedding_model: String,
+
+    /// Ollama host used for embedding requests (defaults to the same as llm.ollama_host).
+    /// Can be overridden with `EMBEDDING_OLLAMA_HOST` env var.
+    #[serde(default)]
+    pub embedding_host: String,
+
+    /// Automatically extract facts, preferences, and entities after each conversation.
+    #[serde(default = "default_true")]
+    pub auto_extract: bool,
+
+    /// Consolidate archival memories older than this many days.
+    #[serde(default = "default_consolidation_age_days")]
+    pub consolidation_age_days: u32,
+
+    /// Maximum number of old memories to consolidate per tick.
+    #[serde(default = "default_consolidation_batch")]
+    pub consolidation_batch_size: usize,
+}
+
+impl Default for MemoryConfig {
+    fn default() -> Self {
+        Self {
+            embedding_model: default_embedding_model(),
+            embedding_host: String::new(),
+            auto_extract: true,
+            consolidation_age_days: default_consolidation_age_days(),
+            consolidation_batch_size: default_consolidation_batch(),
+        }
+    }
+}
+
 // -- Defaults ------------------------------------------------------------
 
 fn default_agent_name() -> String {
@@ -839,6 +881,15 @@ fn default_tailscale_bin() -> String {
 }
 fn default_tailscale_mode() -> String {
     "funnel".to_string()
+}
+fn default_embedding_model() -> String {
+    "nomic-embed-text".to_string()
+}
+fn default_consolidation_age_days() -> u32 {
+    30
+}
+fn default_consolidation_batch() -> usize {
+    20
 }
 fn default_2fa_tools() -> Vec<String> {
     vec![
@@ -1050,6 +1101,7 @@ impl Default for Config {
             security: SecurityConfig::default(),
             federation: FederationConfig::default(),
             plugins: PluginsConfig::default(),
+            memory: MemoryConfig::default(),
         }
     }
 }

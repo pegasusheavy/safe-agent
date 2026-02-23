@@ -74,9 +74,16 @@ impl Agent {
         trash: Arc<TrashManager>,
         encryptor: Arc<FieldEncryptor>,
     ) -> Result<Self> {
-        // Initialize memory
-        let memory = MemoryManager::new(db.clone(), config.conversation_window);
+        // Initialize memory (with optional embedding engine)
+        let mut memory = MemoryManager::new(db.clone(), config.conversation_window);
         memory.init(&config.core_personality).await?;
+
+        let embed_host = if config.memory.embedding_host.is_empty() {
+            &config.llm.ollama_host
+        } else {
+            &config.memory.embedding_host
+        };
+        memory.init_embeddings(embed_host, &config.memory.embedding_model);
 
         // Initialize approval queue
         let approval_queue = ApprovalQueue::new(db.clone(), config.approval_expiry_secs);
@@ -650,23 +657,79 @@ impl Agent {
             .await?;
         self.notify_update();
 
+        // Post-conversation memory enrichment:
+        // - Record episodic memory (always)
+        // - Run LLM extraction pipeline (if auto_extract is enabled)
+        {
+            let episode_summary = truncate_preview(&context, 200);
+            if let Err(e) = self.memory.episodic.record(
+                "user_message",
+                &episode_summary,
+                &[],
+                "completed",
+                user_id,
+            ).await {
+                warn!(err = %e, "failed to record episode");
+            }
+        }
+
+        if self.config.memory.auto_extract {
+            let extraction_fut = crate::memory::extraction::extract_from_conversation(
+                self.memory.db(),
+                &self.llm,
+                &context,
+                user_id,
+                &[],
+            );
+            // Timeout prevents a slow LLM from blocking indefinitely
+            if tokio::time::timeout(
+                std::time::Duration::from_secs(30),
+                extraction_fut,
+            ).await.is_err() {
+                warn!("memory extraction timed out (30s)");
+            }
+        }
+
         Ok(final_text)
     }
 
-    /// Build the context string sent to the LLM (recent conversation + current message).
+    /// Build the context string sent to the LLM.
+    ///
+    /// Includes: user profile, relevant archival memories, recent conversation,
+    /// and the current message.
     async fn build_llm_context(&self, user_message: &str) -> String {
-        let recent = self.memory.conversation.recent().await;
-        match recent {
-            Ok(messages) if !messages.is_empty() => {
-                let mut ctx = String::new();
+        let mut ctx = String::new();
+
+        // Inject user profile if available
+        if let Ok(profile) = self.memory.user_model.as_context_string(None).await {
+            if !profile.is_empty() {
+                ctx.push_str(&profile);
+                ctx.push('\n');
+            }
+        }
+
+        // Inject relevant archival memories (semantic search if embeddings available)
+        if let Ok(memories) = self.memory.semantic_search_archival(user_message, 3).await {
+            if !memories.is_empty() {
+                ctx.push_str("== RELEVANT MEMORIES ==\n");
+                for mem in &memories {
+                    ctx.push_str(&format!("- {}\n", mem.content));
+                }
+                ctx.push('\n');
+            }
+        }
+
+        // Recent conversation history
+        if let Ok(messages) = self.memory.conversation.recent().await {
+            if !messages.is_empty() {
                 for msg in &messages {
                     ctx.push_str(&format!("{}: {}\n", capitalize(&msg.role), msg.content));
                 }
-                ctx.push_str(&format!("User: {}", user_message));
-                ctx
             }
-            _ => user_message.to_string(),
         }
+
+        ctx.push_str(&format!("User: {}", user_message));
+        ctx
     }
 
     pub fn is_paused(&self) -> bool {

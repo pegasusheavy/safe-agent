@@ -5,6 +5,8 @@
     import { formatDateTime } from '../lib/time';
     import UsersPanel from './UsersPanel.svelte';
     import TwoFactorPanel from './TwoFactorPanel.svelte';
+    import PersonaEditor from './PersonaEditor.svelte';
+    import ConversationHistory from './ConversationHistory.svelte';
 
     interface SsoProvider {
         id: string;
@@ -243,8 +245,14 @@
     });
 </script>
 
+<!-- Agent Persona -->
+<PersonaEditor />
+
+<!-- Conversation History -->
+<ConversationHistory />
+
 <!-- Messaging Platforms -->
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden mb-4">
+<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden mb-4 mt-4">
     <div class="flex justify-between items-center border-b border-border">
         <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
             <i class="fa-solid fa-tower-broadcast mr-1.5"></i> {t('settings.messaging')}
@@ -590,10 +598,47 @@ sso_allowed_emails = ["you@example.com"]</code>
                     {#if expandedProviders.has(provider.id) || provider.accounts.length <= 2}
                         <div class="mt-1.5 space-y-1.5 pl-7">
                             {#each provider.accounts as acct (acct.account)}
+                                {@const expiresAt = acct.expires_at ? new Date(acct.expires_at) : null}
+                                {@const now = new Date()}
+                                {@const isExpired = expiresAt ? expiresAt < now : false}
+                                {@const isExpiringSoon = expiresAt ? !isExpired && (expiresAt.getTime() - now.getTime()) < 24 * 60 * 60 * 1000 : false}
                                 <div class="flex items-center justify-between p-2 rounded-md bg-surface border border-border/50">
                                     <div class="min-w-0 flex-1 space-y-0.5">
-                                        <div class="text-sm text-text truncate">{acct.email}</div>
-                                        <div class="flex items-center gap-2 text-xs text-text-subtle">
+                                        <div class="flex items-center gap-2">
+                                            <span class="text-sm text-text truncate">{acct.email}</span>
+                                            <!-- Token health indicator -->
+                                            {#if isExpired}
+                                                <span class="token-health-expired text-[10px]" title={t('oauth.health_expired')}>
+                                                    <i class="fa-solid fa-circle-xmark"></i>
+                                                </span>
+                                            {:else if isExpiringSoon}
+                                                <span class="token-health-warning text-[10px]" title={t('oauth.health_warning')}>
+                                                    <i class="fa-solid fa-circle-exclamation"></i>
+                                                </span>
+                                            {:else}
+                                                <span class="token-health-good text-[10px]" title={t('oauth.health_good')}>
+                                                    <i class="fa-solid fa-circle-check"></i>
+                                                </span>
+                                            {/if}
+                                        </div>
+                                        <div class="flex items-center gap-2 text-xs text-text-subtle flex-wrap">
+                                            {#if acct.expires_at}
+                                                {#if isExpired}
+                                                    <span class="text-error-400">
+                                                        <i class="fa-solid fa-clock mr-0.5"></i>{t('oauth.health_expired')}
+                                                    </span>
+                                                {:else if isExpiringSoon}
+                                                    <span class="text-warning-400">
+                                                        <i class="fa-solid fa-clock mr-0.5"></i>{t('oauth.health_warning')}
+                                                    </span>
+                                                {:else}
+                                                    <span>
+                                                        <i class="fa-solid fa-clock mr-0.5"></i>{formatDateTime(acct.expires_at)}
+                                                    </span>
+                                                {/if}
+                                            {:else}
+                                                <span><i class="fa-solid fa-infinity mr-0.5"></i>{t('oauth.never_expires')}</span>
+                                            {/if}
                                             {#if acct.updated_at}
                                                 <span>{t('settings.updated')} {formatDateTime(acct.updated_at)}</span>
                                             {/if}
@@ -602,9 +647,21 @@ sso_allowed_emails = ["you@example.com"]</code>
                                                     <i class="fa-solid fa-triangle-exclamation"></i> {t('settings.no_refresh_token')}
                                                 </span>
                                             {/if}
+                                            {#if acct.scopes?.length > 0}
+                                                <span class="text-[10px] text-text-subtle/70">{acct.scopes.join(', ')}</span>
+                                            {/if}
                                         </div>
                                     </div>
                                     <div class="flex gap-1.5 ml-2 flex-shrink-0">
+                                        {#if isExpired}
+                                            <a
+                                                href={provider.authorize_url}
+                                                class="px-2 py-1 text-xs border border-warning-600/50 rounded bg-warning-500/10 text-warning-400 hover:bg-warning-500/20 transition-colors"
+                                                title={t('oauth.reauth')}
+                                            >
+                                                <i class="fa-solid fa-arrow-rotate-right mr-1"></i>{t('oauth.reauth')}
+                                            </a>
+                                        {/if}
                                         <button
                                             onclick={() => refreshToken(provider.id, acct.account)}
                                             disabled={refreshing !== null}

@@ -1,7 +1,12 @@
 pub mod archival;
+pub mod consolidation;
 pub mod conversation;
 pub mod core;
+pub mod embeddings;
+pub mod episodic;
+pub mod extraction;
 pub mod knowledge;
+pub mod user_model;
 
 use std::sync::Arc;
 
@@ -14,6 +19,9 @@ pub struct MemoryManager {
     pub core: core::CoreMemory,
     pub conversation: conversation::ConversationMemory,
     pub archival: archival::ArchivalMemory,
+    pub episodic: episodic::EpisodicMemory,
+    pub user_model: user_model::UserModel,
+    pub embeddings: Option<embeddings::EmbeddingEngine>,
     db: Arc<Mutex<Connection>>,
 }
 
@@ -23,8 +31,98 @@ impl MemoryManager {
             core: core::CoreMemory::new(db.clone()),
             conversation: conversation::ConversationMemory::new(db.clone(), conversation_window),
             archival: archival::ArchivalMemory::new(db.clone()),
+            episodic: episodic::EpisodicMemory::new(db.clone()),
+            user_model: user_model::UserModel::new(db.clone()),
+            embeddings: None,
             db,
         }
+    }
+
+    /// Initialize the embedding engine from memory config.
+    pub fn init_embeddings(&mut self, ollama_host: &str, model: &str) {
+        self.embeddings = embeddings::EmbeddingEngine::new(self.db.clone(), ollama_host, model);
+        if self.embeddings.is_some() {
+            tracing::info!(model, "embedding engine initialized");
+        }
+    }
+
+    /// Semantic search over archival memory.
+    /// Falls back to FTS5 if embeddings are unavailable or fail.
+    pub async fn semantic_search_archival(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<archival::ArchivalEntry>> {
+        if let Some(ref engine) = self.embeddings {
+            match engine.search(query, "archival_memory", limit).await {
+                Ok(results) if !results.is_empty() => {
+                    let db = self.db.lock().await;
+                    let mut entries = Vec::new();
+                    for sr in &results {
+                        if let Ok(entry) = db.query_row(
+                            "SELECT id, content, category, created_at FROM archival_memory WHERE id = ?1",
+                            [sr.source_id],
+                            |row| {
+                                Ok(archival::ArchivalEntry {
+                                    id: row.get(0)?,
+                                    content: row.get(1)?,
+                                    category: row.get(2)?,
+                                    created_at: row.get(3)?,
+                                })
+                            },
+                        ) {
+                            entries.push(entry);
+                        }
+                    }
+                    if !entries.is_empty() {
+                        return Ok(entries);
+                    }
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::debug!(err = %e, "embedding search failed, falling back to FTS5");
+                }
+            }
+        }
+
+        self.archival.search(query, limit).await
+    }
+
+    /// Semantic search over knowledge graph nodes.
+    /// Falls back to FTS5 if embeddings are unavailable or fail.
+    pub async fn semantic_search_knowledge(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<knowledge::KnowledgeNode>> {
+        let kg = knowledge::KnowledgeGraph::new(self.db.clone());
+
+        if let Some(ref engine) = self.embeddings {
+            match engine.search(query, "knowledge_nodes", limit).await {
+                Ok(results) if !results.is_empty() => {
+                    let mut nodes = Vec::new();
+                    for sr in &results {
+                        if let Ok(node) = kg.get_node(sr.source_id).await {
+                            nodes.push(node);
+                        }
+                    }
+                    if !nodes.is_empty() {
+                        return Ok(nodes);
+                    }
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::debug!(err = %e, "embedding search failed, falling back to FTS5");
+                }
+            }
+        }
+
+        kg.search(query, limit).await
+    }
+
+    /// Get the raw database handle (for extraction pipeline and consolidation).
+    pub fn db(&self) -> Arc<Mutex<Connection>> {
+        self.db.clone()
     }
 
     /// Initialize memory with config defaults.

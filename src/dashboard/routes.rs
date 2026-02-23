@@ -140,6 +140,10 @@ pub fn build(
         .route("/", get(serve_index))
         .route("/style.css", get(serve_css))
         .route("/app.js", get(serve_js))
+        .route("/manifest.json", get(serve_manifest))
+        .route("/sw.js", get(serve_sw))
+        .route("/manifest-icon-192.png", get(serve_icon_192))
+        .route("/manifest-icon-512.png", get(serve_icon_512))
         // Auth
         .route("/api/auth/check", get(auth::check))
         .route("/api/auth/info", get(auth::login_info))
@@ -177,6 +181,7 @@ pub fn build(
         .route("/api/memory/core", get(handlers::get_core_memory))
         .route("/api/memory/conversation", get(handlers::get_conversation_memory))
         .route("/api/memory/archival", get(handlers::search_archival_memory))
+        .route("/api/memory/conversation/history", get(handlers::conversation_history))
         // API — Knowledge Graph
         .route("/api/knowledge/nodes", get(handlers::get_knowledge_nodes))
         .route("/api/knowledge/nodes/{id}", get(handlers::get_knowledge_node))
@@ -298,6 +303,8 @@ pub fn build(
         .route("/api/onboarding/complete", post(handlers::onboarding_complete))
         .route("/api/onboarding/test-llm", post(handlers::onboarding_test_llm))
         .route("/api/onboarding/save-config", post(handlers::onboarding_save_config))
+        .route("/api/persona", get(handlers::get_persona))
+        .route("/api/persona", put(handlers::update_persona))
         .route("/metrics", get(handlers::metrics))
         .route("/api/federation/sync", post(handlers::federation_receive_sync))
         .route("/api/federation/heartbeat", post(handlers::federation_receive_heartbeat))
@@ -325,4 +332,52 @@ async fn serve_js() -> (axum::http::HeaderMap, &'static str) {
         "application/javascript".parse().unwrap(),
     );
     (headers, include_str!("ui/app.js"))
+}
+
+async fn serve_manifest() -> (axum::http::HeaderMap, &'static str) {
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(
+        axum::http::header::CONTENT_TYPE,
+        "application/manifest+json".parse().unwrap(),
+    );
+    (headers, include_str!("pwa/manifest.json"))
+}
+
+async fn serve_sw() -> (axum::http::HeaderMap, &'static str) {
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(
+        axum::http::header::CONTENT_TYPE,
+        "application/javascript".parse().unwrap(),
+    );
+    headers.insert(
+        axum::http::header::HeaderName::from_static("service-worker-allowed"),
+        "/".parse().unwrap(),
+    );
+    (headers, include_str!("pwa/sw.js"))
+}
+
+async fn serve_icon_192() -> (axum::http::HeaderMap, &'static [u8]) {
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(
+        axum::http::header::CONTENT_TYPE,
+        "image/png".parse().unwrap(),
+    );
+    headers.insert(
+        axum::http::header::CACHE_CONTROL,
+        "public, max-age=604800".parse().unwrap(),
+    );
+    (headers, include_bytes!("pwa/icon-192.png"))
+}
+
+async fn serve_icon_512() -> (axum::http::HeaderMap, &'static [u8]) {
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(
+        axum::http::header::CONTENT_TYPE,
+        "image/png".parse().unwrap(),
+    );
+    headers.insert(
+        axum::http::header::CACHE_CONTROL,
+        "public, max-age=604800".parse().unwrap(),
+    );
+    (headers, include_bytes!("pwa/icon-512.png"))
 }

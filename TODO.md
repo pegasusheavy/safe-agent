@@ -57,22 +57,40 @@ back, and loops up to `max_tool_turns` (default 5).
 
 ## 2. Memory & Learning
 
-- [ ] **Embedding-based retrieval (RAG)** — replace FTS5 with vector
-      embeddings for semantic memory search. Use a local embedding model
-      or API.
-- [ ] **Automatic memory extraction** — after each conversation, extract
-      key facts, preferences, and commitments into archival memory
-      without being told.
-- [ ] **Episodic memory** — store *what happened* (tool results, decisions,
-      outcomes) so the agent can learn from past actions.
-- [ ] **User model** — build a structured profile of the user's
-      preferences, schedule patterns, communication style, and priorities.
-- [ ] **Knowledge graph auto-population** — when the agent learns new
-      facts, add nodes/edges to the knowledge graph automatically.
-- [ ] **Memory decay & consolidation** — older memories should be
-      summarized and consolidated to keep context windows manageable.
-- [ ] **Cross-session context** — when the user refers to "that thing
-      from yesterday," the agent should be able to find it.
+The memory system is fully functional: archival memory with FTS5 search
+plus optional vector embeddings (via Ollama) for semantic RAG, windowed
+conversation history with per-user isolation, knowledge graph with
+traversal and auto-population, episodic memory recording what happened
+in each interaction, structured user profiles, automatic post-conversation
+extraction of facts/preferences/entities, and periodic consolidation of
+old memories. Core memory persists across sessions.
+
+- [x] **Embedding-based retrieval (RAG)** — Ollama embedding API
+      (`nomic-embed-text` default) generates vectors stored as BLOBs in
+      SQLite with brute-force cosine similarity search.  Falls back to
+      FTS5 when Ollama is unavailable.  Configured via `[memory]` config.
+- [x] **Automatic memory extraction** — post-conversation LLM pipeline
+      (`memory/extraction.rs`) extracts facts, user preferences, entities,
+      and relations, storing them across archival memory, user profiles,
+      and the knowledge graph.  Enabled by `memory.auto_extract` (default
+      true).
+- [x] **Episodic memory** — `episodes` table records trigger, summary,
+      tool actions (JSON), outcome, and user ID per interaction.  Queried
+      by recency or keyword.
+- [x] **User model** — `user_profiles` table with UPSERT key-value
+      entries per user (preferences, communication style, interests, etc.)
+      Auto-populated by the extraction pipeline and injected into the LLM
+      context as `== USER PROFILE ==`.
+- [x] **Knowledge graph auto-population** — the extraction pipeline
+      identifies entities and relations from conversations and inserts
+      them as knowledge graph nodes/edges automatically.
+- [x] **Memory decay & consolidation** — `consolidation.rs` runs every
+      tick, finds archival memories older than `consolidation_age_days`
+      (default 30), groups a batch, asks the LLM to summarize, replaces
+      originals with a consolidated entry.  `consolidated` flag prevents
+      re-processing.
+- [x] **Cross-session context** — conversation history persists in SQLite
+      across sessions; archival search lets the agent find past info.
 
 ---
 
@@ -94,19 +112,28 @@ back, and loops up to `max_tool_turns` (default 5).
 
 ## 4. Browser Automation
 
-The `chromiumoxide` dependency is already in Cargo.toml but the browser
-tool is a scaffold.
+The browser tool uses `chromiumoxide` for full CDP control of a headless
+Chrome/Chromium instance.  All actions are exposed as parameters of the
+single `browser` tool (action dispatch pattern).
 
-- [ ] **CDP integration** — launch a headless browser, navigate pages,
-      extract content, fill forms, click buttons.
-- [ ] **Authenticated browsing** — use stored OAuth tokens to log into
-      web apps and perform actions.
-- [ ] **Screenshot & visual grounding** — take screenshots, pass to
-      vision model, click on elements by description.
-- [ ] **Web scraping toolkit** — structured data extraction from pages
-      with CSS/XPath selectors.
-- [ ] **Bookmark & read-later** — save interesting pages to the knowledge
-      graph for later retrieval.
+- [x] **CDP integration** — launch a headless browser, navigate pages,
+      extract content, take screenshots, evaluate arbitrary JavaScript.
+- [x] **Authenticated browsing** — `auth_navigate` action loads OAuth
+      tokens from the `oauth_tokens` table and monkey-patches `fetch()`
+      and `XMLHttpRequest` to inject `Authorization: Bearer` headers on
+      every request.  The LLM specifies `provider` and `account`.
+- [x] **Screenshot & visual grounding** — `screenshot_describe` takes a
+      full-page screenshot AND runs `ELEMENT_MAP_SCRIPT` JS to enumerate
+      every interactive element (`<a>`, `<button>`, `<input>`, etc.) with
+      index, tag, text, and bounding-box coordinates.  The LLM can then
+      call `click_element` by CSS selector or element index.
+- [x] **Web scraping toolkit** — `scrape` action takes a CSS selector
+      and optional list of HTML attributes to extract.  Returns structured
+      JSON with tag, text content, and requested attributes per element.
+- [x] **Bookmark & read-later** — `bookmark` action saves the current
+      page (URL, title, meta-description excerpt) as a `bookmark` node in
+      the knowledge graph and also stores a copy in archival memory.
+      Supports optional tags which become `tag` nodes with `tagged` edges.
 
 ---
 
@@ -227,25 +254,47 @@ tool is a scaffold.
 
 ## 8. Dashboard & UX
 
-- [ ] **Mobile-responsive design** — the dashboard should be usable on
-      a phone.
-- [ ] **Real-time activity feed** — live-updating log of what the agent
-      is doing right now (SSE events exist, wire them to the UI).
-- [ ] **Conversation history browser** — searchable, filterable view of
-      all past conversations across all platforms.
-- [ ] **Approval notifications** — push notification or Telegram ping
-      when the agent is waiting for approval.
-- [ ] **Skill marketplace UI** — browse, install, and configure community
-      skills from the dashboard.
-- [ ] **Visual knowledge graph** — interactive force-directed graph
-      visualization of the knowledge graph.
-- [ ] **Agent persona editor** — edit personality, tone, and behavior
-      rules from the dashboard (currently config-file only).
-- [ ] **Dark/light theme toggle** — currently dark-only.
-- [ ] **OAuth account management UX** — show token health, last refresh,
-      expiry countdown, and re-auth flow.
-- [ ] **PWA support** — installable as a mobile app with push
-      notifications.
+- [x] **Mobile-responsive design** — hamburger menu for mobile navigation,
+      scrollable tab bar, responsive grid layouts, touch-friendly header
+      controls with proper breakpoints (sm/md/lg).
+- [x] **Real-time activity feed** — `LiveFeed` component wired to SSE
+      `ToolEvent` stream, showing thinking, tool execution, approvals, and
+      completions in real time with colored indicators and timestamps.
+- [x] **Conversation history browser** — `ConversationHistory` component
+      in Settings with full-text search, role filtering (user/assistant/system),
+      pagination, and message timestamps. Backend endpoint
+      `GET /api/memory/conversation/history` with search and offset support.
+- [x] **Approval notifications** — Browser Notification API integration:
+      notification bell toggle in header, permission request flow, automatic
+      push notifications when `approval_needed` SSE events arrive while the
+      dashboard is not focused. Clicking a notification focuses the window
+      and navigates to the overview tab.
+- [x] **Skill marketplace UI** — `SkillMarketplace` component in the Skills
+      tab showing featured community skills with categories (Productivity,
+      Development, Communication, Data), search, filtering, and one-click
+      install via the existing `/api/skills/import` endpoint. Links to
+      GitHub topic browse for discovering more skills.
+- [x] **Visual knowledge graph** — `KnowledgeGraphViz` canvas component
+      with a force-directed layout simulation (repulsion, attraction, centering).
+      Nodes colored by type, draggable, zoomable, pannable. List/Graph toggle
+      in the Knowledge tab header. Edge loading via neighbor API batches.
+      Selected node detail panel with edge list. Type legend.
+- [x] **Agent persona editor** — `PersonaEditor` component in Settings tab
+      allowing direct editing of the core personality text with save/unsaved
+      indicators. Backend `GET/PUT /api/persona` endpoints.
+- [x] **Dark/light theme toggle** — Light theme CSS variable overrides via
+      `[data-theme="light"]` selector. Toggle button (sun/moon icon) in
+      header. Persisted in localStorage. Applies to all surfaces, borders,
+      text colors, and shadows.
+- [x] **OAuth account management UX** — Token health indicators (green
+      check for healthy, yellow exclamation for expiring soon < 24h, red X
+      for expired). Expiry timestamps displayed. Re-authorize button for
+      expired tokens linking directly to the OAuth flow. Scope display.
+- [x] **PWA support** — Web App Manifest (`manifest.json`) with app icons
+      (192px and 512px), standalone display, theme colors. Service worker
+      (`sw.js`) with precaching of app shell and stale-while-revalidate for
+      assets. Install banner with dismiss/persist. `<meta>` tags for
+      theme-color, apple-mobile-web-app-capable.
 
 ---
 

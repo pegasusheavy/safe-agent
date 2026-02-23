@@ -322,6 +322,23 @@
 # Memory sync interval in seconds (default: 5)
 # sync_interval_secs = 5
 
+[memory]
+# Ollama model used for generating embeddings (semantic search over memories).
+# Set to empty string to disable embeddings and fall back to FTS5.
+# embedding_model = "nomic-embed-text"
+
+# Ollama host for embedding requests (defaults to llm.ollama_host, then OLLAMA_HOST).
+# embedding_host = ""
+
+# Automatically extract facts, preferences, and entities after each conversation.
+# auto_extract = true
+
+# Consolidate archival memories older than this many days (reduces context bloat).
+# consolidation_age_days = 30
+
+# Maximum old memories to consolidate per tick.
+# consolidation_batch_size = 20
+
 [sessions]
 # Enable multi-agent session coordination
 # enabled = false
