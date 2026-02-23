@@ -42,10 +42,14 @@ JWT_SECRET=$(openssl rand -hex 32)`
 <section id="quickstart" class="scroll-mt-20 py-20 md:py-28">
 	<div class="mx-auto max-w-4xl px-6">
 		<div class="mb-14 text-center">
+			<div class="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/20 bg-accent/5 px-4 py-1.5 text-sm text-accent-light">
+				<i class="fa-brands fa-docker"></i>
+				Recommended
+			</div>
 			<h2 class="mb-4 text-3xl font-bold text-white md:text-4xl">Up and running in 3 steps</h2>
 			<p class="mx-auto max-w-2xl text-slate-400">
 				Pull the image, set two environment variables, and you're done.
-				No Kubernetes. No Terraform. Just Docker.
+				No Kubernetes. No Terraform. No Rust toolchain. Just Docker.
 			</p>
 		</div>
 
@@ -66,19 +70,34 @@ JWT_SECRET=$(openssl rand -hex 32)`
 			{/each}
 		</div>
 
-		<div class="mt-12 rounded-xl border border-accent/20 bg-accent/5 p-6 text-center">
-			<p class="text-sm text-slate-300">
-				<i class="fa-solid fa-circle-info mr-2 text-accent"></i>
-				Want Docker Compose instead? Check the
+		<div class="mt-12 space-y-4">
+			<div class="rounded-xl border border-accent/20 bg-accent/5 p-6 text-center">
+				<p class="text-sm text-slate-300">
+					<i class="fa-solid fa-circle-info mr-2 text-accent"></i>
+					Want Docker Compose instead? Check the
+					<a
+						href="https://github.com/pegasusheavy/safe-agent#docker-compose"
+						target="_blank"
+						rel="noopener"
+						class="font-medium text-accent-light underline decoration-accent/30 underline-offset-2 hover:decoration-accent"
+					>
+						full docs
+					</a>
+					for a ready-to-use compose file.
+				</p>
+			</div>
+			<p class="text-center text-xs text-slate-600">
+				Prefer building from source? You can, but you'll need Rust (stable), Node.js, and pnpm.
+				See the
 				<a
-					href="https://github.com/pegasusheavy/safe-agent#docker-compose"
+					href="https://github.com/pegasusheavy/safe-agent#from-source-no-docker"
 					target="_blank"
 					rel="noopener"
-					class="font-medium text-accent-light underline decoration-accent/30 underline-offset-2 hover:decoration-accent"
+					class="text-slate-500 underline decoration-slate-700 underline-offset-2 hover:text-slate-400"
 				>
-					full docs
+					README
 				</a>
-				for a ready-to-use compose file.
+				for details.
 			</p>
 		</div>
 	</div>

@@ -41,9 +41,9 @@
 			desc: 'Real-time activity feed, chat, memory browser, knowledge explorer, skill management, and settings.'
 		},
 		{
-			icon: 'fa-solid fa-server',
-			title: 'Self-Hosted',
-			desc: 'Runs on your hardware. Docker image, ARM64 support. Your data never leaves your infrastructure.'
+			icon: 'fa-brands fa-docker',
+			title: 'Docker-First',
+			desc: 'One pull, one run. Pre-built multi-arch images on GHCR. No build toolchain needed — just Docker.'
 		}
 	];
 </script>

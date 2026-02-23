@@ -25,11 +25,15 @@
 		<p class="mx-auto mb-10 max-w-2xl text-lg text-slate-400 md:text-xl">
 			A self-hosted AI agent that proposes actions — you approve them.
 			Six LLM backends, a skill system that grows itself, and a knowledge graph
-			that never forgets. All running on hardware you control.
+			that never forgets. One <code class="rounded bg-surface-raised px-1.5 py-0.5 font-mono text-sm text-accent-light">docker pull</code> and you're running.
 		</p>
 
 		<div class="mx-auto mb-10 max-w-xl">
 			<CodeBlock code={pullCommand} title="terminal" />
+			<p class="mt-3 text-center text-xs text-slate-500">
+				<i class="fa-brands fa-docker mr-1"></i>
+				Multi-arch image (amd64 + arm64) &mdash; works on x86 servers, Raspberry Pi, and Apple Silicon
+			</p>
 		</div>
 
 		<div class="flex flex-col items-center justify-center gap-4 sm:flex-row">
