@@ -21,21 +21,160 @@ safe-agent pairs a pluggable LLM backend (Claude Code CLI, OpenAI Codex CLI, Goo
 
 ## Quick Start
 
-### Docker (recommended)
+### Docker — pull from GHCR (fastest)
+
+Pre-built multi-arch images (amd64 + arm64) are published on every release:
+
+```bash
+docker pull ghcr.io/pegasusheavy/safe-agent:latest
+```
+
+### Docker — full setup
+
+#### 1. Create your directories
+
+safe-agent needs two things on the host: a **data directory** (SQLite database, skills, memory, encryption keys) and a **config file**.
+
+```bash
+# Data directory — this is where everything persistent lives.
+mkdir -p ~/.local/share/safe-agent
+
+# Config file — start from the example and customize.
+mkdir -p ~/.config/safe-agent
+curl -fsSL https://raw.githubusercontent.com/pegasusheavy/safe-agent/main/config.example.toml \
+  -o ~/.config/safe-agent/config.toml
+```
+
+#### 2. Create the `.env` file
+
+Download the example and fill in your values:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/pegasusheavy/safe-agent/main/.env.example \
+  -o ~/.config/safe-agent/.env
+```
+
+Edit `~/.config/safe-agent/.env` — you **must** set at least these two:
+
+```bash
+DASHBOARD_PASSWORD=pick-a-strong-password
+JWT_SECRET=$(openssl rand -hex 32)
+```
+
+#### 3. Edit `config.toml`
+
+At minimum, change the dashboard bind address so it's reachable:
+
+```toml
+# Listen on all interfaces (required inside a container)
+dashboard_bind = "0.0.0.0:3031"
+```
+
+See [`config.example.toml`](config.example.toml) for every option.
+
+#### 4. Run the container
+
+```bash
+docker run -d \
+  --name safe-agent \
+  --restart unless-stopped \
+  -p 3031:3031 \
+  -v ~/.local/share/safe-agent:/data/safe-agent \
+  -v ~/.config/safe-agent/config.toml:/config/safe-agent/config.toml:ro \
+  --env-file ~/.config/safe-agent/.env \
+  -e NO_JAIL=1 \
+  --entrypoint safe-agent \
+  ghcr.io/pegasusheavy/safe-agent:latest
+```
+
+The dashboard is now at **http://localhost:3031**.
+
+#### What each mount does
+
+| Flag | Host path | Container path | Purpose |
+|---|---|---|---|
+| `-v` | `~/.local/share/safe-agent` | `/data/safe-agent` | **All persistent data**: SQLite database, encryption keys, skill files, venvs, skill logs, backups, trash. This is the only directory safe-agent writes to. Back this up. |
+| `-v` | `~/.config/safe-agent/config.toml` | `/config/safe-agent/config.toml:ro` | **Configuration file** (read-only). Agent name, LLM backend, tool settings, Telegram config, security policy, federation, etc. |
+| `--env-file` | `~/.config/safe-agent/.env` | *(environment)* | **Secrets**: dashboard password, JWT key, bot tokens, API keys, OAuth credentials. Never baked into the image. |
+
+#### Docker Compose
+
+If you prefer Compose, create a `docker-compose.yml`:
+
+```yaml
+services:
+  safe-agent:
+    image: ghcr.io/pegasusheavy/safe-agent:latest
+    container_name: safe-agent
+    restart: unless-stopped
+    ports:
+      - "3031:3031"
+    volumes:
+      - ~/.local/share/safe-agent:/data/safe-agent
+      - ~/.config/safe-agent/config.toml:/config/safe-agent/config.toml:ro
+    env_file:
+      - ~/.config/safe-agent/.env
+    environment:
+      - NO_JAIL=1
+    entrypoint: ["safe-agent"]
+```
+
+```bash
+docker compose up -d
+```
+
+#### Optional mounts
+
+These are not required but enable additional features:
+
+```bash
+# Claude Code CLI — mount your Claude auth profile so the agent can call Claude.
+-v ~/.claude:/home/safeagent/.claude:ro \
+-e CLAUDE_CONFIG_DIR=/home/safeagent/.claude
+
+# Ngrok tunnel — expose the dashboard publicly for OAuth callbacks.
+# Just set these in your .env (no extra mounts needed):
+#   NGROK_AUTHTOKEN=your-token
+#   NGROK_DOMAIN=your-subdomain.ngrok-free.app
+
+# HTTPS via Let's Encrypt — expose port 443 and set ACME vars in .env:
+-p 443:443
+#   ACME_ENABLED=true
+#   ACME_DOMAIN=agent.example.com
+#   ACME_EMAIL=you@example.com
+```
+
+#### Building from source (Docker)
+
+To build the image yourself instead of pulling from GHCR:
 
 ```bash
 git clone https://github.com/pegasusheavy/safe-agent.git
 cd safe-agent
-cp .env.example .env
-# Edit .env -- at minimum set DASHBOARD_PASSWORD, JWT_SECRET, and TELEGRAM_BOT_TOKEN
-docker compose up -d --build
+docker build -t safe-agent:latest .
 ```
 
-The dashboard will be available at `http://localhost:3031`.
+Then substitute `safe-agent:latest` for `ghcr.io/pegasusheavy/safe-agent:latest` in the commands above.
 
-### From Source
+#### Matching host UID/GID
 
-Requires Rust (stable), Node.js, and pnpm.
+The container's `safeagent` user defaults to UID/GID 1000. If your host user has a different UID, rebuild with matching values so bind-mounted files have correct ownership:
+
+```bash
+docker build --build-arg SAFE_UID=$(id -u) --build-arg SAFE_GID=$(id -g) -t safe-agent:latest .
+```
+
+Or run the GHCR image with `--user $(id -u):$(id -g)` and `--entrypoint safe-agent` (skips the chroot jail, which requires root).
+
+#### ARM64 / Raspberry Pi / Apple Silicon servers
+
+The GHCR image is multi-arch (`linux/amd64` + `linux/arm64`). Docker will pull the correct one automatically. No special flags needed.
+
+---
+
+### From source (no Docker)
+
+Requires Rust (stable, 2024 edition), Node.js, and pnpm.
 
 ```bash
 git clone https://github.com/pegasusheavy/safe-agent.git
