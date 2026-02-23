@@ -6,6 +6,7 @@ RUN apk add --no-cache musl-dev pkgconf perl make openssl-dev openssl-libs-stati
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY src/ src/
+COPY config/ config/
 COPY config.example.toml ./
 
 # Cache buster — pass --build-arg CACHEBUST=$(date +%s) to force rebuild
