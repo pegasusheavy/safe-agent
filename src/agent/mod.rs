@@ -93,7 +93,7 @@ impl Agent {
 
         // Build tool context
         let http_client = reqwest::Client::builder()
-            .user_agent("SafeClaw/0.1.0")
+            .user_agent("SafeClaw/0.1.2")
             .build()
             .unwrap_or_default();
 

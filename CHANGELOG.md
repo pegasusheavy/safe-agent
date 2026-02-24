@@ -5,6 +5,16 @@ All notable changes to SafeClaw are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] — 2026-02-24
+
+### Changed
+
+- **Rebrand: safe-agent → SafeClaw** — product renamed throughout the
+  codebase. Package name, binary, Docker image, localStorage keys,
+  service worker cache, PWA manifest, User-Agent header, and all
+  display strings updated. Company, GitHub org, and contact info
+  unchanged.
+
 ## [0.1.0] — 2026-02-17
 
 Initial release of SafeClaw: a sandboxed autonomous AI agent with tool
