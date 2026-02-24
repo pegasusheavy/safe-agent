@@ -1,6 +1,6 @@
 {
-  "name": "safe-agent Dashboard",
-  "short_name": "safe-agent",
+  "name": "SafeClaw Dashboard",
+  "short_name": "SafeClaw",
   "description": "Your personal AI agent dashboard",
   "start_url": "/",
   "display": "standalone",

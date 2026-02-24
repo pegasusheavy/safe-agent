@@ -298,7 +298,7 @@ impl TrashManager {
         // It falls back to real deletion for special paths (e.g., /tmp, /dev).
         let rm_wrapper = format!(
             r#"#!/bin/sh
-# safe-agent rm wrapper — moves files to trash instead of deleting
+# safeclaw rm wrapper — moves files to trash instead of deleting
 TRASH_FILES="{trash_files_dir}"
 TRASH_META="{trash_meta_dir}"
 
@@ -387,7 +387,7 @@ done
 
         let rmdir_wrapper = format!(
             r#"#!/bin/sh
-# safe-agent rmdir wrapper — moves directories to trash instead of deleting
+# safeclaw rmdir wrapper — moves directories to trash instead of deleting
 TRASH_FILES="{trash_files_dir}"
 TRASH_META="{trash_meta_dir}"
 

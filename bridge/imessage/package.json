@@ -1,8 +1,8 @@
 {
-  "name": "safe-agent-imessage-bridge",
+  "name": "safeclaw-imessage-bridge",
   "version": "0.1.0",
   "private": true,
-  "description": "AppleScript-based iMessage bridge for safe-agent",
+  "description": "AppleScript-based iMessage bridge for safeclaw",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

@@ -23,7 +23,7 @@ export const auth = $state({
 });
 
 export function initTheme(): void {
-    const stored = localStorage.getItem('safe-agent-theme');
+    const stored = localStorage.getItem('safeclaw-theme');
     if (stored === 'light' || stored === 'dark') {
         dashboard.theme = stored;
     }
@@ -32,7 +32,7 @@ export function initTheme(): void {
 
 export function toggleTheme(): void {
     dashboard.theme = dashboard.theme === 'dark' ? 'light' : 'dark';
-    localStorage.setItem('safe-agent-theme', dashboard.theme);
+    localStorage.setItem('safeclaw-theme', dashboard.theme);
     applyTheme(dashboard.theme);
 }
 

@@ -1,9 +1,9 @@
 {
-    "name": "safe-agent",
-    "version": "0.1.0",
+    "name": "safeclaw",
+    "version": "0.1.2",
     "private": true,
     "type": "module",
-    "description": "Dashboard UI build for safe-agent",
+    "description": "Dashboard UI build for safeclaw",
     "scripts": {
         "build:ui": "vite build src/dashboard/frontend",
         "dev:ui": "vite dev src/dashboard/frontend"

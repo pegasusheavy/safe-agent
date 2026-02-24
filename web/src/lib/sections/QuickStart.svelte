@@ -6,18 +6,18 @@
 			num: '01',
 			title: 'Create your directories',
 			desc: 'One folder for data, one for config. That\'s it.',
-			code: `mkdir -p ~/.local/share/safe-agent
-mkdir -p ~/.config/safe-agent
-curl -fsSL https://raw.githubusercontent.com/pegasusheavy/safe-agent/main/config.example.toml \\
-  -o ~/.config/safe-agent/config.toml
-curl -fsSL https://raw.githubusercontent.com/pegasusheavy/safe-agent/main/.env.example \\
-  -o ~/.config/safe-agent/.env`
+			code: `mkdir -p ~/.local/share/safeclaw
+mkdir -p ~/.config/safeclaw
+curl -fsSL https://raw.githubusercontent.com/pegasusheavy/safeclaw/main/config.example.toml \\
+  -o ~/.config/safeclaw/config.toml
+curl -fsSL https://raw.githubusercontent.com/pegasusheavy/safeclaw/main/.env.example \\
+  -o ~/.config/safeclaw/.env`
 		},
 		{
 			num: '02',
 			title: 'Set your secrets',
 			desc: 'Edit the .env file with your dashboard password and a JWT secret.',
-			code: `# Edit ~/.config/safe-agent/.env
+			code: `# Edit ~/.config/safeclaw/.env
 DASHBOARD_PASSWORD=pick-a-strong-password
 JWT_SECRET=$(openssl rand -hex 32)`
 		},
@@ -26,15 +26,15 @@ JWT_SECRET=$(openssl rand -hex 32)`
 			title: 'Run the container',
 			desc: 'One command. Dashboard is at localhost:3031.',
 			code: `docker run -d \\
-  --name safe-agent \\
+  --name safeclaw \\
   --restart unless-stopped \\
   -p 3031:3031 \\
-  -v ~/.local/share/safe-agent:/data/safe-agent \\
-  -v ~/.config/safe-agent/config.toml:/config/safe-agent/config.toml:ro \\
-  --env-file ~/.config/safe-agent/.env \\
+  -v ~/.local/share/safeclaw:/data/safeclaw \\
+  -v ~/.config/safeclaw/config.toml:/config/safeclaw/config.toml:ro \\
+  --env-file ~/.config/safeclaw/.env \\
   -e NO_JAIL=1 \\
-  --entrypoint safe-agent \\
-  ghcr.io/pegasusheavy/safe-agent:latest`
+  --entrypoint safeclaw \\
+  ghcr.io/pegasusheavy/safeclaw:latest`
 		}
 	];
 </script>
@@ -76,7 +76,7 @@ JWT_SECRET=$(openssl rand -hex 32)`
 					<i class="fa-solid fa-circle-info mr-2 text-accent"></i>
 					Want Docker Compose instead? Check the
 					<a
-						href="https://github.com/pegasusheavy/safe-agent#docker-compose"
+						href="https://github.com/pegasusheavy/safeclaw#docker-compose"
 						target="_blank"
 						rel="noopener"
 						class="font-medium text-accent-light underline decoration-accent/30 underline-offset-2 hover:decoration-accent"
@@ -90,7 +90,7 @@ JWT_SECRET=$(openssl rand -hex 32)`
 				Prefer building from source? You can, but you'll need Rust (stable), Node.js, and pnpm.
 				See the
 				<a
-					href="https://github.com/pegasusheavy/safe-agent#from-source-no-docker"
+					href="https://github.com/pegasusheavy/safeclaw#from-source-no-docker"
 					target="_blank"
 					rel="noopener"
 					class="text-slate-500 underline decoration-slate-700 underline-offset-2 hover:text-slate-400"

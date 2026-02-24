@@ -1,23 +1,23 @@
 services:
-  safe-agent:
+  safeclaw:
     build:
       context: .
       dockerfile: Dockerfile
-    image: safe-agent:latest
-    container_name: safe-agent
+    image: safeclaw:latest
+    container_name: safeclaw
     restart: unless-stopped
     network_mode: host
     # Entrypoint runs as root to set up chroot jail, then drops to
-    # the safeagent user via su-exec.  Set NO_JAIL=1 to bypass.
+    # the safeclaw user via su-exec.  Set NO_JAIL=1 to bypass.
     # SYS_ADMIN is required for mount --bind in the chroot jail setup;
-    # it is dropped when the entrypoint exec's into safeagent via su-exec.
+    # it is dropped when the entrypoint exec's into safeclaw via su-exec.
     cap_add:
       - SYS_ADMIN
     volumes:
       # Persistent agent data (SQLite, memory, etc.)
-      - ${HOME}/.local/share/safe-agent:/data/safe-agent
+      - ${HOME}/.local/share/safeclaw:/data/safeclaw
       # Agent config (read-only)
-      - ./config.toml:/config/safe-agent/config.toml:ro
+      - ./config.toml:/config/safeclaw/config.toml:ro
       # Claude CLI profile directory — mounted at a dedicated path and
       # bind-mounted into the chroot jail by the entrypoint script.
       - ${CLAUDE_CONFIG_DIR:-${HOME}/.claude}:/claude-config
@@ -25,4 +25,4 @@ services:
       - .env
     environment:
       - CLAUDE_CONFIG_DIR=/claude-config
-      - HOME=/home/safeagent
+      - HOME=/home/safeclaw

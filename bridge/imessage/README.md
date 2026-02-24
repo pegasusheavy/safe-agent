@@ -1,6 +1,6 @@
-# iMessage Bridge for safe-agent
+# iMessage Bridge for SafeClaw
 
-AppleScript-based iMessage/SMS relay bridge that connects safe-agent to macOS Messages.app. Sends outgoing messages via AppleScript and receives incoming messages by polling the local `chat.db` SQLite database.
+AppleScript-based iMessage/SMS relay bridge that connects SafeClaw to macOS Messages.app. Sends outgoing messages via AppleScript and receives incoming messages by polling the local `chat.db` SQLite database.
 
 ## Requirements
 
@@ -28,7 +28,7 @@ npm start
 | Variable | Default | Description |
 |---|---|---|
 | `PORT` | `3040` | HTTP server listen port |
-| `WEBHOOK_URL` | `http://127.0.0.1:3030/api/messaging/incoming` | safe-agent endpoint for incoming messages |
+| `WEBHOOK_URL` | `http://127.0.0.1:3030/api/messaging/incoming` | SafeClaw endpoint for incoming messages |
 | `POLL_INTERVAL_MS` | `3000` | How often to poll chat.db for new messages (ms) |
 | `ALLOWED_IDS` | _(empty = all)_ | Comma-separated phone numbers or iCloud emails to accept messages from |
 
@@ -42,7 +42,7 @@ npm start
 
 ## How It Works
 
-**Sending:** safe-agent POSTs to `http://localhost:3040/send` with `{ "to": "+15551234567", "text": "Hello" }`. The bridge executes an AppleScript command that tells Messages.app to send the message via iMessage (or SMS relay if the recipient is not on iMessage).
+**Sending:** SafeClaw POSTs to `http://localhost:3040/send` with `{ "to": "+15551234567", "text": "Hello" }`. The bridge executes an AppleScript command that tells Messages.app to send the message via iMessage (or SMS relay if the recipient is not on iMessage).
 
 **Receiving:** The bridge opens `~/Library/Messages/chat.db` in read-only mode and polls for new rows in the `message` table every `POLL_INTERVAL_MS` milliseconds. New incoming messages are forwarded to `WEBHOOK_URL` as JSON.
 
@@ -53,7 +53,7 @@ npm start
 Send an outgoing iMessage/SMS.
 
 ```json
-{ "to": "+15551234567", "text": "Hello from safe-agent" }
+{ "to": "+15551234567", "text": "Hello from SafeClaw" }
 ```
 
 Returns `{ "ok": true }` on success, `{ "ok": false, "error": "..." }` on failure.

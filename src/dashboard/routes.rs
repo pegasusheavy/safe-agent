@@ -87,7 +87,7 @@ pub fn build(
 
     // Initialize skill extension manager
     let skills_dir = Config::data_dir().join("skills");
-    let db_path = Config::data_dir().join("safe-agent.db");
+    let db_path = Config::data_dir().join("safeclaw.db");
     let mut ext_mgr = ExtensionManager::new(skills_dir, db_path);
     ext_mgr.discover();
 

@@ -490,7 +490,7 @@ mod tests {
     #[test]
     fn test_open_with_temp_file() {
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("safe-agent-test-{}.db", std::process::id()));
+        let path = dir.join(format!("safeclaw-test-{}.db", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let conn = open(&path).unwrap();
         let _ = std::fs::remove_file(&path);
