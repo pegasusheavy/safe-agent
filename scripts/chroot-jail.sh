@@ -1,13 +1,13 @@
 #!/bin/bash
-# chroot-jail.sh — Create and enter a chroot jail for safe-agent.
+# chroot-jail.sh — Create and enter a chroot jail for safeclaw.
 #
 # This script builds a minimal chroot filesystem under /jail using hardlinks
 # (zero extra disk space on the same filesystem) from the container's installed
-# packages, then chroots into the jail and exec's safe-agent as the non-root
-# "safeagent" user via su-exec.
+# packages, then chroots into the jail and exec's safeclaw as the non-root
+# "safeclaw" user via su-exec.
 #
 # The entrypoint starts as root (required for mknod, mount, chroot) and drops
-# to the safeagent user before executing the application binary.
+# to the safeclaw user before executing the application binary.
 #
 # Bypass:  NO_JAIL=1  or  --no-jail  flag to skip the jail for debugging.
 #
@@ -17,8 +17,8 @@
 set -euo pipefail
 
 JAIL="/jail"
-RUN_USER="safeagent"
-RUN_GROUP="safeagent"
+RUN_USER="safeclaw"
+RUN_GROUP="safeclaw"
 
 # ── Bypass ───────────────────────────────────────────────────────────
 NVM_DIR="${NVM_DIR:-/usr/local/nvm}"
@@ -39,9 +39,9 @@ if [ "${NO_JAIL:-}" = "1" ] || [ "${1:-}" = "--no-jail" ]; then
     [ "${1:-}" = "--no-jail" ] && shift
     echo "[entrypoint] chroot jail bypassed (NO_JAIL=1)"
     chmod 1777 /tmp
-    chown -R "$RUN_USER:$RUN_GROUP" /data/safe-agent /config/safe-agent /home/safeagent 2>/dev/null || true
+    chown -R "$RUN_USER:$RUN_GROUP" /data/safeclaw /config/safeclaw /home/safeclaw 2>/dev/null || true
     export NVM_DIR PYENV_ROOT PATH="$SA_PATH"
-    exec su-exec "$RUN_USER:$RUN_GROUP" /usr/local/bin/safe-agent "$@"
+    exec su-exec "$RUN_USER:$RUN_GROUP" /usr/local/bin/safeclaw "$@"
 fi
 
 echo "[entrypoint] building chroot jail at $JAIL"
@@ -62,13 +62,13 @@ done
 # ── Additional directories ───────────────────────────────────────────
 mkdir -p "$JAIL"/{dev,etc,proc,sys,tmp,run,root}
 mkdir -p "$JAIL/dev/pts"
-mkdir -p "$JAIL/home/safeagent"
-mkdir -p "$JAIL/data/safe-agent/skills"
-mkdir -p "$JAIL/config/safe-agent"
+mkdir -p "$JAIL/home/safeclaw"
+mkdir -p "$JAIL/data/safeclaw/skills"
+mkdir -p "$JAIL/config/safeclaw"
 chmod 1777 "$JAIL/tmp"
 
 # ── Minimal /dev ─────────────────────────────────────────────────────
-# Only the device nodes that safe-agent and its child processes need.
+# Only the device nodes that safeclaw and its child processes need.
 
 create_dev() {
     local name="$1" type="$2" major="$3" minor="$4" mode="$5"
@@ -95,7 +95,7 @@ if ! mountpoint -q "$JAIL/proc" 2>/dev/null; then
 fi
 
 # ── Minimal /etc ─────────────────────────────────────────────────────
-# Copy only the files safe-agent and its child processes need.
+# Copy only the files safeclaw and its child processes need.
 # Network resolution, user database, TLS trust store.
 
 for f in resolv.conf hosts hostname passwd group shadow nsswitch.conf localtime; do
@@ -132,8 +132,8 @@ bind_volume() {
     fi
 }
 
-bind_volume /data/safe-agent  "$JAIL/data/safe-agent"
-bind_volume /config/safe-agent "$JAIL/config/safe-agent"
+bind_volume /data/safeclaw  "$JAIL/data/safeclaw"
+bind_volume /config/safeclaw "$JAIL/config/safeclaw"
 
 # Bind-mount the Claude CLI config directory into the jail so that
 # token refreshes performed inside the jail persist back to the host
@@ -143,20 +143,20 @@ CLAUDE_CFG="${CLAUDE_CONFIG_DIR:-/claude-config}"
 if [ -d "$CLAUDE_CFG" ]; then
     mkdir -p "$JAIL/$CLAUDE_CFG"
     bind_volume "$CLAUDE_CFG" "$JAIL/$CLAUDE_CFG"
-    mkdir -p "$JAIL/home/safeagent"
-    ln -sfn "$CLAUDE_CFG" "$JAIL/home/safeagent/.claude"
+    mkdir -p "$JAIL/home/safeclaw"
+    ln -sfn "$CLAUDE_CFG" "$JAIL/home/safeclaw/.claude"
 fi
 
 # ── Fix ownership for the non-root user ──────────────────────────────
-# Data, config, home, and tmp must be writable by safeagent.
+# Data, config, home, and tmp must be writable by safeclaw.
 # System directories (bin, lib, usr, etc) stay owned by root (read-only).
 chown -R "$RUN_USER:$RUN_GROUP" \
-    "$JAIL/data/safe-agent" \
-    "$JAIL/config/safe-agent" \
-    "$JAIL/home/safeagent" \
+    "$JAIL/data/safeclaw" \
+    "$JAIL/config/safeclaw" \
+    "$JAIL/home/safeclaw" \
     2>/dev/null || true
 
 # ── Enter the jail as non-root ───────────────────────────────────────
 echo "[entrypoint] chroot jail ready — entering as $RUN_USER"
 export NVM_DIR PYENV_ROOT PATH="$SA_PATH"
-exec /usr/sbin/chroot "$JAIL" /sbin/su-exec "$RUN_USER:$RUN_GROUP" /usr/local/bin/safe-agent "$@"
+exec /usr/sbin/chroot "$JAIL" /sbin/su-exec "$RUN_USER:$RUN_GROUP" /usr/local/bin/safeclaw "$@"

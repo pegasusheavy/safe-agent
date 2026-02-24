@@ -93,7 +93,7 @@ impl Agent {
 
         // Build tool context
         let http_client = reqwest::Client::builder()
-            .user_agent("safe-agent/0.1.0")
+            .user_agent("SafeClaw/0.1.0")
             .build()
             .unwrap_or_default();
 
@@ -120,7 +120,7 @@ impl Agent {
             let global_plugins_dir = if config.plugins.global_dir.is_empty() {
                 dirs::config_dir()
                     .unwrap_or_else(|| std::path::PathBuf::from(".config"))
-                    .join("safe-agent")
+                    .join("safeclaw")
                     .join("plugins")
             } else {
                 std::path::PathBuf::from(&config.plugins.global_dir)
@@ -129,7 +129,7 @@ impl Agent {
             let project_plugins_dir = if config.plugins.project_dir.is_empty() {
                 std::env::current_dir()
                     .unwrap_or_else(|_| std::path::PathBuf::from("."))
-                    .join(".safe-agent")
+                    .join(".safeclaw")
                     .join("plugins")
             } else {
                 std::path::PathBuf::from(&config.plugins.project_dir)

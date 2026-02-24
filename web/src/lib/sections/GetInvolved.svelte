@@ -4,7 +4,7 @@
 			icon: 'fa-brands fa-github',
 			title: 'Star on GitHub',
 			desc: 'Browse the source, file issues, and send PRs.',
-			href: 'https://github.com/pegasusheavy/safe-agent',
+			href: 'https://github.com/pegasusheavy/safeclaw',
 			cta: 'View repository',
 			color: 'hover:border-slate-600'
 		},
@@ -12,7 +12,7 @@
 			icon: 'fa-solid fa-book-open',
 			title: 'Read CONTRIBUTING.md',
 			desc: 'Git workflow, commit standards, code style, and AI co-authorship policy.',
-			href: 'https://github.com/pegasusheavy/safe-agent/blob/main/CONTRIBUTING.md',
+			href: 'https://github.com/pegasusheavy/safeclaw/blob/main/CONTRIBUTING.md',
 			cta: 'Contributing guide',
 			color: 'hover:border-accent/40'
 		},
@@ -32,7 +32,7 @@
 		<div class="mb-14 text-center">
 			<h2 class="mb-4 text-3xl font-bold text-white md:text-4xl">Get involved</h2>
 			<p class="mx-auto max-w-2xl text-slate-400">
-				safe-agent is open source and built in the open. We'd love your help —
+				safeclaw is open source and built in the open. We'd love your help —
 				whether that's code, bug reports, docs, or just telling a friend.
 			</p>
 		</div>

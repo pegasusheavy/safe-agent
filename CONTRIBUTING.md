@@ -1,6 +1,6 @@
-# Contributing to safe-agent
+# Contributing to SafeClaw
 
-Thank you for your interest in contributing to safe-agent. This document covers everything you need to get started.
+Thank you for your interest in contributing to SafeClaw. This document covers everything you need to get started.
 
 ## Prerequisites
 
@@ -13,8 +13,8 @@ Thank you for your interest in contributing to safe-agent. This document covers 
 
 ```bash
 # Clone the repository
-git clone https://github.com/pegasusheavy/safe-agent.git
-cd safe-agent
+git clone https://github.com/pegasusheavy/SafeClaw.git
+cd SafeClaw
 
 # Switch to the develop branch (all work starts here)
 git checkout develop
@@ -237,7 +237,7 @@ If any part of your contribution was generated or substantially authored by an A
 
 4. **Disclose the scope.** If only a portion of a commit was AI-generated (e.g., boilerplate, tests, documentation), note that in the commit body. If the entire implementation was AI-driven, say so.
 
-**Why we require this:** safe-agent is itself an AI agent project. We believe in honest attribution. Knowing which code was human-written vs. AI-assisted helps reviewers calibrate their review, helps maintainers understand the provenance of the codebase, and sets an industry norm for transparency.
+**Why we require this:** SafeClaw is itself an AI agent project. We believe in honest attribution. Knowing which code was human-written vs. AI-assisted helps reviewers calibrate their review, helps maintainers understand the provenance of the codebase, and sets an industry norm for transparency.
 
 Contributions that omit required AI attribution may be rejected or asked to amend their commit history.
 

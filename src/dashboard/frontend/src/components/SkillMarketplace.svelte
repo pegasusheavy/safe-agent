@@ -17,8 +17,8 @@
         {
             name: 'google-calendar',
             description: 'Monitor and manage Google Calendar events with automatic reminders',
-            author: 'safe-agent',
-            repo: 'https://github.com/PegasusHeavyIndustries/safe-agent-skill-google-calendar',
+            author: 'safeclaw',
+            repo: 'https://github.com/PegasusHeavyIndustries/safeclaw-skill-google-calendar',
             category: 'productivity',
             tags: ['calendar', 'google', 'reminders'],
             stars: 0,
@@ -26,8 +26,8 @@
         {
             name: 'web-monitor',
             description: 'Monitor websites for changes and send notifications',
-            author: 'safe-agent',
-            repo: 'https://github.com/PegasusHeavyIndustries/safe-agent-skill-web-monitor',
+            author: 'safeclaw',
+            repo: 'https://github.com/PegasusHeavyIndustries/safeclaw-skill-web-monitor',
             category: 'data',
             tags: ['monitoring', 'web', 'alerts'],
             stars: 0,
@@ -35,8 +35,8 @@
         {
             name: 'email-digest',
             description: 'Summarize and categorize incoming emails with AI-powered triage',
-            author: 'safe-agent',
-            repo: 'https://github.com/PegasusHeavyIndustries/safe-agent-skill-email-digest',
+            author: 'safeclaw',
+            repo: 'https://github.com/PegasusHeavyIndustries/safeclaw-skill-email-digest',
             category: 'communication',
             tags: ['email', 'digest', 'summary'],
             stars: 0,
@@ -44,8 +44,8 @@
         {
             name: 'github-issues',
             description: 'Track GitHub issues and PRs, auto-triage with labels',
-            author: 'safe-agent',
-            repo: 'https://github.com/PegasusHeavyIndustries/safe-agent-skill-github-issues',
+            author: 'safeclaw',
+            repo: 'https://github.com/PegasusHeavyIndustries/safeclaw-skill-github-issues',
             category: 'development',
             tags: ['github', 'issues', 'development'],
             stars: 0,
@@ -53,8 +53,8 @@
         {
             name: 'rss-reader',
             description: 'Follow RSS/Atom feeds and get AI-summarized updates',
-            author: 'safe-agent',
-            repo: 'https://github.com/PegasusHeavyIndustries/safe-agent-skill-rss-reader',
+            author: 'safeclaw',
+            repo: 'https://github.com/PegasusHeavyIndustries/safeclaw-skill-rss-reader',
             category: 'data',
             tags: ['rss', 'feeds', 'news'],
             stars: 0,
@@ -62,8 +62,8 @@
         {
             name: 'daily-briefing',
             description: 'Generate a personalized morning briefing from your calendars, email, and news',
-            author: 'safe-agent',
-            repo: 'https://github.com/PegasusHeavyIndustries/safe-agent-skill-daily-briefing',
+            author: 'safeclaw',
+            repo: 'https://github.com/PegasusHeavyIndustries/safeclaw-skill-daily-briefing',
             category: 'productivity',
             tags: ['briefing', 'summary', 'daily'],
             stars: 0,
@@ -132,7 +132,7 @@
             <i class="fa-solid fa-store mr-1.5"></i> {t('marketplace.title')}
         </h2>
         <a
-            href="https://github.com/topics/safe-agent-skill"
+            href="https://github.com/topics/safeclaw-skill"
             target="_blank"
             rel="noopener noreferrer"
             class="text-xs text-primary-400 hover:text-primary-300 pr-3 transition-colors"

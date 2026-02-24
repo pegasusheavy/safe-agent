@@ -1,4 +1,4 @@
-const CACHE_NAME = 'safe-agent-v1';
+const CACHE_NAME = 'safeclaw-v1';
 const PRECACHE = ['/', '/style.css', '/app.js'];
 
 self.addEventListener('install', (event) => {

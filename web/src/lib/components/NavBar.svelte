@@ -30,7 +30,7 @@
 				class="flex h-8 w-8 items-center justify-center rounded-lg bg-accent font-mono text-sm font-black text-slate-950"
 				>SA</span
 			>
-			<span class="text-slate-100">safe-agent</span>
+			<span class="text-slate-100">safeclaw</span>
 		</a>
 
 		<div class="hidden items-center gap-8 md:flex">
@@ -41,7 +41,7 @@
 				>
 			{/each}
 			<a
-				href="https://github.com/pegasusheavy/safe-agent"
+				href="https://github.com/pegasusheavy/safeclaw"
 				target="_blank"
 				rel="noopener"
 				class="flex items-center gap-2 rounded-lg bg-surface-raised px-4 py-2 text-sm text-slate-300 transition-colors hover:bg-surface-overlay"
@@ -70,7 +70,7 @@
 				>
 			{/each}
 			<a
-				href="https://github.com/pegasusheavy/safe-agent"
+				href="https://github.com/pegasusheavy/safeclaw"
 				target="_blank"
 				rel="noopener"
 				class="mt-2 flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-accent-light"

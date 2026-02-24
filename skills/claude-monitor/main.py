@@ -115,7 +115,7 @@ def find_credentials_path() -> Path | None:
         Path.home() / ".claude" / ".credentials.json",
         Path("/claude-config/.credentials.json"),
         Path("/data/safe-agent/.claude/.credentials.json"),
-        Path("/home/safeagent/.claude/.credentials.json"),
+        Path("/home/safeclaw/.claude/.credentials.json"),
         Path("/home/agent/.claude/.credentials.json"),
         Path("/home/joseph/.claude/.credentials.json"),
     ]
@@ -137,7 +137,7 @@ def find_stats_path() -> Path | None:
         Path.home() / ".claude" / "stats-cache.json",
         Path("/claude-config/stats-cache.json"),
         Path("/data/safe-agent/.claude/stats-cache.json"),
-        Path("/home/safeagent/.claude/stats-cache.json"),
+        Path("/home/safeclaw/.claude/stats-cache.json"),
         Path("/home/agent/.claude/stats-cache.json"),
         Path("/home/joseph/.claude/stats-cache.json"),
     ]

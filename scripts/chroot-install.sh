@@ -1,20 +1,20 @@
 #!/bin/bash
-# chroot-install.sh — Install and manage a chroot jail for safe-agent on
+# chroot-install.sh — Install and manage a chroot jail for safeclaw on
 # bare-metal Debian/Ubuntu, Fedora/RHEL/CentOS, or Arch Linux systems.
 #
 # Usage:
-#   chroot-install.sh setup   [-b /path/to/safe-agent]  Install deps, build chroot
-#   chroot-install.sh start   [-- safe-agent-args...]    Mount & run inside chroot
+#   chroot-install.sh setup   [-b /path/to/safeclaw]  Install deps, build chroot
+#   chroot-install.sh start   [-- safeclaw-args...]    Mount & run inside chroot
 #   chroot-install.sh stop                               Kill agent & unmount
 #   chroot-install.sh shell                              Open a bash shell in the jail
 #   chroot-install.sh status                             Show mount and process status
 #   chroot-install.sh teardown                           Remove chroot entirely
 #
 # Environment overrides:
-#   JAIL_ROOT      Chroot base directory       (default: /opt/safe-agent)
-#   SA_BINARY      Path to safe-agent binary   (default: ./target/release/safe-agent)
-#   SA_USER        Runtime user                (default: safeagent)
-#   SA_GROUP       Runtime group               (default: safeagent)
+#   JAIL_ROOT      Chroot base directory       (default: /opt/safeclaw)
+#   SA_BINARY      Path to safeclaw binary   (default: ./target/release/safeclaw)
+#   SA_USER        Runtime user                (default: safeclaw)
+#   SA_GROUP       Runtime group               (default: safeclaw)
 #
 # Copyright (c) 2026 Pegasus Heavy Industries LLC
 # Contact: pegasusheavyindustries@gmail.com
@@ -23,12 +23,12 @@ set -euo pipefail
 
 # ── Defaults ─────────────────────────────────────────────────────────
 
-JAIL="${JAIL_ROOT:-/opt/safe-agent}"
-SA_USER="${SA_USER:-safeagent}"
-SA_GROUP="${SA_GROUP:-safeagent}"
-SA_BINARY="${SA_BINARY:-./target/release/safe-agent}"
-SYSTEMD_UNIT="safe-agent.service"
-PID_FILE="$JAIL/run/safe-agent.pid"
+JAIL="${JAIL_ROOT:-/opt/safeclaw}"
+SA_USER="${SA_USER:-safeclaw}"
+SA_GROUP="${SA_GROUP:-safeclaw}"
+SA_BINARY="${SA_BINARY:-./target/release/safeclaw}"
+SYSTEMD_UNIT="safeclaw.service"
+PID_FILE="$JAIL/run/safeclaw.pid"
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
@@ -262,7 +262,7 @@ build_chroot() {
     local binary="$1"
 
     if [ ! -f "$binary" ]; then
-        err "safe-agent binary not found at: $binary"
+        err "safeclaw binary not found at: $binary"
         err "Build it first (cargo build --release) or set SA_BINARY."
         exit 1
     fi
@@ -272,8 +272,8 @@ build_chroot() {
     # Directory structure
     mkdir -p "$JAIL"/{dev,etc,proc,sys,tmp,run,var/tmp}
     mkdir -p "$JAIL/dev/pts"
-    mkdir -p "$JAIL/home/$SA_USER/.config/safe-agent"
-    mkdir -p "$JAIL/home/$SA_USER/.local/share/safe-agent/skills"
+    mkdir -p "$JAIL/home/$SA_USER/.config/safeclaw"
+    mkdir -p "$JAIL/home/$SA_USER/.local/share/safeclaw/skills"
     mkdir -p "$JAIL/usr/local/bin"
     chmod 1777 "$JAIL/tmp"
 
@@ -286,9 +286,9 @@ build_chroot() {
     # lib64 exists on most x86_64 glibc systems
     [ -d /lib64 ] && mkdir -p "$JAIL/lib64"
 
-    # ── Copy safe-agent binary ───────────────────────────────────────
-    install -m 0755 "$binary" "$JAIL/usr/local/bin/safe-agent"
-    log "Installed safe-agent binary into jail"
+    # ── Copy safeclaw binary ───────────────────────────────────────
+    install -m 0755 "$binary" "$JAIL/usr/local/bin/safeclaw"
+    log "Installed safeclaw binary into jail"
 
     # ── Minimal /dev ─────────────────────────────────────────────────
     create_dev_node() {
@@ -424,8 +424,8 @@ install_systemd_unit() {
 
     cat > "$unit_path" <<UNIT
 [Unit]
-Description=safe-agent AI assistant (chroot)
-Documentation=https://github.com/PegasusHeavyIndustries/safe-agent
+Description=safeclaw AI assistant (chroot)
+Documentation=https://github.com/PegasusHeavyIndustries/safeclaw
 After=network-online.target
 Wants=network-online.target
 
@@ -433,7 +433,7 @@ Wants=network-online.target
 Type=simple
 
 ExecStartPre=$script_path mount-only
-ExecStart=/usr/sbin/chroot --userspec=$SA_USER:$SA_GROUP $JAIL /usr/local/bin/safe-agent
+ExecStart=/usr/sbin/chroot --userspec=$SA_USER:$SA_GROUP $JAIL /usr/local/bin/safeclaw
 ExecStopPost=$script_path umount-only
 
 Environment=XDG_DATA_HOME=/home/$SA_USER/.local/share
@@ -491,11 +491,11 @@ cmd_setup() {
     echo ""
     info "Jail root:     $JAIL"
     info "Runtime user:  $SA_USER"
-    info "Data dir:      $JAIL/home/$SA_USER/.local/share/safe-agent/"
-    info "Config dir:    $JAIL/home/$SA_USER/.config/safe-agent/"
+    info "Data dir:      $JAIL/home/$SA_USER/.local/share/safeclaw/"
+    info "Config dir:    $JAIL/home/$SA_USER/.config/safeclaw/"
     echo ""
     info "Next steps:"
-    info "  1. Copy your config.toml into: $JAIL/home/$SA_USER/.config/safe-agent/"
+    info "  1. Copy your config.toml into: $JAIL/home/$SA_USER/.config/safeclaw/"
     info "  2. Set environment variables in /etc/systemd/system/$SYSTEMD_UNIT"
     info "     (DASHBOARD_PASSWORD, JWT_SECRET, TELEGRAM_BOT_TOKEN, etc.)"
     info "  3. systemctl enable --now $SYSTEMD_UNIT"
@@ -507,7 +507,7 @@ cmd_start() {
     require_root
 
     if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-        err "safe-agent is already running (PID $(cat "$PID_FILE"))."
+        err "safeclaw is already running (PID $(cat "$PID_FILE"))."
         exit 1
     fi
 
@@ -523,7 +523,7 @@ cmd_start() {
     [ -d "$NVM_DIR" ] && nvm_bin="$NVM_DIR/versions/node/$(ls "$NVM_DIR/versions/node/" 2>/dev/null | tail -1)/bin"
     local pyenv_bin="$PYENV_ROOT/shims:$PYENV_ROOT/bin"
 
-    log "Starting safe-agent as $SA_USER in chroot..."
+    log "Starting safeclaw as $SA_USER in chroot..."
     exec chroot --userspec="$SA_USER:$SA_GROUP" "$JAIL" \
         /usr/bin/env \
         HOME="/home/$SA_USER" \
@@ -532,7 +532,7 @@ cmd_start() {
         NVM_DIR="$NVM_DIR" \
         PYENV_ROOT="$PYENV_ROOT" \
         PATH="${nvm_bin}:${pyenv_bin}:/usr/local/bin:/usr/bin:/bin" \
-        /usr/local/bin/safe-agent "$@"
+        /usr/local/bin/safeclaw "$@"
 }
 
 cmd_stop() {
@@ -542,7 +542,7 @@ cmd_stop() {
         local pid
         pid="$(cat "$PID_FILE")"
         if kill -0 "$pid" 2>/dev/null; then
-            log "Stopping safe-agent (PID $pid)..."
+            log "Stopping safeclaw (PID $pid)..."
             kill "$pid"
             # Wait up to 15 seconds
             local i=0
@@ -558,7 +558,7 @@ cmd_stop() {
         rm -f "$PID_FILE"
     else
         warn "No PID file found. Checking for running processes..."
-        pkill -f "$JAIL/usr/local/bin/safe-agent" 2>/dev/null || true
+        pkill -f "$JAIL/usr/local/bin/safeclaw" 2>/dev/null || true
     fi
 
     umount_jail
@@ -623,11 +623,11 @@ cmd_status() {
     echo ""
     echo -e "${CYAN}Process:${NC}"
     if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
-        echo -e "  ${GREEN}●${NC} safe-agent running (PID $(cat "$PID_FILE"))"
-    elif pgrep -f "$JAIL/usr/local/bin/safe-agent" &>/dev/null; then
-        echo -e "  ${GREEN}●${NC} safe-agent running (PID $(pgrep -f "$JAIL/usr/local/bin/safe-agent"))"
+        echo -e "  ${GREEN}●${NC} safeclaw running (PID $(cat "$PID_FILE"))"
+    elif pgrep -f "$JAIL/usr/local/bin/safeclaw" &>/dev/null; then
+        echo -e "  ${GREEN}●${NC} safeclaw running (PID $(pgrep -f "$JAIL/usr/local/bin/safeclaw"))"
     else
-        echo -e "  ${RED}○${NC} safe-agent not running"
+        echo -e "  ${RED}○${NC} safeclaw not running"
     fi
 
     # Disk usage
@@ -690,30 +690,30 @@ cmd_umount_only() {
 
 usage() {
     cat <<EOF
-safe-agent chroot jail installer
+safeclaw chroot jail installer
 
 Usage: $(basename "$0") <command> [options]
 
 Commands:
   setup    [-b binary]   Install dependencies, create user, build chroot, install systemd unit
-  start    [-- args...]  Mount jail filesystems and run safe-agent inside the chroot
-  stop                   Stop safe-agent and unmount jail filesystems
+  start    [-- args...]  Mount jail filesystems and run safeclaw inside the chroot
+  stop                   Stop safeclaw and unmount jail filesystems
   shell                  Open an interactive bash shell inside the jail
   status                 Show jail mount and process status
   teardown               Remove the chroot jail and systemd unit entirely
 
 Options:
-  -b, --binary PATH      Path to the safe-agent binary (default: ./target/release/safe-agent)
+  -b, --binary PATH      Path to the safeclaw binary (default: ./target/release/safeclaw)
 
 Environment:
-  JAIL_ROOT    Chroot base directory  (default: /opt/safe-agent)
-  SA_BINARY    Binary path            (default: ./target/release/safe-agent)
-  SA_USER      Runtime user           (default: safeagent)
-  SA_GROUP     Runtime group          (default: safeagent)
+  JAIL_ROOT    Chroot base directory  (default: /opt/safeclaw)
+  SA_BINARY    Binary path            (default: ./target/release/safeclaw)
+  SA_USER      Runtime user           (default: safeclaw)
+  SA_GROUP     Runtime group          (default: safeclaw)
 
 Examples:
   sudo ./scripts/chroot-install.sh setup
-  sudo ./scripts/chroot-install.sh setup -b /usr/local/bin/safe-agent
+  sudo ./scripts/chroot-install.sh setup -b /usr/local/bin/safeclaw
   sudo ./scripts/chroot-install.sh start
   sudo ./scripts/chroot-install.sh shell
   sudo ./scripts/chroot-install.sh status

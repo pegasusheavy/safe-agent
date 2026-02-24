@@ -1,13 +1,13 @@
 # Changelog
 
-All notable changes to safe-agent are documented here.
+All notable changes to SafeClaw are documented here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.1.0] — 2026-02-17
 
-Initial release of safe-agent: a sandboxed autonomous AI agent with tool
+Initial release of SafeClaw: a sandboxed autonomous AI agent with tool
 execution, knowledge graph, multi-interface control, and a full web dashboard.
 
 ### Core Agent
@@ -258,7 +258,7 @@ execution, knowledge graph, multi-interface control, and a full web dashboard.
 - **Chroot jail** — Docker entrypoint builds a minimal chroot with only
   required binaries and libraries.
 - **Non-root execution** — Docker image runs the agent as a dedicated
-  `safeagent` user (configurable UID/GID).
+  `safeclaw` user (configurable UID/GID).
 - **URL validation** — blocks requests to private IPs, localhost, and
   metadata endpoints.
 - **SQL injection guard** — input sanitization for all user-provided values
@@ -335,7 +335,7 @@ execution, knowledge graph, multi-interface control, and a full web dashboard.
   and Svelte (`pnpm test`, `pnpm build`) on every push/PR to `main`.
 - **CodeQL workflow** — static security analysis for JavaScript/TypeScript.
 - **Docker workflow** — multi-arch image build and push to
-  `ghcr.io/pegasusheavy/safe-agent` on push to `main` and version tags.
+  `ghcr.io/pegasusheavy/SafeClaw` on push to `main` and version tags.
 
 ### Configuration
 
@@ -344,4 +344,4 @@ execution, knowledge graph, multi-interface control, and a full web dashboard.
 - **Example config** — `config.example.toml` documents every option with
   inline comments, including `[federation]` for multi-node setup.
 
-[0.1.0]: https://github.com/PegasusHeavyIndustries/safe-agent/releases/tag/v0.1.0
+[0.1.0]: https://github.com/PegasusHeavyIndustries/SafeClaw/releases/tag/v0.1.0

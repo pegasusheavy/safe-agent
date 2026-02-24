@@ -303,19 +303,19 @@ async fn fetch_user_identity(provider: &OAuthProvider, access_token: &str) -> Op
         UserInfoMethod::BearerGet => {
             client.get(provider.userinfo_url)
                 .bearer_auth(access_token)
-                .header("User-Agent", "safe-agent/1.0")
+                .header("User-Agent", "safeclaw/1.0")
                 .send().await.ok()?
         }
         UserInfoMethod::BearerPost => {
             client.post(provider.userinfo_url)
                 .bearer_auth(access_token)
-                .header("User-Agent", "safe-agent/1.0")
+                .header("User-Agent", "safeclaw/1.0")
                 .send().await.ok()?
         }
         UserInfoMethod::SlackStyle => {
             client.get(provider.userinfo_url)
                 .bearer_auth(access_token)
-                .header("User-Agent", "safe-agent/1.0")
+                .header("User-Agent", "safeclaw/1.0")
                 .send().await.ok()?
         }
     };

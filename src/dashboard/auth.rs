@@ -630,13 +630,13 @@ async fn fetch_sso_email(provider: &oauth::OAuthProvider, access_token: &str) ->
         oauth::UserInfoMethod::BearerGet | oauth::UserInfoMethod::SlackStyle => {
             client.get(provider.userinfo_url)
                 .bearer_auth(access_token)
-                .header("User-Agent", "safe-agent/1.0")
+                .header("User-Agent", "safeclaw/1.0")
                 .send().await.ok()?
         }
         oauth::UserInfoMethod::BearerPost => {
             client.post(provider.userinfo_url)
                 .bearer_auth(access_token)
-                .header("User-Agent", "safe-agent/1.0")
+                .header("User-Agent", "safeclaw/1.0")
                 .send().await.ok()?
         }
     };
@@ -666,7 +666,7 @@ async fn fetch_sso_email(provider: &oauth::OAuthProvider, access_token: &str) ->
         // Fallback: fetch from /user/emails
         let emails_resp = client.get("https://api.github.com/user/emails")
             .bearer_auth(access_token)
-            .header("User-Agent", "safe-agent/1.0")
+            .header("User-Agent", "safeclaw/1.0")
             .send().await.ok()?;
         if emails_resp.status().is_success() {
             let emails: Vec<serde_json::Value> = emails_resp.json().await.ok()?;
@@ -851,7 +851,7 @@ pub async fn setup_totp(
 
     match state.agent.user_manager.setup_totp(&user_id).await {
         Ok((secret, recovery_codes)) => {
-            let uri = authn::totp_uri(&secret, &user.username, "safe-agent");
+            let uri = authn::totp_uri(&secret, &user.username, "safeclaw");
             Json(serde_json::json!({
                 "ok": true,
                 "secret": secret,

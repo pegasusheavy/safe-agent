@@ -554,8 +554,8 @@ mod tests {
 
     #[test]
     fn test_totp_uri() {
-        let uri = totp_uri("JBSWY3DPEHPK3PXP", "alice", "safe-agent");
-        assert!(uri.starts_with("otpauth://totp/safe-agent:alice?"));
+        let uri = totp_uri("JBSWY3DPEHPK3PXP", "alice", "safeclaw");
+        assert!(uri.starts_with("otpauth://totp/safeclaw:alice?"));
         assert!(uri.contains("secret=JBSWY3DPEHPK3PXP"));
     }
 

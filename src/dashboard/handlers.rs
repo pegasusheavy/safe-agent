@@ -1305,47 +1305,47 @@ pub async fn metrics(
 
     // Agent info
     out.push_str(&format!(
-        "# HELP safe_agent_info Agent metadata.\n\
-         # TYPE safe_agent_info gauge\n\
-         safe_agent_info{{version=\"{}\",agent_name=\"{}\"}} 1\n\n",
+        "# HELP safeclaw_info Agent metadata.\n\
+         # TYPE safeclaw_info gauge\n\
+         safeclaw_info{{version=\"{}\",agent_name=\"{}\"}} 1\n\n",
         env!("CARGO_PKG_VERSION"),
         state.agent.config.agent_name,
     ));
 
     // Agent paused
     out.push_str(&format!(
-        "# HELP safe_agent_paused Whether the agent is paused.\n\
-         # TYPE safe_agent_paused gauge\n\
-         safe_agent_paused {}\n\n",
+        "# HELP safeclaw_paused Whether the agent is paused.\n\
+         # TYPE safeclaw_paused gauge\n\
+         safeclaw_paused {}\n\n",
         if state.agent.is_paused() { 1 } else { 0 },
     ));
 
     // Tools count
     out.push_str(&format!(
-        "# HELP safe_agent_tools_registered Number of registered tools.\n\
-         # TYPE safe_agent_tools_registered gauge\n\
-         safe_agent_tools_registered {}\n\n",
+        "# HELP safeclaw_tools_registered Number of registered tools.\n\
+         # TYPE safeclaw_tools_registered gauge\n\
+         safeclaw_tools_registered {}\n\n",
         state.agent.tools.len(),
     ));
 
     // Stats from DB
     if let Ok(stats) = state.agent.memory.get_stats().await {
         out.push_str(&format!(
-            "# HELP safe_agent_ticks_total Total agent ticks executed.\n\
-             # TYPE safe_agent_ticks_total counter\n\
-             safe_agent_ticks_total {}\n\n",
+            "# HELP safeclaw_ticks_total Total agent ticks executed.\n\
+             # TYPE safeclaw_ticks_total counter\n\
+             safeclaw_ticks_total {}\n\n",
             stats.total_ticks,
         ));
         out.push_str(&format!(
-            "# HELP safe_agent_actions_approved_total Total approved actions.\n\
-             # TYPE safe_agent_actions_approved_total counter\n\
-             safe_agent_actions_approved_total {}\n\n",
+            "# HELP safeclaw_actions_approved_total Total approved actions.\n\
+             # TYPE safeclaw_actions_approved_total counter\n\
+             safeclaw_actions_approved_total {}\n\n",
             stats.total_approved,
         ));
         out.push_str(&format!(
-            "# HELP safe_agent_actions_rejected_total Total rejected actions.\n\
-             # TYPE safe_agent_actions_rejected_total counter\n\
-             safe_agent_actions_rejected_total {}\n\n",
+            "# HELP safeclaw_actions_rejected_total Total rejected actions.\n\
+             # TYPE safeclaw_actions_rejected_total counter\n\
+             safeclaw_actions_rejected_total {}\n\n",
             stats.total_rejected,
         ));
     }
@@ -1353,81 +1353,81 @@ pub async fn metrics(
     // Audit summary
     let audit = state.agent.audit.summary().await;
     out.push_str(&format!(
-        "# HELP safe_agent_audit_events_total Total audit log events.\n\
-         # TYPE safe_agent_audit_events_total counter\n\
-         safe_agent_audit_events_total {}\n\n",
+        "# HELP safeclaw_audit_events_total Total audit log events.\n\
+         # TYPE safeclaw_audit_events_total counter\n\
+         safeclaw_audit_events_total {}\n\n",
         audit.total_events,
     ));
     out.push_str(&format!(
-        "# HELP safe_agent_tool_calls_total Total tool calls.\n\
-         # TYPE safe_agent_tool_calls_total counter\n\
-         safe_agent_tool_calls_total {}\n\n",
+        "# HELP safeclaw_tool_calls_total Total tool calls.\n\
+         # TYPE safeclaw_tool_calls_total counter\n\
+         safeclaw_tool_calls_total {}\n\n",
         audit.tool_calls,
     ));
     out.push_str(&format!(
-        "# HELP safe_agent_rate_limits_total Total rate limit events.\n\
-         # TYPE safe_agent_rate_limits_total counter\n\
-         safe_agent_rate_limits_total {}\n\n",
+        "# HELP safeclaw_rate_limits_total Total rate limit events.\n\
+         # TYPE safeclaw_rate_limits_total counter\n\
+         safeclaw_rate_limits_total {}\n\n",
         audit.rate_limits,
     ));
     out.push_str(&format!(
-        "# HELP safe_agent_pii_detections_total Total PII detections.\n\
-         # TYPE safe_agent_pii_detections_total counter\n\
-         safe_agent_pii_detections_total {}\n\n",
+        "# HELP safeclaw_pii_detections_total Total PII detections.\n\
+         # TYPE safeclaw_pii_detections_total counter\n\
+         safeclaw_pii_detections_total {}\n\n",
         audit.pii_detections,
     ));
 
     // Cost tracking
     let cost = state.agent.cost_tracker.summary().await;
     out.push_str(&format!(
-        "# HELP safe_agent_llm_cost_today_usd Estimated LLM cost today in USD.\n\
-         # TYPE safe_agent_llm_cost_today_usd gauge\n\
-         safe_agent_llm_cost_today_usd {:.6}\n\n",
+        "# HELP safeclaw_llm_cost_today_usd Estimated LLM cost today in USD.\n\
+         # TYPE safeclaw_llm_cost_today_usd gauge\n\
+         safeclaw_llm_cost_today_usd {:.6}\n\n",
         cost.today_usd,
     ));
     out.push_str(&format!(
-        "# HELP safe_agent_llm_cost_total_usd Estimated LLM cost all-time in USD.\n\
-         # TYPE safe_agent_llm_cost_total_usd counter\n\
-         safe_agent_llm_cost_total_usd {:.6}\n\n",
+        "# HELP safeclaw_llm_cost_total_usd Estimated LLM cost all-time in USD.\n\
+         # TYPE safeclaw_llm_cost_total_usd counter\n\
+         safeclaw_llm_cost_total_usd {:.6}\n\n",
         cost.total_usd,
     ));
     out.push_str(&format!(
-        "# HELP safe_agent_llm_tokens_today Total LLM tokens used today.\n\
-         # TYPE safe_agent_llm_tokens_today gauge\n\
-         safe_agent_llm_tokens_today {}\n\n",
+        "# HELP safeclaw_llm_tokens_today Total LLM tokens used today.\n\
+         # TYPE safeclaw_llm_tokens_today gauge\n\
+         safeclaw_llm_tokens_today {}\n\n",
         cost.today_tokens,
     ));
     out.push_str(&format!(
-        "# HELP safe_agent_llm_tokens_total Total LLM tokens used all-time.\n\
-         # TYPE safe_agent_llm_tokens_total counter\n\
-         safe_agent_llm_tokens_total {}\n\n",
+        "# HELP safeclaw_llm_tokens_total Total LLM tokens used all-time.\n\
+         # TYPE safeclaw_llm_tokens_total counter\n\
+         safeclaw_llm_tokens_total {}\n\n",
         cost.total_tokens,
     ));
     out.push_str(&format!(
-        "# HELP safe_agent_llm_requests_today LLM requests today.\n\
-         # TYPE safe_agent_llm_requests_today gauge\n\
-         safe_agent_llm_requests_today {}\n\n",
+        "# HELP safeclaw_llm_requests_today LLM requests today.\n\
+         # TYPE safeclaw_llm_requests_today gauge\n\
+         safeclaw_llm_requests_today {}\n\n",
         cost.today_requests,
     ));
 
     // Rate limiter
     let rate = state.agent.rate_limiter.status();
     out.push_str(&format!(
-        "# HELP safe_agent_rate_calls_minute Tool calls in the last minute.\n\
-         # TYPE safe_agent_rate_calls_minute gauge\n\
-         safe_agent_rate_calls_minute {}\n\n",
+        "# HELP safeclaw_rate_calls_minute Tool calls in the last minute.\n\
+         # TYPE safeclaw_rate_calls_minute gauge\n\
+         safeclaw_rate_calls_minute {}\n\n",
         rate.calls_last_minute,
     ));
     out.push_str(&format!(
-        "# HELP safe_agent_rate_calls_hour Tool calls in the last hour.\n\
-         # TYPE safe_agent_rate_calls_hour gauge\n\
-         safe_agent_rate_calls_hour {}\n\n",
+        "# HELP safeclaw_rate_calls_hour Tool calls in the last hour.\n\
+         # TYPE safeclaw_rate_calls_hour gauge\n\
+         safeclaw_rate_calls_hour {}\n\n",
         rate.calls_last_hour,
     ));
     out.push_str(&format!(
-        "# HELP safe_agent_rate_limited Whether the agent is currently rate limited.\n\
-         # TYPE safe_agent_rate_limited gauge\n\
-         safe_agent_rate_limited {}\n\n",
+        "# HELP safeclaw_rate_limited Whether the agent is currently rate limited.\n\
+         # TYPE safeclaw_rate_limited gauge\n\
+         safeclaw_rate_limited {}\n\n",
         if rate.is_limited { 1 } else { 0 },
     ));
 
@@ -1465,7 +1465,7 @@ pub async fn create_backup(
     headers.insert(
         axum::http::header::CONTENT_DISPOSITION,
         format!(
-            "attachment; filename=\"safe-agent-backup-{}.json\"",
+            "attachment; filename=\"safeclaw-backup-{}.json\"",
             chrono::Utc::now().format("%Y%m%d-%H%M%S")
         )
         .parse()
@@ -1624,12 +1624,12 @@ pub async fn check_update(
 
     // Check GitHub releases API
     let client = reqwest::Client::builder()
-        .user_agent("safe-agent")
+        .user_agent("safeclaw")
         .build()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     let resp = client
-        .get("https://api.github.com/repos/PegasusHeavyIndustries/safe-agent/releases/latest")
+        .get("https://api.github.com/repos/PegasusHeavyIndustries/safeclaw/releases/latest")
         .send()
         .await
         .map_err(|e| {
@@ -1801,7 +1801,7 @@ pub async fn federation_add_peer(
 ) -> Result<Json<ActionResponse>, StatusCode> {
     // Fetch the peer's info
     let client = reqwest::Client::builder()
-        .user_agent("safe-agent-federation")
+        .user_agent("safeclaw-federation")
         .timeout(std::time::Duration::from_secs(10))
         .build()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;

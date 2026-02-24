@@ -607,12 +607,12 @@ pub struct SessionsConfig {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct PluginsConfig {
-    /// Global plugin directory (default: ~/.config/safe-agent/plugins).
+    /// Global plugin directory (default: ~/.config/safeclaw/plugins).
     /// Empty string means use the default path.
     #[serde(default)]
     pub global_dir: String,
 
-    /// Project-local plugin directory (default: .safe-agent/plugins).
+    /// Project-local plugin directory (default: .safeclaw/plugins).
     /// Relative to the working directory. Empty means use default.
     #[serde(default)]
     pub project_dir: String,
@@ -659,7 +659,7 @@ pub struct TlsConfig {
     pub acme_production: bool,
 
     /// Directory to cache ACME account keys and certificates.
-    /// Defaults to `$XDG_DATA_HOME/safe-agent/acme-cache`.
+    /// Defaults to `$XDG_DATA_HOME/safeclaw/acme-cache`.
     #[serde(default)]
     pub acme_cache_dir: String,
 
@@ -782,7 +782,7 @@ impl Default for MemoryConfig {
 // -- Defaults ------------------------------------------------------------
 
 fn default_agent_name() -> String {
-    "safe-agent".to_string()
+    "safeclaw".to_string()
 }
 fn default_timezone() -> String {
     "UTC".to_string()
@@ -1129,19 +1129,19 @@ impl Config {
         Ok(config)
     }
 
-    /// Returns the default config file path: `$XDG_CONFIG_HOME/safe-agent/config.toml`
+    /// Returns the default config file path: `$XDG_CONFIG_HOME/safeclaw/config.toml`
     pub fn default_config_path() -> PathBuf {
         dirs::config_dir()
             .unwrap_or_else(|| PathBuf::from(".config"))
-            .join("safe-agent")
+            .join("safeclaw")
             .join("config.toml")
     }
 
-    /// Returns the data directory: `$XDG_DATA_HOME/safe-agent/`
+    /// Returns the data directory: `$XDG_DATA_HOME/safeclaw/`
     pub fn data_dir() -> PathBuf {
         dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from(".local/share"))
-            .join("safe-agent")
+            .join("safeclaw")
     }
 
     /// Get the Telegram bot token from the environment.
@@ -1172,7 +1172,7 @@ mod tests {
     #[test]
     fn default_config_has_expected_values() {
         let c = Config::default();
-        assert_eq!(c.agent_name, "safe-agent");
+        assert_eq!(c.agent_name, "safeclaw");
         assert_eq!(c.dashboard_bind, "127.0.0.1:3030");
         assert_eq!(c.tick_interval_secs, 120);
         assert_eq!(c.conversation_window, 5);
@@ -1331,13 +1331,13 @@ mod tests {
 
     #[test]
     fn load_nonexistent_returns_defaults() {
-        let c = Config::load(Some(Path::new("/tmp/nonexistent-safe-agent-test.toml"))).unwrap();
-        assert_eq!(c.agent_name, "safe-agent");
+        let c = Config::load(Some(Path::new("/tmp/nonexistent-safeclaw-test.toml"))).unwrap();
+        assert_eq!(c.agent_name, "safeclaw");
     }
 
     #[test]
     fn load_invalid_toml_returns_error() {
-        let path = std::env::temp_dir().join("bad-safe-agent.toml");
+        let path = std::env::temp_dir().join("bad-safeclaw.toml");
         std::fs::write(&path, "this is not valid %%% toml").unwrap();
         let result = Config::load(Some(&path));
         assert!(result.is_err());
@@ -1345,16 +1345,16 @@ mod tests {
     }
 
     #[test]
-    fn default_config_path_has_safe_agent() {
+    fn default_config_path_has_safeclaw() {
         let path = Config::default_config_path();
-        assert!(path.to_string_lossy().contains("safe-agent"));
+        assert!(path.to_string_lossy().contains("safeclaw"));
         assert!(path.to_string_lossy().contains("config.toml"));
     }
 
     #[test]
-    fn data_dir_has_safe_agent() {
+    fn data_dir_has_safeclaw() {
         let path = Config::data_dir();
-        assert!(path.to_string_lossy().contains("safe-agent"));
+        assert!(path.to_string_lossy().contains("safeclaw"));
     }
 
     #[test]
@@ -1381,13 +1381,13 @@ mod tests {
     fn parse_plugins_section() {
         let toml_str = r#"
         [plugins]
-        global_dir = "/home/user/.config/safe-agent/plugins"
-        project_dir = ".safe-agent/plugins"
+        global_dir = "/home/user/.config/safeclaw/plugins"
+        project_dir = ".safeclaw/plugins"
         disabled = ["broken-plugin"]
         "#;
         let c: Config = toml::from_str(toml_str).unwrap();
-        assert_eq!(c.plugins.global_dir, "/home/user/.config/safe-agent/plugins");
-        assert_eq!(c.plugins.project_dir, ".safe-agent/plugins");
+        assert_eq!(c.plugins.global_dir, "/home/user/.config/safeclaw/plugins");
+        assert_eq!(c.plugins.project_dir, ".safeclaw/plugins");
         assert_eq!(c.plugins.disabled, vec!["broken-plugin"]);
     }
 

@@ -85,7 +85,7 @@
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
             deferredPrompt = e as Event & { prompt: () => void };
-            if (!localStorage.getItem('safe-agent-pwa-dismissed')) {
+            if (!localStorage.getItem('safeclaw-pwa-dismissed')) {
                 showInstallBanner = true;
             }
         });
@@ -115,7 +115,7 @@
 
     function dismissInstall() {
         showInstallBanner = false;
-        localStorage.setItem('safe-agent-pwa-dismissed', '1');
+        localStorage.setItem('safeclaw-pwa-dismissed', '1');
     }
 
     let evtSource: EventSource | undefined;

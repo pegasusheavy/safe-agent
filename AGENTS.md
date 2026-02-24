@@ -1,10 +1,10 @@
-# safe-agent
+# SafeClaw
 
 Sandboxed autonomous AI agent with tool execution, knowledge graph, skill system, and multi-interface control.
 
 ## Architecture
 
-safe-agent is an autonomous agent system with a pluggable LLM backend. It can use Claude Code CLI, OpenAI Codex CLI, Google Gemini CLI, Aider, OpenRouter (any model via API), or a local GGUF model (via llama-gguf) for reasoning. The operator controls the agent via a Svelte web dashboard (with JWT authentication) or Telegram bot.
+SafeClaw is an autonomous agent system with a pluggable LLM backend. It can use Claude Code CLI, OpenAI Codex CLI, Google Gemini CLI, Aider, OpenRouter (any model via API), or a local GGUF model (via llama-gguf) for reasoning. The operator controls the agent via a Svelte web dashboard (with JWT authentication) or Telegram bot.
 
 ```
 Telegram Bot ──┐
@@ -401,39 +401,39 @@ cargo build --release --features local
 cargo build --release --features local-cuda
 
 # Run with Claude backend (requires DASHBOARD_PASSWORD and JWT_SECRET)
-DASHBOARD_PASSWORD=mypass JWT_SECRET=mysecret ./target/release/safe-agent
+DASHBOARD_PASSWORD=mypass JWT_SECRET=mysecret ./target/release/SafeClaw
 
 # Run with OpenRouter (any model via API)
 LLM_BACKEND=openrouter OPENROUTER_API_KEY=sk-or-... \
   DASHBOARD_PASSWORD=mypass JWT_SECRET=mysecret \
-  ./target/release/safe-agent
+  ./target/release/SafeClaw
 
 # Run with OpenAI Codex backend
 LLM_BACKEND=codex \
   DASHBOARD_PASSWORD=mypass JWT_SECRET=mysecret \
-  ./target/release/safe-agent
+  ./target/release/SafeClaw
 
 # Run with Google Gemini CLI backend
 LLM_BACKEND=gemini \
   DASHBOARD_PASSWORD=mypass JWT_SECRET=mysecret \
-  ./target/release/safe-agent
+  ./target/release/SafeClaw
 
 # Run with Aider (uses any provider via API keys)
 LLM_BACKEND=aider AIDER_MODEL=gpt-4o \
   OPENAI_API_KEY=sk-... \
   DASHBOARD_PASSWORD=mypass JWT_SECRET=mysecret \
-  ./target/release/safe-agent
+  ./target/release/SafeClaw
 
 # Run with a local GGUF model
 LLM_BACKEND=local MODEL_PATH=/path/to/model.gguf \
   DASHBOARD_PASSWORD=mypass JWT_SECRET=mysecret \
-  ./target/release/safe-agent
+  ./target/release/SafeClaw
 
 # Run with custom config
-./target/release/safe-agent --config /path/to/config.toml
+./target/release/SafeClaw --config /path/to/config.toml
 
 # Pre-flight check
-./target/release/safe-agent --check
+./target/release/SafeClaw --check
 ```
 
 ### Docker
@@ -446,12 +446,12 @@ cp .env.example .env
 docker compose up -d --build
 
 # View logs
-docker compose logs -f safe-agent
+docker compose logs -f SafeClaw
 ```
 
 ## Configuration
 
-Config file: `~/.config/safe-agent/config.toml`
+Config file: `~/.config/SafeClaw/config.toml`
 
 See `config.example.toml` for all options with defaults.
 
@@ -508,7 +508,7 @@ Each OAuth provider requires a client ID and secret, set via environment variabl
 
 ### CLAUDE.md (LLM Backend Project Rules)
 
-All CLI-based LLM backends (Claude, Codex, Gemini, Aider) run with `current_dir` set to the data directory (`$XDG_DATA_HOME/safe-agent/`). This means the CLI picks up the `CLAUDE.md` file located there as project-level instructions.
+All CLI-based LLM backends (Claude, Codex, Gemini, Aider) run with `current_dir` set to the data directory (`$XDG_DATA_HOME/SafeClaw/`). This means the CLI picks up the `CLAUDE.md` file located there as project-level instructions.
 
 **System-managed rules** are maintained automatically at startup from an embedded template (`config/CLAUDE.md` in the repo). The file uses marker comments to separate system rules from user-added rules:
 
@@ -529,8 +529,8 @@ All CLI-based LLM backends (Claude, Codex, Gemini, Aider) run with `current_dir`
 
 ## Data Storage
 
-All data is stored under `$XDG_DATA_HOME/safe-agent/` (typically `~/.local/share/safe-agent/`):
-- `safe-agent.db` — SQLite database (conversation, memory, knowledge graph, approvals, stats, OAuth tokens)
+All data is stored under `$XDG_DATA_HOME/SafeClaw/` (typically `~/.local/share/SafeClaw/`):
+- `SafeClaw.db` — SQLite database (conversation, memory, knowledge graph, approvals, stats, OAuth tokens)
 - `CLAUDE.md` — System + user rules for CLI LLM backends (managed at startup, see above)
 - `skills/` — Skill directories (each with `skill.toml`, entrypoint, `skill.log`, `data/`, optional `routes.rhai`, optional `ui/`)
 - `skills/credentials.json` — Stored skill credentials

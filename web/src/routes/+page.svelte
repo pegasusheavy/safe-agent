@@ -8,7 +8,7 @@
 </script>
 
 <svelte:head>
-	<title>safe-agent — Self-hosted AI agent on your hardware</title>
+	<title>safeclaw — Self-hosted AI agent on your hardware</title>
 	<meta name="description" content="A sandboxed, self-hosted AI agent with tool execution, a skill system, knowledge graph, and multi-interface control. Your hardware. Your rules." />
 </svelte:head>
 
