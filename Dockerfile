@@ -1,4 +1,4 @@
-# Stage 1: Build the safe-agent binary (musl/static for Alpine)
+# Stage 1: Build the safeclaw binary (musl/static for Alpine)
 FROM rust:1.88-alpine AS builder
 
 RUN apk add --no-cache musl-dev pkgconf perl make openssl-dev openssl-libs-static
@@ -54,33 +54,33 @@ RUN pip install --no-cache-dir --break-system-packages \
     feedparser \
     icalendar
 
-# Copy safe-agent binary
-COPY --from=builder /build/target/release/safe-agent /usr/local/bin/safe-agent
+# Copy safeclaw binary
+COPY --from=builder /build/target/release/safeclaw /usr/local/bin/safeclaw
 
 # Chroot jail entrypoint script
 COPY scripts/chroot-jail.sh /usr/local/bin/chroot-jail.sh
 RUN chmod +x /usr/local/bin/chroot-jail.sh
 
-# Non-root user for running safe-agent (jail setup still runs as root).
+# Non-root user for running safeclaw (jail setup still runs as root).
 # UID/GID default to 1000 to match typical host users — override with
 # --build-arg to match your host user's uid/gid for bind-mount perms.
 ARG SAFE_UID=1000
 ARG SAFE_GID=1000
-RUN addgroup -g "${SAFE_GID}" -S safeagent && \
-    adduser -u "${SAFE_UID}" -G safeagent -h /home/safeagent -s /bin/bash -S safeagent
+RUN addgroup -g "${SAFE_GID}" -S safeclaw && \
+    adduser -u "${SAFE_UID}" -G safeclaw -h /home/safeclaw -s /bin/bash -S safeclaw
 
 # Pre-create the jail root and volume mount points
-RUN mkdir -p /jail /data/safe-agent/skills /config/safe-agent /home/safeagent && \
-    chown -R safeagent:safeagent /data/safe-agent /config/safe-agent /home/safeagent
+RUN mkdir -p /jail /data/safeclaw/skills /config/safeclaw /home/safeclaw && \
+    chown -R safeclaw:safeclaw /data/safeclaw /config/safeclaw /home/safeclaw
 
 ENV XDG_DATA_HOME=/data
 ENV XDG_CONFIG_HOME=/config
-ENV HOME=/home/safeagent
+ENV HOME=/home/safeclaw
 
 EXPOSE 3031 443
 
-VOLUME ["/data/safe-agent", "/config/safe-agent"]
+VOLUME ["/data/safeclaw", "/config/safeclaw"]
 
 # The entrypoint script builds the chroot jail at startup, then
-# chroots into it and exec's safe-agent.  Pass NO_JAIL=1 to bypass.
+# chroots into it and exec's safeclaw.  Pass NO_JAIL=1 to bypass.
 ENTRYPOINT ["chroot-jail.sh"]

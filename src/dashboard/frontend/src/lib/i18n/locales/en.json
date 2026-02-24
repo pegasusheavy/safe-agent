@@ -40,7 +40,7 @@
   "nav.ops": "Ops",
   "nav.settings": "Settings",
 
-  "header.title": "safe-agent",
+  "header.title": "SafeClaw",
   "header.loading": "loading...",
   "header.paused": "paused",
   "header.running": "running",
@@ -51,7 +51,7 @@
   "header.force_tick": "Force Tick",
   "header.sign_out": "Sign out",
 
-  "login.title": "safe-agent",
+  "login.title": "SafeClaw",
   "login.2fa_required": "Two-factor authentication required",
   "login.sign_in_continue": "Sign in to continue",
   "login.sign_in_account": "Sign in with your account",
@@ -80,7 +80,7 @@
   "login.passkey_start_failed": "Failed to start passkey authentication",
   "login.passkey_verify_failed": "Passkey verification failed",
 
-  "onboarding.welcome": "Welcome to Safe Agent",
+  "onboarding.welcome": "Welcome to SafeClaw",
   "onboarding.welcome_desc": "Let's set up your AI agent. You can change these later in Settings.",
   "onboarding.agent_name": "Agent Name",
   "onboarding.agent_name_placeholder": "e.g. Jarvis, Friday, Atlas...",
@@ -653,6 +653,6 @@
   "oauth.reauth": "Re-authorize",
 
   "pwa.install": "Install App",
-  "pwa.install_hint": "Install safe-agent as an app for quick access",
+  "pwa.install_hint": "Install SafeClaw as an app for quick access",
   "pwa.dismiss": "Dismiss"
 }

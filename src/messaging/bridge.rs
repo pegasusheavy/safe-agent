@@ -12,7 +12,7 @@ use super::MessagingBackend;
 /// - `POST /send` with JSON `{"to": "...", "text": "..."}` → `{"ok": true}`
 /// - `GET /status` → `{"state": "connected"|"disconnected", ...}`
 ///
-/// Incoming messages are handled by the bridge POSTing to safe-agent's
+/// Incoming messages are handled by the bridge POSTing to safeclaw's
 /// `/api/messaging/incoming` webhook — this struct only handles outgoing.
 pub struct BridgeBackend {
     platform: String,

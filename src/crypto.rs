@@ -97,7 +97,7 @@ impl FieldEncryptor {
         // cannot be used to reverse-engineer the AES key.
         let mut mac = <HmacSha256 as Mac>::new_from_slice(&key_bytes)
             .expect("HMAC can take any key size");
-        mac.update(b"safe-agent-blind-index-v1");
+        mac.update(b"safeclaw-blind-index-v1");
         let derived = mac.finalize().into_bytes();
         let mut blind_key = [0u8; 32];
         blind_key.copy_from_slice(&derived);
@@ -240,7 +240,7 @@ mod tests {
     fn test_encryptor() -> FieldEncryptor {
         let key_bytes = [0x42u8; 32];
         let mut mac = <HmacSha256 as Mac>::new_from_slice(&key_bytes).unwrap();
-        mac.update(b"safe-agent-blind-index-v1");
+        mac.update(b"safeclaw-blind-index-v1");
         let derived = mac.finalize().into_bytes();
         let mut blind_key = [0u8; 32];
         blind_key.copy_from_slice(&derived);
@@ -332,7 +332,7 @@ mod tests {
 
     #[test]
     fn ensure_key_creates_and_reloads() {
-        let dir = std::env::temp_dir().join(format!("safe-agent-test-{}", uuid::Uuid::new_v4()));
+        let dir = std::env::temp_dir().join(format!("safeclaw-test-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(&dir).unwrap();
 
         // First call creates the key

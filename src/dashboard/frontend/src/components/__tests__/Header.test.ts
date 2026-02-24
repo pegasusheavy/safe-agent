@@ -21,7 +21,7 @@ describe('Header', () => {
     it('renders the agent name', async () => {
         render(Header);
         await vi.waitFor(() => {
-            expect(screen.getByText(/safe-agent/)).toBeInTheDocument();
+            expect(screen.getByText(/SafeClaw/)).toBeInTheDocument();
         });
     });
 

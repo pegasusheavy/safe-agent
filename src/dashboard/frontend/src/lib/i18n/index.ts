@@ -2,7 +2,7 @@ import en from './locales/en.json';
 
 type Messages = Record<string, string>;
 
-const STORAGE_KEY = 'safe-agent-locale';
+const STORAGE_KEY = 'safeclaw-locale';
 
 export const SUPPORTED_LOCALES: Record<string, string> = {
 	en: 'English',

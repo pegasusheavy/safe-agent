@@ -75,7 +75,7 @@ async fn main() {
         agent_name = %config.agent_name,
         dashboard = %config.dashboard_bind,
         tick_interval = config.tick_interval_secs,
-        "safe-agent starting"
+        "safeclaw starting"
     );
 
     // Set up sandboxed filesystem
@@ -97,7 +97,7 @@ async fn main() {
     } else {
         let config_dir = dirs::config_dir()
             .unwrap_or_else(|| std::path::PathBuf::from(".config"))
-            .join("safe-agent");
+            .join("safeclaw");
         match crate::security::apply_landlock(&data_dir, &config_dir) {
             Ok(()) => {}
             Err(e) => warn!("landlock sandbox not applied: {e}"),
@@ -115,7 +115,7 @@ async fn main() {
     info!(bin_dir = %trash.bin_dir().display(), "trash system initialized");
 
     // Set up binary installer (user-space tool management via dashboard)
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/home/safeagent".to_string());
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/home/safeclaw".to_string());
     let local_bin = std::path::PathBuf::from(&home).join(".local/bin");
     let installer = installer::BinaryInstaller::new(local_bin.clone(), &data_dir);
 
@@ -138,7 +138,7 @@ async fn main() {
     ensure_claude_md(&data_dir);
 
     // Open database
-    let db_path = sandbox.root().join("safe-agent.db");
+    let db_path = sandbox.root().join("safeclaw.db");
     let db = match db::open(&db_path) {
         Ok(d) => d,
         Err(e) => {
@@ -489,7 +489,7 @@ async fn main() {
         })
     };
 
-    info!("safe-agent is running — press Ctrl+C to stop");
+    info!("safeclaw is running — press Ctrl+C to stop");
 
     // Wait for shutdown signal
     tokio::signal::ctrl_c()
@@ -501,7 +501,7 @@ async fn main() {
 
     // Wait for tasks to finish
     let _ = tokio::join!(dashboard_handle, agent_handle);
-    info!("safe-agent stopped");
+    info!("safeclaw stopped");
 }
 
 /// Build the tool registry from config.
@@ -885,13 +885,13 @@ fn ensure_claude_md(data_dir: &std::path::Path) {
 
 fn print_usage() {
     println!(
-        "safe-agent — sandboxed autonomous AI agent with tool execution
+        "safeclaw — sandboxed autonomous AI agent with tool execution
 
 USAGE:
-    safe-agent [OPTIONS]
+    safeclaw [OPTIONS]
 
 OPTIONS:
-    --config <PATH>     Path to config file (default: ~/.config/safe-agent/config.toml)
+    --config <PATH>     Path to config file (default: ~/.config/safeclaw/config.toml)
     --default-config    Print default config to stdout and exit
     --check             Validate config and connectivity, then exit
     -h, --help          Print this help message

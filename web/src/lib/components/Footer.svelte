@@ -11,7 +11,7 @@
 
 		<div class="flex items-center gap-6">
 			<a
-				href="https://github.com/pegasusheavy/safe-agent"
+				href="https://github.com/pegasusheavy/safeclaw"
 				target="_blank"
 				rel="noopener"
 				class="text-slate-500 transition-colors hover:text-slate-300"

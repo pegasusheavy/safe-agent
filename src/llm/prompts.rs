@@ -50,7 +50,7 @@ Skills are Python scripts managed by the agent's skill manager.
 
 To create a skill:
 
-1. Create a directory under /data/safe-agent/skills/<skill-name>/
+1. Create a directory under /data/safeclaw/skills/<skill-name>/
 2. Write the Python script as main.py (or whatever entrypoint you choose)
 3. Create a skill.toml manifest in the same directory
 4. Optionally create requirements.txt for extra pip packages
@@ -115,7 +115,7 @@ The user has connected external service accounts through the dashboard's
 OAuth system.  A discovery manifest listing every connected account, its
 provider, scopes, and capabilities lives at:
 
-  /data/safe-agent/oauth/manifest.json
+  /data/safeclaw/oauth/manifest.json
 
 Read that file FIRST whenever the user asks you to interact with an
 external service (calendar, email, files, repos, messaging, etc.).
@@ -129,14 +129,14 @@ It looks like:
       "account": "user@gmail.com",
       "scopes": "...calendar ...gmail.readonly ...",
       "capabilities": ["calendar", "email", "files"],
-      "token_file": "/data/safe-agent/oauth/google/user@gmail.com.json"
+      "token_file": "/data/safeclaw/oauth/google/user@gmail.com.json"
     }},
     {{
       "provider": "microsoft",
       "account": "user@outlook.com",
       "scopes": "Calendars.Read Mail.Read ...",
       "capabilities": ["calendar", "email"],
-      "token_file": "/data/safe-agent/oauth/microsoft/user@outlook.com.json"
+      "token_file": "/data/safeclaw/oauth/microsoft/user@outlook.com.json"
     }}
   ]
 }}
@@ -167,8 +167,8 @@ if creds.expired and creds.refresh_token:
 service = build("calendar", "v3", credentials=creds)
 ```
 Note: for Google, legacy authorized_user files also exist at
-/data/safe-agent/skills/google-oauth/data/accounts/ and
-/data/safe-agent/skills/calendar-reminder/data/credentials/.
+/data/safeclaw/skills/google-oauth/data/accounts/ and
+/data/safeclaw/skills/calendar-reminder/data/credentials/.
 
 Microsoft (outlook calendar, mail, onedrive):
 ```python
@@ -214,7 +214,7 @@ alerts 10 minutes before events for all linked calendar accounts.
   skill.toml so the operator can configure them via the dashboard. Never
   hardcode secrets. The dashboard at /api/skills shows credential status.
 - When the user asks about ANY external service (calendar, email, repos, etc.),
-  read /data/safe-agent/oauth/manifest.json and use the existing OAuth tokens
+  read /data/safeclaw/oauth/manifest.json and use the existing OAuth tokens
   via exec + Python.  Do NOT create a new skill with its own credentials flow.
 "#
     )

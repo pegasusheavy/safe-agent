@@ -91,7 +91,7 @@ async fn handle_command(
     match cmd {
         "/start" | "/help" => {
             let help = "\
-🤖 safe-agent Telegram Control
+🤖 safeclaw Telegram Control
 
 /status - Agent status & stats
 /pending - List pending actions

@@ -1,4 +1,4 @@
-# safe-agent — Roadmap
+# SafeClaw — Roadmap
 
 > What it takes to go from "cool project" to "indispensable agentic companion."
 
@@ -436,7 +436,7 @@ single `browser` tool (action dispatch pattern).
       `develop` or `main`.
 - [x] **GHCR container images** — GitHub Actions workflow builds and
       pushes multi-arch Docker images (amd64 + arm64) to
-      `ghcr.io/pegasusheavy/safe-agent` on version tags (`v*`).
+      `ghcr.io/pegasusheavy/SafeClaw` on version tags (`v*`).
 - [x] **Comprehensive Docker README** — full Quick Start section covering
       directory setup, `.env` configuration, `docker run` command with
       mount explanations, Docker Compose example, optional mounts (Claude

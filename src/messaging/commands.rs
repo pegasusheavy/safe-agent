@@ -58,7 +58,7 @@ pub async fn handle_bot_command(
         "start" | "help" => {
             let p = pfx;
             CommandResult::Reply(format!(
-                "🤖 safe-agent Control\n\n\
+                "🤖 safeclaw Control\n\n\
                  {p}status - Agent status & stats\n\
                  {p}pending - List pending actions\n\
                  {p}approve <id|all> - Approve action(s)\n\

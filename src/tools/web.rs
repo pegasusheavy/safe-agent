@@ -69,7 +69,7 @@ impl Tool for WebSearchTool {
         let resp = ctx
             .http_client
             .get(&url)
-            .header("User-Agent", "Mozilla/5.0 (compatible; safe-agent/0.1)")
+            .header("User-Agent", "Mozilla/5.0 (compatible; SafeClaw/0.1)")
             .send()
             .await;
 
@@ -234,7 +234,7 @@ impl Tool for WebFetchTool {
         let resp = ctx
             .http_client
             .get(url)
-            .header("User-Agent", "Mozilla/5.0 (compatible; safe-agent/0.1)")
+            .header("User-Agent", "Mozilla/5.0 (compatible; SafeClaw/0.1)")
             .send()
             .await;
 

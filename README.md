@@ -1,8 +1,8 @@
-# safe-agent
+# SafeClaw
 
 Sandboxed autonomous AI agent with tool execution, knowledge graph, skill system, and multi-interface control.
 
-safe-agent pairs a pluggable LLM backend (Claude Code CLI, OpenAI Codex CLI, Google Gemini CLI, Aider, OpenRouter, or a local GGUF model via llama-gguf) with a human-in-the-loop approval queue so an AI agent can observe, reason, and act -- but only with your permission. Control it from a Svelte web dashboard or a Telegram bot. The agent can teach itself new skills on the fly and grow its own knowledge graph over time.
+SafeClaw pairs a pluggable LLM backend (Claude Code CLI, OpenAI Codex CLI, Google Gemini CLI, Aider, OpenRouter, or a local GGUF model via llama-gguf) with a human-in-the-loop approval queue so an AI agent can observe, reason, and act -- but only with your permission. Control it from a Svelte web dashboard or a Telegram bot. The agent can teach itself new skills on the fly and grow its own knowledge graph over time.
 
 ## Features
 
@@ -26,23 +26,23 @@ safe-agent pairs a pluggable LLM backend (Claude Code CLI, OpenAI Codex CLI, Goo
 Pre-built multi-arch images (amd64 + arm64) are published on every release:
 
 ```bash
-docker pull ghcr.io/pegasusheavy/safe-agent:latest
+docker pull ghcr.io/pegasusheavy/SafeClaw:latest
 ```
 
 ### Docker — full setup
 
 #### 1. Create your directories
 
-safe-agent needs two things on the host: a **data directory** (SQLite database, skills, memory, encryption keys) and a **config file**.
+SafeClaw needs two things on the host: a **data directory** (SQLite database, skills, memory, encryption keys) and a **config file**.
 
 ```bash
 # Data directory — this is where everything persistent lives.
-mkdir -p ~/.local/share/safe-agent
+mkdir -p ~/.local/share/SafeClaw
 
 # Config file — start from the example and customize.
-mkdir -p ~/.config/safe-agent
-curl -fsSL https://raw.githubusercontent.com/pegasusheavy/safe-agent/main/config.example.toml \
-  -o ~/.config/safe-agent/config.toml
+mkdir -p ~/.config/SafeClaw
+curl -fsSL https://raw.githubusercontent.com/pegasusheavy/SafeClaw/main/config.example.toml \
+  -o ~/.config/SafeClaw/config.toml
 ```
 
 #### 2. Create the `.env` file
@@ -50,11 +50,11 @@ curl -fsSL https://raw.githubusercontent.com/pegasusheavy/safe-agent/main/config
 Download the example and fill in your values:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/pegasusheavy/safe-agent/main/.env.example \
-  -o ~/.config/safe-agent/.env
+curl -fsSL https://raw.githubusercontent.com/pegasusheavy/SafeClaw/main/.env.example \
+  -o ~/.config/SafeClaw/.env
 ```
 
-Edit `~/.config/safe-agent/.env` — you **must** set at least these two:
+Edit `~/.config/SafeClaw/.env` — you **must** set at least these two:
 
 ```bash
 DASHBOARD_PASSWORD=pick-a-strong-password
@@ -76,15 +76,15 @@ See [`config.example.toml`](config.example.toml) for every option.
 
 ```bash
 docker run -d \
-  --name safe-agent \
+  --name SafeClaw \
   --restart unless-stopped \
   -p 3031:3031 \
-  -v ~/.local/share/safe-agent:/data/safe-agent \
-  -v ~/.config/safe-agent/config.toml:/config/safe-agent/config.toml:ro \
-  --env-file ~/.config/safe-agent/.env \
+  -v ~/.local/share/SafeClaw:/data/SafeClaw \
+  -v ~/.config/SafeClaw/config.toml:/config/SafeClaw/config.toml:ro \
+  --env-file ~/.config/SafeClaw/.env \
   -e NO_JAIL=1 \
-  --entrypoint safe-agent \
-  ghcr.io/pegasusheavy/safe-agent:latest
+  --entrypoint SafeClaw \
+  ghcr.io/pegasusheavy/SafeClaw:latest
 ```
 
 The dashboard is now at **http://localhost:3031**.
@@ -93,9 +93,9 @@ The dashboard is now at **http://localhost:3031**.
 
 | Flag | Host path | Container path | Purpose |
 |---|---|---|---|
-| `-v` | `~/.local/share/safe-agent` | `/data/safe-agent` | **All persistent data**: SQLite database, encryption keys, skill files, venvs, skill logs, backups, trash. This is the only directory safe-agent writes to. Back this up. |
-| `-v` | `~/.config/safe-agent/config.toml` | `/config/safe-agent/config.toml:ro` | **Configuration file** (read-only). Agent name, LLM backend, tool settings, Telegram config, security policy, federation, etc. |
-| `--env-file` | `~/.config/safe-agent/.env` | *(environment)* | **Secrets**: dashboard password, JWT key, bot tokens, API keys, OAuth credentials. Never baked into the image. |
+| `-v` | `~/.local/share/SafeClaw` | `/data/SafeClaw` | **All persistent data**: SQLite database, encryption keys, skill files, venvs, skill logs, backups, trash. This is the only directory SafeClaw writes to. Back this up. |
+| `-v` | `~/.config/SafeClaw/config.toml` | `/config/SafeClaw/config.toml:ro` | **Configuration file** (read-only). Agent name, LLM backend, tool settings, Telegram config, security policy, federation, etc. |
+| `--env-file` | `~/.config/SafeClaw/.env` | *(environment)* | **Secrets**: dashboard password, JWT key, bot tokens, API keys, OAuth credentials. Never baked into the image. |
 
 #### Docker Compose
 
@@ -103,20 +103,20 @@ If you prefer Compose, create a `docker-compose.yml`:
 
 ```yaml
 services:
-  safe-agent:
-    image: ghcr.io/pegasusheavy/safe-agent:latest
-    container_name: safe-agent
+  SafeClaw:
+    image: ghcr.io/pegasusheavy/SafeClaw:latest
+    container_name: SafeClaw
     restart: unless-stopped
     ports:
       - "3031:3031"
     volumes:
-      - ~/.local/share/safe-agent:/data/safe-agent
-      - ~/.config/safe-agent/config.toml:/config/safe-agent/config.toml:ro
+      - ~/.local/share/SafeClaw:/data/SafeClaw
+      - ~/.config/SafeClaw/config.toml:/config/SafeClaw/config.toml:ro
     env_file:
-      - ~/.config/safe-agent/.env
+      - ~/.config/SafeClaw/.env
     environment:
       - NO_JAIL=1
-    entrypoint: ["safe-agent"]
+    entrypoint: ["SafeClaw"]
 ```
 
 ```bash
@@ -129,8 +129,8 @@ These are not required but enable additional features:
 
 ```bash
 # Claude Code CLI — mount your Claude auth profile so the agent can call Claude.
--v ~/.claude:/home/safeagent/.claude:ro \
--e CLAUDE_CONFIG_DIR=/home/safeagent/.claude
+-v ~/.claude:/home/safeclaw/.claude:ro \
+-e CLAUDE_CONFIG_DIR=/home/safeclaw/.claude
 
 # Ngrok tunnel — expose the dashboard publicly for OAuth callbacks.
 # Just set these in your .env (no extra mounts needed):
@@ -149,22 +149,22 @@ These are not required but enable additional features:
 To build the image yourself instead of pulling from GHCR:
 
 ```bash
-git clone https://github.com/pegasusheavy/safe-agent.git
-cd safe-agent
-docker build -t safe-agent:latest .
+git clone https://github.com/pegasusheavy/SafeClaw.git
+cd SafeClaw
+docker build -t SafeClaw:latest .
 ```
 
-Then substitute `safe-agent:latest` for `ghcr.io/pegasusheavy/safe-agent:latest` in the commands above.
+Then substitute `SafeClaw:latest` for `ghcr.io/pegasusheavy/SafeClaw:latest` in the commands above.
 
 #### Matching host UID/GID
 
-The container's `safeagent` user defaults to UID/GID 1000. If your host user has a different UID, rebuild with matching values so bind-mounted files have correct ownership:
+The container's `safeclaw` user defaults to UID/GID 1000. If your host user has a different UID, rebuild with matching values so bind-mounted files have correct ownership:
 
 ```bash
-docker build --build-arg SAFE_UID=$(id -u) --build-arg SAFE_GID=$(id -g) -t safe-agent:latest .
+docker build --build-arg SAFE_UID=$(id -u) --build-arg SAFE_GID=$(id -g) -t SafeClaw:latest .
 ```
 
-Or run the GHCR image with `--user $(id -u):$(id -g)` and `--entrypoint safe-agent` (skips the chroot jail, which requires root).
+Or run the GHCR image with `--user $(id -u):$(id -g)` and `--entrypoint SafeClaw` (skips the chroot jail, which requires root).
 
 #### ARM64 / Raspberry Pi / Apple Silicon servers
 
@@ -177,8 +177,8 @@ The GHCR image is multi-arch (`linux/amd64` + `linux/arm64`). Docker will pull t
 Requires Rust (stable, 2024 edition), Node.js, and pnpm.
 
 ```bash
-git clone https://github.com/pegasusheavy/safe-agent.git
-cd safe-agent
+git clone https://github.com/pegasusheavy/SafeClaw.git
+cd SafeClaw
 
 # Frontend
 pnpm install
@@ -193,29 +193,29 @@ cargo build --release --features local
 # Run with Claude (default)
 cp .env.example .env
 # Edit .env with your values
-source .env && ./target/release/safe-agent
+source .env && ./target/release/SafeClaw
 
 # Run with OpenRouter (any model via API)
 LLM_BACKEND=openrouter OPENROUTER_API_KEY=sk-or-... \
-  source .env && ./target/release/safe-agent
+  source .env && ./target/release/SafeClaw
 
 # Run with OpenAI Codex
-LLM_BACKEND=codex source .env && ./target/release/safe-agent
+LLM_BACKEND=codex source .env && ./target/release/SafeClaw
 
 # Run with Google Gemini
-LLM_BACKEND=gemini source .env && ./target/release/safe-agent
+LLM_BACKEND=gemini source .env && ./target/release/SafeClaw
 
 # Run with Aider (any provider)
-LLM_BACKEND=aider AIDER_MODEL=gpt-4o source .env && ./target/release/safe-agent
+LLM_BACKEND=aider AIDER_MODEL=gpt-4o source .env && ./target/release/SafeClaw
 
 # Run with a local model
 LLM_BACKEND=local MODEL_PATH=/path/to/model.gguf \
-  source .env && ./target/release/safe-agent
+  source .env && ./target/release/SafeClaw
 ```
 
 ## Configuration
 
-Runtime configuration lives in a TOML file (default: `~/.config/safe-agent/config.toml`). See [`config.example.toml`](config.example.toml) for all options.
+Runtime configuration lives in a TOML file (default: `~/.config/SafeClaw/config.toml`). See [`config.example.toml`](config.example.toml) for all options.
 
 Secrets are loaded from environment variables, never config files. See [`.env.example`](.env.example) for the full list.
 

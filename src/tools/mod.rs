@@ -195,7 +195,7 @@ mod tests {
     }
 
     fn make_test_context() -> ToolContext {
-        let tmp = std::env::temp_dir().join("safe-agent-tools-test");
+        let tmp = std::env::temp_dir().join("safeclaw-tools-test");
         std::fs::create_dir_all(&tmp).unwrap();
         let sandbox = SandboxedFs::new(tmp.clone()).unwrap();
         let db = Arc::new(Mutex::new(rusqlite::Connection::open_in_memory().unwrap()));

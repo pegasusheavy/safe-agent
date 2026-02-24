@@ -1,15 +1,15 @@
 #Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Install and manage a sandboxed environment for safe-agent on Windows.
+    Install and manage a sandboxed environment for safeclaw on Windows.
 
 .DESCRIPTION
     Creates a restricted local user, NTFS-ACL-locked sandbox directory, and
-    Windows Job Object process containment for safe-agent. This is the Windows
+    Windows Job Object process containment for safeclaw. This is the Windows
     equivalent of the Linux chroot-install.sh script.
 
     Isolation mechanisms:
-      1. Restricted local user (safeagent) with no admin rights
+      1. Restricted local user (safeclaw) with no admin rights
       2. NTFS ACLs confining writes to the sandbox directory only
       3. Job Object limiting process count, memory, and enforcing kill-on-close
 
@@ -17,10 +17,10 @@
     Action to perform: Setup, Start, Stop, Shell, Status, Teardown.
 
 .PARAMETER Binary
-    Path to safe-agent.exe (default: .\target\release\safe-agent.exe).
+    Path to safeclaw.exe (default: .\target\release\safeclaw.exe).
 
 .PARAMETER SandboxRoot
-    Root directory for the sandbox (default: C:\ProgramData\safe-agent).
+    Root directory for the sandbox (default: C:\ProgramData\safeclaw).
 
 .PARAMETER MaxProcesses
     Job Object active process limit (default: 64).
@@ -30,7 +30,7 @@
 
 .EXAMPLE
     .\sandbox-install.ps1 Setup
-    .\sandbox-install.ps1 Setup -Binary C:\bin\safe-agent.exe
+    .\sandbox-install.ps1 Setup -Binary C:\bin\safeclaw.exe
     .\sandbox-install.ps1 Start
     .\sandbox-install.ps1 Stop
     .\sandbox-install.ps1 Shell
@@ -48,9 +48,9 @@ param(
     [ValidateSet("Setup", "Start", "Stop", "Shell", "Status", "Teardown")]
     [string]$Command,
 
-    [string]$Binary = ".\target\release\safe-agent.exe",
+    [string]$Binary = ".\target\release\safeclaw.exe",
 
-    [string]$SandboxRoot = "C:\ProgramData\safe-agent",
+    [string]$SandboxRoot = "C:\ProgramData\safeclaw",
 
     [int]$MaxProcesses = 64,
 
@@ -62,10 +62,10 @@ $ErrorActionPreference = "Stop"
 
 # ── Constants ────────────────────────────────────────────────────────
 
-$SA_USER       = "safeagent"
+$SA_USER       = "safeclaw"
 $SA_FULLUSER   = "$env:COMPUTERNAME\$SA_USER"
 $TASK_NAME     = "SafeAgentService"
-$PID_FILE      = Join-Path $SandboxRoot "run\safe-agent.pid"
+$PID_FILE      = Join-Path $SandboxRoot "run\safeclaw.pid"
 
 # Subdirectories inside the sandbox
 $Dirs = @{
@@ -236,8 +236,8 @@ function New-SandboxUser {
 
     New-LocalUser -Name $SA_USER `
         -Password $secPass `
-        -FullName "safe-agent service account" `
-        -Description "Restricted account for running safe-agent in a sandbox." `
+        -FullName "safeclaw service account" `
+        -Description "Restricted account for running safeclaw in a sandbox." `
         -PasswordNeverExpires `
         -UserMayNotChangePassword `
         -AccountNeverExpires | Out-Null
@@ -277,13 +277,13 @@ function New-SandboxDirs {
         }
     }
 
-    # Set NTFS ACLs: safeagent gets FullControl on the sandbox tree.
+    # Set NTFS ACLs: safeclaw gets FullControl on the sandbox tree.
     # Inherited SYSTEM and Administrators access is preserved (they own the parent).
     Write-Log "Configuring NTFS ACLs..."
 
     $acl = Get-Acl $SandboxRoot
 
-    # Remove any existing rules for safeagent
+    # Remove any existing rules for safeclaw
     $acl.Access | Where-Object {
         $_.IdentityReference.Value -like "*\$SA_USER"
     } | ForEach-Object { $acl.RemoveAccessRule($_) | Out-Null }
@@ -467,14 +467,14 @@ function Install-Binary {
     param([string]$BinaryPath)
 
     if (-not (Test-Path $BinaryPath)) {
-        Write-Err "safe-agent binary not found at: $BinaryPath"
+        Write-Err "safeclaw binary not found at: $BinaryPath"
         Write-Err "Build it first (cargo build --release) or use -Binary."
         exit 1
     }
 
-    $dest = Join-Path $Dirs.Bin "safe-agent.exe"
+    $dest = Join-Path $Dirs.Bin "safeclaw.exe"
     Copy-Item -Path $BinaryPath -Destination $dest -Force
-    Write-Log "Installed safe-agent.exe to $($Dirs.Bin)"
+    Write-Log "Installed safeclaw.exe to $($Dirs.Bin)"
 }
 
 # ── Scheduled Task ──────────────────────────────────────────────────
@@ -482,7 +482,7 @@ function Install-Binary {
 function Register-SafeAgentTask {
     Write-Log "Registering scheduled task: $TASK_NAME"
 
-    $exePath = Join-Path $Dirs.Bin "safe-agent.exe"
+    $exePath = Join-Path $Dirs.Bin "safeclaw.exe"
 
     # Unregister if it already exists
     try {
@@ -506,7 +506,7 @@ function Register-SafeAgentTask {
         -StartWhenAvailable `
         -MultipleInstances IgnoreNew
 
-    # Run as safeagent
+    # Run as safeclaw
     $cred = Get-SandboxCredential
     $principal = New-ScheduledTaskPrincipal `
         -UserId $SA_FULLUSER `
@@ -536,7 +536,7 @@ function Register-SafeAgentTask {
 function Write-EnvFile {
     $envPath = Join-Path $SandboxRoot "config\sandbox.env"
     $content = @"
-# safe-agent sandbox environment variables
+# safeclaw sandbox environment variables
 # Edit this file, then restart the agent.
 # These are loaded by the Start command and set for the agent process.
 
@@ -579,7 +579,7 @@ function Read-EnvFile {
 # ── Commands ─────────────────────────────────────────────────────────
 
 function Invoke-Setup {
-    Write-Log "Setting up safe-agent sandbox..."
+    Write-Log "Setting up safeclaw sandbox..."
     Write-Info "Sandbox root: $SandboxRoot"
 
     # Create directory tree first (needed for credential file)
@@ -610,17 +610,17 @@ function Invoke-Setup {
 }
 
 function Invoke-Start {
-    $exePath = Join-Path $Dirs.Bin "safe-agent.exe"
+    $exePath = Join-Path $Dirs.Bin "safeclaw.exe"
     if (-not (Test-Path $exePath)) {
-        Write-Err "safe-agent.exe not found in sandbox. Run Setup first."
+        Write-Err "safeclaw.exe not found in sandbox. Run Setup first."
         exit 1
     }
 
     # Check if already running
-    $existing = Get-Process -Name "safe-agent" -ErrorAction SilentlyContinue |
+    $existing = Get-Process -Name "safeclaw" -ErrorAction SilentlyContinue |
         Where-Object { $_.Path -eq $exePath }
     if ($existing) {
-        Write-Err "safe-agent is already running (PID $($existing.Id))."
+        Write-Err "safeclaw is already running (PID $($existing.Id))."
         exit 1
     }
 
@@ -646,7 +646,7 @@ function Invoke-Start {
     $memBytes = [uint64]$MaxMemoryMB * 1024 * 1024
     $hJob = [JobObject]::Create("SafeAgentSandbox", [uint32]$MaxProcesses, $memBytes)
 
-    Write-Log "Starting safe-agent as $SA_USER..."
+    Write-Log "Starting safeclaw as $SA_USER..."
 
     # Set environment variables for the child process
     foreach ($k in $envBlock.Keys) {
@@ -709,15 +709,15 @@ function Invoke-Start {
 
     # Write PID file
     $proc.Id | Set-Content -Path $PID_FILE -Force
-    Write-Log "safe-agent started (PID $($proc.Id))."
+    Write-Log "safeclaw started (PID $($proc.Id))."
     Write-Info "Logs: check the dashboard at http://localhost:3031"
     Write-Info "Stop: .\sandbox-install.ps1 Stop"
 
     # Wait for the process (blocks until it exits)
-    Write-Info "Waiting for safe-agent to exit (Ctrl+C to detach)..."
+    Write-Info "Waiting for safeclaw to exit (Ctrl+C to detach)..."
     try {
         $proc.WaitForExit()
-        Write-Log "safe-agent exited with code $($proc.ExitCode)."
+        Write-Log "safeclaw exited with code $($proc.ExitCode)."
     } catch {
         Write-Warn "Detached from process."
     } finally {
@@ -727,9 +727,9 @@ function Invoke-Start {
 }
 
 function Invoke-Stop {
-    Write-Log "Stopping safe-agent..."
+    Write-Log "Stopping safeclaw..."
 
-    $exePath = Join-Path $Dirs.Bin "safe-agent.exe"
+    $exePath = Join-Path $Dirs.Bin "safeclaw.exe"
 
     # Try PID file first
     if (Test-Path $PID_FILE) {
@@ -743,8 +743,8 @@ function Invoke-Stop {
         Remove-Item $PID_FILE -Force -ErrorAction SilentlyContinue
     }
 
-    # Kill any remaining safe-agent processes from the sandbox
-    Get-Process -Name "safe-agent" -ErrorAction SilentlyContinue |
+    # Kill any remaining safeclaw processes from the sandbox
+    Get-Process -Name "safeclaw" -ErrorAction SilentlyContinue |
         Where-Object { $_.Path -eq $exePath } |
         ForEach-Object {
             Write-Info "Killing leftover PID $($_.Id)..."
@@ -772,7 +772,7 @@ function Invoke-Shell {
 
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = "cmd.exe"
-    $psi.Arguments = "/k title safe-agent sandbox & cd /d `"$SandboxRoot`""
+    $psi.Arguments = "/k title safeclaw sandbox & cd /d `"$SandboxRoot`""
     $psi.WorkingDirectory = $SandboxRoot
     $psi.UseShellExecute = $false
     $psi.UserName = $SA_USER
@@ -809,7 +809,7 @@ function Invoke-Shell {
         $env:XDG_DATA_HOME   = $Dirs.Data
         $env:XDG_CONFIG_HOME = $Dirs.Config
         $env:HOME            = $Dirs.Home
-        cmd.exe /k "title safe-agent sandbox & cd /d `"$SandboxRoot`""
+        cmd.exe /k "title safeclaw sandbox & cd /d `"$SandboxRoot`""
     }
 
     Write-Info "Shell session ended."
@@ -817,7 +817,7 @@ function Invoke-Shell {
 
 function Invoke-Status {
     Write-Host ""
-    Write-Host "-- safe-agent sandbox status --" -ForegroundColor Cyan
+    Write-Host "-- safeclaw sandbox status --" -ForegroundColor Cyan
     Write-Host ""
 
     # Sandbox directory
@@ -842,8 +842,8 @@ function Invoke-Status {
     # Process
     Write-Host ""
     Write-Host "Process:" -ForegroundColor Cyan
-    $exePath = Join-Path $Dirs.Bin "safe-agent.exe"
-    $procs = Get-Process -Name "safe-agent" -ErrorAction SilentlyContinue |
+    $exePath = Join-Path $Dirs.Bin "safeclaw.exe"
+    $procs = Get-Process -Name "safeclaw" -ErrorAction SilentlyContinue |
         Where-Object { $_.Path -eq $exePath }
     if ($procs) {
         foreach ($p in $procs) {
@@ -851,7 +851,7 @@ function Invoke-Status {
             Write-Host "  [+] PID $($p.Id), Memory: ${mem} MB, CPU: $([math]::Round($p.TotalProcessorTime.TotalSeconds, 1))s" -ForegroundColor Green
         }
     } else {
-        Write-Host "  [x] safe-agent not running" -ForegroundColor Red
+        Write-Host "  [x] safeclaw not running" -ForegroundColor Red
     }
 
     # Scheduled task

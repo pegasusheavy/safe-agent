@@ -17,9 +17,9 @@ describe('LoginOverlay', () => {
         ));
     });
 
-    it('renders the safe-agent title', () => {
+    it('renders the SafeClaw title', () => {
         render(LoginOverlay);
-        expect(screen.getByText('safe-agent')).toBeTruthy();
+        expect(screen.getByText('SafeClaw')).toBeTruthy();
     });
 
     it('renders a password input after info loads', async () => {

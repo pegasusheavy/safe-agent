@@ -12,7 +12,7 @@ use super::{split_message, MessagingBackend};
 /// registration, key management, and message delivery; this struct only
 /// handles outgoing messages via the bridge's REST API.
 ///
-/// Incoming messages are handled by the bridge POSTing to safe-agent's
+/// Incoming messages are handled by the bridge POSTing to safeclaw's
 /// `/api/messaging/incoming` webhook with `platform: "signal"`.
 pub struct SignalBackend {
     bridge_url: String,

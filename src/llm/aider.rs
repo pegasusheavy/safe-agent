@@ -15,7 +15,7 @@ use crate::llm::prompts;
 /// from stdout, then exits.  Aider supports many LLM providers (OpenAI,
 /// Anthropic, Google, etc.) and selects the model via `--model`.
 ///
-/// Runs with `--yes` (auto-confirm), `--no-auto-commits` (safe-agent manages
+/// Runs with `--yes` (auto-confirm), `--no-auto-commits` (safeclaw manages
 /// its own persistence), and `--no-stream` for clean stdout capture.
 ///
 /// The caller's existing provider API keys (OPENAI_API_KEY,
