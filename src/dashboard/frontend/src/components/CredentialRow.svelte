@@ -77,13 +77,13 @@
         bind:value={inputValue}
         onkeyup={handleKey}
         placeholder={placeholder()}
-        class="flex-1 px-2 py-1 border border-border rounded-md bg-background text-text text-xs font-mono outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-900 placeholder:text-text-subtle"
+        class="form__input flex-1 text-xs font-mono"
     />
     <div class="flex gap-1 shrink-0">
         <button
             onclick={save}
             title={t('common.save')}
-            class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface text-success-500 hover:bg-success-500/10 hover:border-success-500 transition-colors"
+            class="btn btn--success btn--sm"
         >
             <i class="fa-solid fa-floppy-disk"></i>
         </button>
@@ -91,7 +91,7 @@
             <button
                 onclick={remove}
                 title={t('common.delete')}
-                class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface text-error-500 hover:bg-error-500/10 hover:border-error-500 transition-colors"
+                class="btn btn--danger btn--sm"
             >
                 <i class="fa-solid fa-trash-can"></i>
             </button>

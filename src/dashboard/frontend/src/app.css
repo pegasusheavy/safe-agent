@@ -99,7 +99,23 @@
     --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
 }
 
-/* Custom scrollbar */
+/* ================================================================
+   Animations
+   ================================================================ */
+
+@keyframes subtle-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.animate-subtle-pulse {
+    animation: subtle-pulse 2s ease-in-out infinite;
+}
+
+/* ================================================================
+   Custom Scrollbar Utility
+   ================================================================ */
+
 .custom-scroll::-webkit-scrollbar {
     width: 6px;
 }
@@ -113,126 +129,240 @@
     border-radius: 3px;
 }
 
-/* Badge states */
-.badge-running {
-    background: rgba(0, 150, 136, 0.15);
-    color: var(--color-success-500);
-}
+/* ================================================================
+   Tab Scroll Container
+   ================================================================ */
 
-.badge-paused {
-    background: rgba(255, 193, 7, 0.15);
-    color: var(--color-warning-500);
-}
-
-/* Main tabs */
-.main-tab {
-    border: none;
-    border-radius: 0;
-    border-bottom: 2px solid transparent;
-    padding: 10px 20px;
-    font-size: 14px;
-    color: var(--color-text-muted);
-    background: transparent;
-    font-weight: 500;
-    cursor: pointer;
-    transition: color 0.15s;
-    white-space: nowrap;
-}
-
-.main-tab.active {
-    color: var(--color-primary-500);
-    border-bottom-color: var(--color-primary-500);
-}
-
-.main-tab:hover {
-    background: transparent;
-    color: var(--color-text);
-}
-
-/* Memory sub-tabs */
-.mem-tab {
-    border: none;
-    border-radius: 0;
-    border-bottom: 2px solid transparent;
-    padding: 8px 12px;
-    font-size: 13px;
-    color: var(--color-text-muted);
-    background: transparent;
-    cursor: pointer;
-    transition: color 0.15s;
-}
-
-.mem-tab.active {
-    color: var(--color-primary-500);
-    border-bottom-color: var(--color-primary-500);
-}
-
-.mem-tab:hover {
-    background: transparent;
-    color: var(--color-text);
-}
-
-/* Pulse animation for active tool indicator */
-@keyframes subtle-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
-}
-
-.animate-subtle-pulse {
-    animation: subtle-pulse 2s ease-in-out infinite;
-}
-
-/* Mobile responsive tab bar */
 .tab-scroll {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
 }
+
 .tab-scroll::-webkit-scrollbar {
     display: none;
 }
 
-/* Mobile hamburger menu overlay */
+/* ================================================================
+   Badge Component
+   ================================================================ */
+
+.badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full font-medium;
+    font-size: 11px;
+}
+
+.badge--running {
+    background: rgba(0, 150, 136, 0.15);
+    color: var(--color-success-500);
+}
+
+.badge--paused {
+    background: rgba(255, 193, 7, 0.15);
+    color: var(--color-warning-500);
+}
+
+.badge--success { @apply bg-success-500/15 text-success-500; }
+.badge--error   { @apply bg-error-500/10 text-error-400; }
+.badge--warning { @apply bg-warning-500/15 text-warning-500; }
+.badge--info    { @apply bg-info-500/15 text-info-400; }
+.badge--primary { @apply bg-primary-950 text-primary-400; }
+
+/* ================================================================
+   Button Component
+   ================================================================ */
+
+.btn {
+    @apply inline-flex items-center justify-center border border-border rounded-md font-medium transition-colors cursor-pointer;
+}
+
+.btn:disabled {
+    @apply opacity-50 cursor-not-allowed;
+}
+
+/* Sizes */
+.btn--sm   { @apply px-3 py-1.5 text-xs; }
+.btn--md   { @apply px-4 py-2 text-sm; }
+.btn--icon { @apply p-2 text-sm; }
+
+/* Variants */
+.btn--primary {
+    @apply bg-primary-600 text-white border-transparent;
+}
+
+.btn--primary:hover:not(:disabled) {
+    @apply bg-primary-500;
+}
+
+.btn--secondary {
+    @apply bg-surface text-text-muted;
+}
+
+.btn--secondary:hover {
+    @apply bg-surface-elevated text-text;
+}
+
+.btn--ghost {
+    @apply bg-transparent border-transparent text-text-muted;
+}
+
+.btn--ghost:hover {
+    @apply text-text;
+}
+
+.btn--success {
+    @apply text-success-500;
+}
+
+.btn--success:hover {
+    @apply bg-success-500/10 border-success-500;
+}
+
+.btn--danger {
+    @apply text-error-500;
+}
+
+.btn--danger:hover {
+    @apply bg-error-500/10 border-error-500;
+}
+
+/* ================================================================
+   Card / Panel Component
+   ================================================================ */
+
+.card {
+    @apply bg-surface border border-border rounded-lg shadow-sm overflow-hidden;
+}
+
+.card__header {
+    @apply flex items-center justify-between px-4 py-3 border-b border-border;
+}
+
+.card__header-title {
+    @apply text-xs font-semibold uppercase tracking-wider text-text-muted;
+}
+
+.card__body {
+    @apply p-4;
+}
+
+/* ================================================================
+   Form Controls
+   ================================================================ */
+
+.form__label {
+    @apply block text-xs font-medium text-text-muted uppercase tracking-wide mb-1;
+}
+
+.form__input {
+    @apply w-full px-3 py-2 rounded-md border border-border bg-background text-text text-sm outline-none;
+}
+
+.form__input:focus {
+    @apply border-primary-500 ring-1 ring-primary-900;
+}
+
+.form__input::placeholder {
+    @apply text-text-subtle;
+}
+
+.form__textarea {
+    @apply w-full px-3 py-2 rounded-md border border-border bg-background text-text text-sm outline-none resize-none;
+}
+
+.form__textarea:focus {
+    @apply border-primary-500 ring-1 ring-primary-900;
+}
+
+.form__textarea::placeholder {
+    @apply text-text-subtle;
+}
+
+.form__select {
+    @apply w-full px-3 py-2 rounded-md border border-border bg-background text-text text-sm outline-none;
+}
+
+.form__select:focus {
+    @apply border-primary-500 ring-1 ring-primary-900;
+}
+
+/* ================================================================
+   Nav Tab Component (replaces .main-tab and .mem-tab)
+   ================================================================ */
+
+.nav-tab {
+    border: none;
+    border-radius: 0;
+    border-bottom: 2px solid transparent;
+    background: transparent;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color 0.15s;
+    white-space: nowrap;
+    @apply text-text-muted;
+}
+
+.nav-tab:hover {
+    background: transparent;
+    @apply text-text;
+}
+
+.nav-tab--main { @apply py-2.5 px-5 text-sm; }
+
+.nav-tab--sub {
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+.nav-tab--active {
+    @apply text-primary-500;
+    border-bottom-color: var(--color-primary-500);
+}
+
+/* ================================================================
+   Mobile Navigation
+   ================================================================ */
+
 .mobile-menu-overlay {
-    position: fixed;
-    inset: 0;
+    @apply fixed inset-0 z-40;
     background: rgba(0, 0, 0, 0.5);
-    z-index: 40;
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s;
 }
-.mobile-menu-overlay.open {
+
+.mobile-menu-overlay--open {
     opacity: 1;
     pointer-events: auto;
 }
 
 .mobile-menu {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
+    @apply fixed top-0 left-0 bottom-0 bg-surface border-r border-border z-50 overflow-y-auto;
     width: 280px;
     max-width: 85vw;
-    background: var(--color-surface);
-    border-right: 1px solid var(--color-border);
-    z-index: 50;
     transform: translateX(-100%);
     transition: transform 0.25s ease;
-    overflow-y: auto;
 }
-.mobile-menu.open {
+
+.mobile-menu--open {
     transform: translateX(0);
 }
 
-/* Mobile tab items in sidebar */
-.mobile-nav-item {
+.mobile-menu__header {
+    @apply flex items-center justify-between px-4 py-3 border-b border-border;
+}
+
+.mobile-menu__nav {
+    @apply py-2;
+}
+
+.mobile-menu__nav-item {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     padding: 0.75rem 1.25rem;
     font-size: 0.9375rem;
-    color: var(--color-text-muted);
+    @apply text-text-muted;
     transition: color 0.15s, background 0.15s;
     cursor: pointer;
     border: none;
@@ -240,33 +370,92 @@
     width: 100%;
     text-align: left;
 }
-.mobile-nav-item:hover {
-    color: var(--color-text);
-    background: var(--color-surface-elevated);
+
+.mobile-menu__nav-item:hover {
+    @apply text-text bg-surface-elevated;
 }
-.mobile-nav-item.active {
-    color: var(--color-primary-500);
-    background: var(--color-surface-muted);
+
+.mobile-menu__nav-item--active {
+    @apply text-primary-500 bg-surface-muted;
     border-left: 3px solid var(--color-primary-500);
 }
 
-/* Knowledge graph canvas */
-.kg-canvas {
-    width: 100%;
-    height: 500px;
-    border-radius: var(--radius-lg);
-    cursor: grab;
+/* ================================================================
+   Alert / Message Component
+   ================================================================ */
+
+.alert {
+    @apply rounded-md p-3 text-sm;
 }
+
+.alert--success { @apply bg-success-500/10 border border-success-500/30 text-success-500; }
+.alert--error   { @apply bg-error-500/10 border border-error-500/30 text-error-500; }
+.alert--warning { @apply bg-warning-500/10 border border-warning-500/30 text-warning-500; }
+.alert--info    { @apply bg-info-500/10 border border-info-500/30 text-info-500; }
+
+/* ================================================================
+   Chat Bubble Component
+   ================================================================ */
+
+.chat-bubble {
+    @apply rounded-lg px-3 py-2 text-sm;
+}
+
+.chat-bubble--user {
+    @apply bg-primary-600 text-white rounded-br-sm;
+}
+
+.chat-bubble--assistant {
+    @apply bg-surface-elevated border border-border rounded-bl-sm;
+}
+
+.chat-bubble--system {
+    @apply text-text-subtle italic bg-surface-muted rounded-full px-3 py-1;
+    font-size: 11px;
+}
+
+/* ================================================================
+   Knowledge Graph Canvas
+   ================================================================ */
+
+.kg-canvas {
+    @apply w-full rounded-lg cursor-grab;
+    height: 500px;
+}
+
 .kg-canvas:active {
     cursor: grabbing;
 }
 
-/* Token health indicators */
-.token-health-good { color: var(--color-success-500); }
-.token-health-warning { color: var(--color-warning-500); }
-.token-health-expired { color: var(--color-error-500); }
+/* ================================================================
+   Token Health Indicators
+   ================================================================ */
 
-/* PWA install banner */
-.pwa-install-btn {
+.token-health--good    { @apply text-success-500; }
+.token-health--warning { @apply text-warning-500; }
+.token-health--expired { @apply text-error-500; }
+
+/* ================================================================
+   PWA Install Banner
+   ================================================================ */
+
+.pwa-banner {
+    @apply flex items-center justify-between gap-3 px-4 py-2.5 bg-primary-900/30 border-b border-primary-800/40;
+}
+
+.pwa-banner__message {
+    @apply flex items-center gap-2 text-sm text-primary-300;
+}
+
+.pwa-banner__actions {
+    @apply flex gap-2;
+}
+
+.pwa-banner__install-btn {
+    @apply px-3 py-1 text-xs font-medium rounded bg-primary-600 text-white hover:bg-primary-500 transition-colors;
     animation: subtle-pulse 3s ease-in-out 2;
+}
+
+.pwa-banner__dismiss-btn {
+    @apply px-2 py-1 text-xs text-text-muted hover:text-text transition-colors;
 }

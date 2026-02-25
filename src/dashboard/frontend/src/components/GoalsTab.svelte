@@ -129,9 +129,9 @@
     });
 </script>
 
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden">
-    <div class="flex justify-between items-center border-b border-border">
-        <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
+<section class="card">
+    <div class="card__header">
+        <h2 class="card__header-title">
             <i class="fa-solid fa-bullseye mr-1.5"></i> {t('goals.title')}
         </h2>
         <div class="flex items-center gap-2 pr-3">
@@ -152,7 +152,7 @@
             </span>
             <button
                 onclick={load}
-                class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface hover:bg-surface-elevated transition-colors"
+                class="btn btn--secondary btn--sm"
             >
                 <i class="fa-solid fa-arrows-rotate mr-1"></i> {t('common.refresh')}
             </button>
@@ -225,20 +225,20 @@
                                     </button>
                                     <button
                                         onclick={() => updateStatus(goal.id, 'cancelled')}
-                                        class="px-3 py-1.5 text-xs border border-border rounded-md bg-surface text-error-400 hover:bg-error-500/10 hover:border-error-500 transition-colors"
+                                        class="btn btn--danger btn--sm"
                                     >
                                         <i class="fa-solid fa-ban mr-1"></i>{t('common.cancel')}
                                     </button>
                                 {:else if goal.status === 'paused'}
                                     <button
                                         onclick={() => updateStatus(goal.id, 'active')}
-                                        class="px-3 py-1.5 text-xs border border-border rounded-md bg-surface text-success-500 hover:bg-success-500/10 hover:border-success-500 transition-colors"
+                                        class="btn btn--success btn--sm"
                                     >
                                         <i class="fa-solid fa-play mr-1"></i>{t('goals.resume')}
                                     </button>
                                     <button
                                         onclick={() => updateStatus(goal.id, 'cancelled')}
-                                        class="px-3 py-1.5 text-xs border border-border rounded-md bg-surface text-error-400 hover:bg-error-500/10 hover:border-error-500 transition-colors"
+                                        class="btn btn--danger btn--sm"
                                     >
                                         <i class="fa-solid fa-ban mr-1"></i>{t('common.cancel')}
                                     </button>

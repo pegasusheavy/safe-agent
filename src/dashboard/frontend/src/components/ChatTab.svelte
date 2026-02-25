@@ -101,7 +101,7 @@
                 {#if msg.role === 'user'}
                     <div class="flex justify-end">
                         <div class="max-w-[70%] min-w-[120px]">
-                            <div class="bg-primary-600 text-white rounded-lg rounded-br-sm px-3 py-2 text-sm whitespace-pre-wrap break-words">
+                            <div class="chat-bubble chat-bubble--user whitespace-pre-wrap break-words">
                                 {msg.content}
                             </div>
                             <div class="text-[10px] text-text-subtle mt-0.5 text-right">
@@ -112,7 +112,7 @@
                 {:else if msg.role === 'assistant'}
                     <div class="flex justify-start">
                         <div class="max-w-[70%] min-w-[120px]">
-                            <div class="bg-surface-elevated border border-border rounded-lg rounded-bl-sm px-3 py-2 text-sm whitespace-pre-wrap break-words">
+                            <div class="chat-bubble chat-bubble--assistant whitespace-pre-wrap break-words">
                                 {msg.content}
                             </div>
                             <div class="text-[10px] text-text-subtle mt-0.5">
@@ -123,7 +123,7 @@
                 {:else}
                     <!-- system messages -->
                     <div class="flex justify-center">
-                        <div class="text-[11px] text-text-subtle italic px-3 py-1 bg-surface-muted rounded-full max-w-[80%] truncate">
+                        <div class="chat-bubble chat-bubble--system max-w-[80%] truncate">
                             {msg.content}
                         </div>
                     </div>
@@ -133,7 +133,7 @@
             {#if sending}
                 <div class="flex justify-start">
                     <div class="min-w-[120px] max-w-[70%]">
-                        <div class="bg-surface-elevated border border-border rounded-lg rounded-bl-sm px-3 py-2 text-sm text-text-muted">
+                        <div class="chat-bubble chat-bubble--assistant text-text-muted">
                             {#if liveFeed.activeTool}
                                 <i class="fa-solid fa-gear fa-spin mr-1.5 text-primary-500"></i>
                                 <span class="text-primary-400 font-mono">{liveFeed.activeTool}</span>
@@ -166,16 +166,12 @@
                 placeholder="Type a message..."
                 disabled={sending}
                 rows="1"
-                class="flex-1 px-3 py-2 rounded-md border border-border bg-background text-text text-sm outline-none
-                       focus:border-primary-500 focus:ring-1 focus:ring-primary-500/50 font-sans
-                       placeholder:text-text-subtle disabled:opacity-50 disabled:cursor-not-allowed resize-none"
+                class="form__textarea flex-1 font-sans disabled:opacity-50 disabled:cursor-not-allowed"
             ></textarea>
             <button
                 onclick={send}
                 disabled={sending || !input.trim()}
-                class="px-4 py-2 rounded-md bg-primary-600 text-white text-sm font-medium
-                       hover:bg-primary-500 transition-colors
-                       disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                class="btn btn--primary btn--md shrink-0"
             >
                 {#if sending}
                     <i class="fa-solid fa-circle-notch fa-spin"></i>

@@ -253,7 +253,7 @@
 {:else if status}
     <div class="space-y-4">
         {#if message}
-            <div class="px-3 py-2 rounded-md text-sm {messageType === 'error' ? 'bg-red-900/20 border border-red-800/40 text-red-400' : 'bg-green-900/20 border border-green-800/40 text-green-400'}">
+            <div class="alert {messageType === 'error' ? 'alert--error' : 'alert--success'}">
                 <i class="fa-solid {messageType === 'error' ? 'fa-circle-exclamation' : 'fa-check-circle'} mr-1"></i>
                 {message}
             </div>
@@ -270,9 +270,9 @@
                     </div>
                 </div>
                 {#if status.totp_enabled}
-                    <span class="text-xs px-2 py-0.5 rounded-full border bg-green-900/40 text-green-400 border-green-800/50">{t('twofa.enabled_badge')}</span>
+                    <span class="badge badge--success">{t('twofa.enabled_badge')}</span>
                 {:else}
-                    <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">{t('twofa.disabled_badge')}</span>
+                    <span class="badge">{t('twofa.disabled_badge')}</span>
                 {/if}
             </div>
             <div class="p-4">
@@ -283,7 +283,7 @@
                     </p>
                     <div class="flex gap-2 items-end">
                         <div>
-                            <label class="text-xs text-text-muted block mb-1">{t('twofa.totp_code')}</label>
+                            <label class="form__label">{t('twofa.totp_code')}</label>
                             <input
                                 type="text"
                                 bind:value={disableCode}
@@ -310,7 +310,7 @@
                     </p>
                     <button
                         onclick={startTotpSetup}
-                        class="px-4 py-2 text-sm rounded bg-primary-600 text-white hover:bg-primary-500 transition-colors"
+                        class="btn btn--primary btn--md"
                     >
                         <i class="fa-solid fa-shield-halved mr-1"></i> {t('twofa.setup_authenticator')}
                     </button>
@@ -376,7 +376,7 @@
                                 </button>
                                 <button
                                     onclick={() => { setupStep = 'idle'; totpSecret = ''; otpauthUri = ''; }}
-                                    class="px-3 py-1.5 text-sm rounded border border-border text-text-muted hover:bg-surface-elevated transition-colors"
+                                    class="btn btn--secondary btn--sm"
                                 >
                                     {t('common.cancel')}
                                 </button>
@@ -399,11 +399,11 @@
                         </div>
                     </div>
                     {#if status.passkey_count > 0}
-                        <span class="text-xs px-2 py-0.5 rounded-full border bg-green-900/40 text-green-400 border-green-800/50">
+                        <span class="badge badge--success">
                             {t('twofa.registered', { count: status.passkey_count })}
                         </span>
                     {:else}
-                        <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">{t('twofa.none_badge')}</span>
+                        <span class="badge">{t('twofa.none_badge')}</span>
                     {/if}
                 </div>
                 <div class="p-4">
@@ -434,18 +434,18 @@
                     <!-- Register new passkey -->
                     <div class="flex items-end gap-2">
                         <div class="flex-1">
-                            <label class="text-xs text-text-muted block mb-1">{t('twofa.passkey_name')}</label>
+                            <label class="form__label">{t('twofa.passkey_name')}</label>
                             <input
                                 type="text"
                                 bind:value={passkeyName}
                                 placeholder={t('twofa.passkey_placeholder')}
-                                class="w-full bg-bg border border-border rounded px-3 py-1.5 text-sm"
+                                class="form__input"
                             />
                         </div>
                         <button
                             onclick={registerPasskey}
                             disabled={registeringPasskey}
-                            class="px-4 py-1.5 text-sm rounded bg-primary-600 text-white hover:bg-primary-500 transition-colors disabled:opacity-50 whitespace-nowrap"
+                            class="btn btn--primary btn--md disabled:opacity-50 whitespace-nowrap"
                         >
                             {#if registeringPasskey}
                                 <i class="fa-solid fa-spinner fa-spin mr-1"></i> {t('twofa.registering')}

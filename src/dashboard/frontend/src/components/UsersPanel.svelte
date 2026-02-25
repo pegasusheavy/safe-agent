@@ -140,7 +140,7 @@
             <i class="fa-solid fa-users mr-1"></i> {t('users.title')}
         </h3>
         {#if isAdmin}
-            <button class="btn-primary text-sm" onclick={() => showCreateForm = !showCreateForm}>
+            <button class="btn btn--primary btn--sm" onclick={() => showCreateForm = !showCreateForm}>
                 <i class="fa-solid fa-plus mr-1"></i> {t('users.add_user')}
             </button>
         {/if}
@@ -156,43 +156,43 @@
             <h4 class="text-sm font-medium">{t('users.create_user')}</h4>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                    <label class="text-xs text-muted block mb-1">{t('users.username')} *</label>
-                    <input type="text" bind:value={newUsername} placeholder="jdoe" class="w-full bg-bg border border-border rounded px-3 py-1.5 text-sm" />
+                    <label class="form__label">{t('users.username')} *</label>
+                    <input type="text" bind:value={newUsername} placeholder="jdoe" class="form__input" />
                 </div>
                 <div>
-                    <label class="text-xs text-muted block mb-1">{t('users.display_name')}</label>
-                    <input type="text" bind:value={newDisplayName} placeholder="Jane Doe" class="w-full bg-bg border border-border rounded px-3 py-1.5 text-sm" />
+                    <label class="form__label">{t('users.display_name')}</label>
+                    <input type="text" bind:value={newDisplayName} placeholder="Jane Doe" class="form__input" />
                 </div>
                 <div>
-                    <label class="text-xs text-muted block mb-1">{t('users.role')}</label>
-                    <select bind:value={newRole} class="w-full bg-bg border border-border rounded px-3 py-1.5 text-sm">
+                    <label class="form__label">{t('users.role')}</label>
+                    <select bind:value={newRole} class="form__select">
                         <option value="admin">Admin</option>
                         <option value="user">User</option>
                         <option value="viewer">Viewer</option>
                     </select>
                 </div>
                 <div>
-                    <label class="text-xs text-muted block mb-1">{t('users.password')}</label>
-                    <input type="password" bind:value={newPassword} class="w-full bg-bg border border-border rounded px-3 py-1.5 text-sm" />
+                    <label class="form__label">{t('users.password')}</label>
+                    <input type="password" bind:value={newPassword} class="form__input" />
                 </div>
                 <div>
-                    <label class="text-xs text-muted block mb-1">{t('users.email')}</label>
-                    <input type="email" bind:value={newEmail} placeholder="jane@example.com" class="w-full bg-bg border border-border rounded px-3 py-1.5 text-sm" />
+                    <label class="form__label">{t('users.email')}</label>
+                    <input type="email" bind:value={newEmail} placeholder="jane@example.com" class="form__input" />
                 </div>
                 <div>
-                    <label class="text-xs text-muted block mb-1">{t('users.telegram_id')}</label>
-                    <input type="text" bind:value={newTelegramId} placeholder="123456789" class="w-full bg-bg border border-border rounded px-3 py-1.5 text-sm" />
+                    <label class="form__label">{t('users.telegram_id')}</label>
+                    <input type="text" bind:value={newTelegramId} placeholder="123456789" class="form__input" />
                 </div>
                 <div>
-                    <label class="text-xs text-muted block mb-1">{t('users.whatsapp_id')}</label>
-                    <input type="text" bind:value={newWhatsappId} placeholder="+15551234567" class="w-full bg-bg border border-border rounded px-3 py-1.5 text-sm" />
+                    <label class="form__label">{t('users.whatsapp_id')}</label>
+                    <input type="text" bind:value={newWhatsappId} placeholder="+15551234567" class="form__input" />
                 </div>
             </div>
             <div class="flex gap-2">
-                <button class="btn-primary text-sm" onclick={createUser} disabled={!newUsername.trim()}>
+                <button class="btn btn--primary btn--sm" onclick={createUser} disabled={!newUsername.trim()}>
                     <i class="fa-solid fa-check mr-1"></i> {t('users.create')}
                 </button>
-                <button class="btn-secondary text-sm" onclick={() => showCreateForm = false}>{t('common.cancel')}</button>
+                <button class="btn btn--secondary btn--sm" onclick={() => showCreateForm = false}>{t('common.cancel')}</button>
             </div>
         </div>
     {/if}
@@ -216,7 +216,7 @@
                                 <span class="text-xs text-muted font-mono">@{user.username}</span>
                                 <span class="px-1.5 py-0.5 rounded text-xs font-semibold {roleColor(user.role)}">{user.role}</span>
                                 {#if !user.enabled}
-                                    <span class="px-1.5 py-0.5 rounded text-xs bg-red-500/20 text-red-400">{t('users.disabled')}</span>
+                                    <span class="badge badge--error">{t('users.disabled')}</span>
                                 {/if}
                             </div>
                             <div class="flex gap-3 text-xs text-muted mt-0.5">
@@ -239,7 +239,7 @@
                             <select
                                 value={user.role}
                                 onchange={(e) => changeRole(user, (e.target as HTMLSelectElement).value)}
-                                class="bg-bg border border-border rounded px-2 py-1 text-xs"
+                                class="form__select w-auto px-2 py-1 text-xs"
                             >
                                 <option value="admin">Admin</option>
                                 <option value="user">User</option>

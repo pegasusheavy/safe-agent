@@ -199,25 +199,25 @@
         </div>
         <div class="flex items-center gap-2">
             {#if skill.skill_type === 'daemon'}
-                <span class="text-[11px] px-2 py-0.5 rounded-full font-medium bg-primary-950 text-primary-400">
+                <span class="badge badge--primary">
                     <i class="fa-solid fa-server mr-1"></i>daemon
                 </span>
             {:else}
-                <span class="text-[11px] px-2 py-0.5 rounded-full font-medium bg-warning-500/15 text-warning-500">
+                <span class="badge badge--warning">
                     <i class="fa-solid fa-bolt mr-1"></i>oneshot
                 </span>
             {/if}
 
             {#if !skill.enabled}
-                <span class="text-[11px] px-2 py-0.5 rounded-full font-medium bg-text-subtle/10 text-text-subtle">
+                <span class="badge">
                     <i class="fa-solid fa-ban mr-1"></i>disabled
                 </span>
             {:else if skill.running}
-                <span class="text-[11px] px-2 py-0.5 rounded-full font-medium bg-success-500/15 text-success-500">
+                <span class="badge badge--success">
                     <i class="fa-solid fa-circle-check mr-1"></i>running
                 </span>
             {:else}
-                <span class="text-[11px] px-2 py-0.5 rounded-full font-medium bg-error-500/12 text-error-400">
+                <span class="badge badge--error">
                     <i class="fa-solid fa-circle-stop mr-1"></i>stopped
                 </span>
             {/if}
@@ -249,7 +249,7 @@
             <div class="flex items-center gap-2 px-4 py-2 border-b border-border">
                 <button
                     onclick={toggleEnabled}
-                    class="px-3 py-1.5 text-xs border border-border rounded-md bg-surface transition-colors {skill.enabled ? 'hover:bg-error-500/10 hover:border-error-500 text-error-400' : 'hover:bg-success-500/10 hover:border-success-500 text-success-500'}"
+                    class="btn btn--sm {skill.enabled ? 'btn--danger' : 'btn--success'}"
                 >
                     {#if skill.enabled}
                         <i class="fa-solid fa-power-off mr-1"></i>{t('skills.disable')}
@@ -259,13 +259,13 @@
                 </button>
                 <button
                     onclick={restart}
-                    class="px-3 py-1.5 text-xs border border-border rounded-md bg-surface hover:bg-surface-elevated transition-colors"
+                    class="btn btn--secondary btn--sm"
                 >
                     <i class="fa-solid fa-rotate-right mr-1"></i>{t('skills.restart')}
                 </button>
                 <button
                     onclick={loadDetail}
-                    class="px-3 py-1.5 text-xs border border-border rounded-md bg-surface hover:bg-surface-elevated transition-colors"
+                    class="btn btn--secondary btn--sm"
                 >
                     <i class="fa-solid fa-arrows-rotate mr-1"></i>Refresh
                 </button>
@@ -273,7 +273,7 @@
                 <button
                     onclick={deleteSkill}
                     disabled={deleting}
-                    class="px-3 py-1.5 text-xs border border-error-500/40 rounded-md bg-surface text-error-400 hover:bg-error-500/10 hover:border-error-500 transition-colors disabled:opacity-50"
+                    class="btn btn--danger btn--sm disabled:opacity-50"
                 >
                     {#if deleting}
                         <i class="fa-solid fa-spinner fa-spin mr-1"></i>{t('skills.deleting')}
@@ -348,7 +348,7 @@
                                         <button
                                             onclick={() => deleteEnvVar(key)}
                                             title={t('common.delete')}
-                                            class="px-2 py-0.5 text-xs border border-border rounded bg-surface text-error-500 hover:bg-error-500/10 hover:border-error-500 transition-colors shrink-0"
+                                            class="btn btn--danger btn--sm shrink-0"
                                         >
                                             <i class="fa-solid fa-trash-can"></i>
                                         </button>
@@ -371,7 +371,7 @@
                                     />
                                     <button
                                         onclick={addEnvVar}
-                                        class="px-2.5 py-1 text-xs border border-border rounded bg-surface text-success-500 hover:bg-success-500/10 hover:border-success-500 transition-colors shrink-0"
+                                        class="btn btn--success btn--sm shrink-0"
                                     >
                                         <i class="fa-solid fa-plus mr-1"></i>{t('skills.add')}
                                     </button>
@@ -399,7 +399,7 @@
                                 </span>
                                 <button
                                     onclick={loadLog}
-                                    class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface hover:bg-surface-elevated transition-colors"
+                                    class="btn btn--secondary btn--sm"
                                 >
                                     <i class="fa-solid fa-arrows-rotate mr-1"></i>{t('common.refresh')}
                                 </button>
@@ -481,7 +481,7 @@
                                 <button
                                     onclick={saveManifest}
                                     disabled={manifestSaving}
-                                    class="px-3 py-1.5 text-xs border border-border rounded-md bg-surface text-success-500 hover:bg-success-500/10 hover:border-success-500 transition-colors disabled:opacity-50"
+                                    class="btn btn--success btn--sm disabled:opacity-50"
                                 >
                                     {#if manifestSaving}
                                         <i class="fa-solid fa-spinner fa-spin mr-1"></i>{t('common.saving')}
@@ -491,19 +491,19 @@
                                 </button>
                             </div>
                             {#if manifestError}
-                                <div class="text-xs text-error-400 mb-2 p-2 bg-error-500/10 border border-error-500/30 rounded">
+                                <div class="alert alert--error text-xs mb-2">
                                     <i class="fa-solid fa-triangle-exclamation mr-1"></i>{manifestError}
                                 </div>
                             {/if}
                             {#if manifestSuccess}
-                                <div class="text-xs text-success-500 mb-2 p-2 bg-success-500/10 border border-success-500/30 rounded">
+                                <div class="alert alert--success text-xs mb-2">
                                     <i class="fa-solid fa-check mr-1"></i>{manifestSuccess}
                                 </div>
                             {/if}
                             <textarea
                                 bind:value={manifestEdit}
                                 spellcheck="false"
-                                class="w-full h-[320px] bg-background border border-border rounded-md p-3 text-[12px] font-mono text-text outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-900 resize-y leading-relaxed"
+                                class="form__textarea h-[320px] text-[12px] font-mono focus:ring-1 focus:ring-primary-900 resize-y leading-relaxed"
                             ></textarea>
                         </div>
                     {/if}

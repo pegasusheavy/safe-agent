@@ -126,16 +126,16 @@
     }
 </script>
 
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden mt-4">
-    <div class="flex justify-between items-center border-b border-border">
-        <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
+<section class="card mt-4">
+    <div class="card__header">
+        <h2 class="card__header-title">
             <i class="fa-solid fa-store mr-1.5"></i> {t('marketplace.title')}
         </h2>
         <a
             href="https://github.com/topics/safeclaw-skill"
             target="_blank"
             rel="noopener noreferrer"
-            class="text-xs text-primary-400 hover:text-primary-300 pr-3 transition-colors"
+            class="text-xs text-primary-400 hover:text-primary-300 transition-colors"
         >
             <i class="fa-brands fa-github mr-1"></i> {t('marketplace.browse_github')}
         </a>
@@ -146,7 +146,7 @@
             type="text"
             bind:value={searchQuery}
             placeholder={t('marketplace.search')}
-            class="flex-1 px-2.5 py-1.5 border border-border rounded-md bg-background text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-900"
+            class="form__input flex-1"
         />
         <div class="flex gap-1 flex-wrap">
             {#each categories as cat}
@@ -189,11 +189,11 @@
                     </div>
                     <div class="flex flex-col items-end gap-1 shrink-0">
                         {#if installStatus[skill.name] === 'ok'}
-                            <span class="text-xs text-success-500 font-medium">
+                            <span class="badge badge--success">
                                 <i class="fa-solid fa-check mr-1"></i>{t('marketplace.installed')}
                             </span>
                         {:else if installStatus[skill.name] === 'error'}
-                            <span class="text-xs text-error-500">{t('marketplace.failed')}</span>
+                            <span class="badge badge--error">{t('marketplace.failed')}</span>
                         {:else}
                             <button
                                 onclick={() => installSkill(skill)}

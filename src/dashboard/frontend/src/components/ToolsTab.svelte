@@ -22,8 +22,8 @@
     });
 </script>
 
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden">
-    <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted border-b border-border">
+<section class="card">
+    <h2 class="card__header-title px-4 py-3 border-b border-border">
         <i class="fa-solid fa-screwdriver-wrench mr-1.5"></i> {t('tools.title')}
     </h2>
     <div class="p-3 max-h-[600px] overflow-y-auto custom-scroll">

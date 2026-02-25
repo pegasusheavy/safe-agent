@@ -109,7 +109,7 @@
     const isActive = $derived(liveFeed.isThinking || liveFeed.activeTool !== null);
 </script>
 
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden">
+<section class="card">
     <div class="flex justify-between items-center border-b border-border">
         <button
             class="flex items-center gap-2 text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted hover:text-text transition-colors"

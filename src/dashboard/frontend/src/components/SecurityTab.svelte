@@ -204,7 +204,8 @@
             { id: '2fa' as const, label: t('security.twofa'), icon: 'fa-lock' },
         ] as section}
             <button
-                class="px-3 py-1.5 text-sm rounded-t transition-colors"
+                class="nav-tab nav-tab--sub px-3 py-1.5 text-sm rounded-t"
+                class:nav-tab--active={activeSection === section.id}
                 class:bg-card={activeSection === section.id}
                 class:text-heading={activeSection === section.id}
                 class:text-muted={activeSection !== section.id}
@@ -301,7 +302,7 @@
     <!-- Audit Trail Section -->
     {:else if activeSection === 'audit'}
         <div class="flex gap-2 mb-3">
-            <select class="bg-bg border border-border rounded px-2 py-1 text-sm" bind:value={auditFilter.event_type} onchange={() => loadAudit()}>
+            <select class="form__select" bind:value={auditFilter.event_type} onchange={() => loadAudit()}>
                 <option value="">{t('security.all_types')}</option>
                 <option value="tool_call">Tool Calls</option>
                 <option value="approval">Approvals</option>
@@ -313,11 +314,11 @@
             <input
                 type="text"
                 placeholder={t('security.filter')}
-                class="bg-bg border border-border rounded px-2 py-1 text-sm flex-1"
+                class="form__input flex-1"
                 bind:value={auditFilter.tool}
                 onkeyup={(e) => { if ((e as KeyboardEvent).key === 'Enter') loadAudit(); }}
             />
-            <button class="btn btn-sm" onclick={() => loadAudit()}>
+            <button class="btn btn--secondary btn--sm" onclick={() => loadAudit()}>
                 <i class="fa-solid fa-rotate mr-1"></i>{t('common.refresh')}
             </button>
         </div>
@@ -505,7 +506,7 @@
         <div class="space-y-3">
             <div class="flex items-center justify-between mb-2">
                 <h3 class="text-lg font-bold text-heading"><i class="fa-solid fa-lock mr-2"></i>{t('security.pending_challenges')}</h3>
-                <button class="btn btn-sm" onclick={() => load2FA()}>
+                <button class="btn btn--secondary btn--sm" onclick={() => load2FA()}>
                     <i class="fa-solid fa-rotate mr-1"></i>{t('common.refresh')}
                 </button>
             </div>
@@ -532,10 +533,10 @@
                                 </div>
                                 <p class="text-sm text-muted mt-1">{challenge.description}</p>
                                 <div class="flex gap-2 mt-2">
-                                    <button class="btn btn-sm bg-green-600 hover:bg-green-500 text-white" onclick={() => confirm2FA(challenge.id)}>
+                                    <button class="btn btn--success btn--sm" onclick={() => confirm2FA(challenge.id)}>
                                         <i class="fa-solid fa-check mr-1"></i>{t('common.confirm')}
                                     </button>
-                                    <button class="btn btn-sm bg-red-600 hover:bg-red-500 text-white" onclick={() => reject2FA(challenge.id)}>
+                                    <button class="btn btn--danger btn--sm" onclick={() => reject2FA(challenge.id)}>
                                         <i class="fa-solid fa-xmark mr-1"></i>{t('security.reject')}
                                     </button>
                                 </div>

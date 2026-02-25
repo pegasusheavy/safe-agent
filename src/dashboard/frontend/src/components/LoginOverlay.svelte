@@ -259,7 +259,7 @@
         </div>
 
         {#if error}
-            <div class="mb-4 px-3 py-2 rounded-md bg-error-950 border border-error-500/30 text-sm text-error-400">
+            <div class="alert alert--error mb-4">
                 <i class="fa-solid fa-circle-exclamation mr-1"></i> {error}
             </div>
         {/if}
@@ -304,7 +304,7 @@
                     {#if !showRecoveryInput}
                         <div>
                             <label class="block mb-3">
-                                <span class="text-xs font-medium text-text-muted uppercase tracking-wide">{t('login.authenticator_code')}</span>
+                                <span class="form__label">{t('login.authenticator_code')}</span>
                                 <input
                                     type="text"
                                     bind:value={totpCode}
@@ -323,8 +323,7 @@
                                 type="button"
                                 onclick={verifyTotp}
                                 disabled={loading || totpCode.trim().length !== 6}
-                                class="w-full px-4 py-2 rounded-md bg-primary-600 text-white font-medium text-sm
-                                       hover:bg-primary-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                class="btn btn--primary btn--md w-full disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {#if loading}
                                     <i class="fa-solid fa-spinner fa-spin mr-1"></i> {t('common.verifying')}
@@ -343,7 +342,7 @@
                     {:else}
                         <div>
                             <label class="block mb-3">
-                                <span class="text-xs font-medium text-text-muted uppercase tracking-wide">{t('login.recovery_code')}</span>
+                                <span class="form__label">{t('login.recovery_code')}</span>
                                 <input
                                     type="text"
                                     bind:value={recoveryCode}
@@ -361,8 +360,7 @@
                                 type="button"
                                 onclick={verifyTotp}
                                 disabled={loading || !recoveryCode.trim()}
-                                class="w-full px-4 py-2 rounded-md bg-primary-600 text-white font-medium text-sm
-                                       hover:bg-primary-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                class="btn btn--primary btn--md w-full disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {#if loading}
                                     <i class="fa-solid fa-spinner fa-spin mr-1"></i> {t('common.verifying')}
@@ -423,31 +421,27 @@
                 <form onsubmit={handleLogin}>
                     {#if multiUserMode}
                         <label class="block mb-3">
-                            <span class="text-xs font-medium text-text-muted uppercase tracking-wide">{t('login.username')}</span>
+                            <span class="form__label">{t('login.username')}</span>
                             <input
                                 type="text"
                                 bind:value={username}
                                 required
                                 autofocus
                                 disabled={loading}
-                                class="mt-1 w-full px-3 py-2 rounded-md border border-border bg-surface-elevated text-text
-                                       placeholder-text-muted/50 focus:outline-none focus:ring-2 focus:ring-primary-500/50
-                                       disabled:opacity-50"
+                                class="form__input mt-1 disabled:opacity-50"
                                 placeholder={t('login.enter_username')}
                             />
                         </label>
                     {/if}
                     <label class="block mb-4">
-                        <span class="text-xs font-medium text-text-muted uppercase tracking-wide">{t('login.password')}</span>
+                        <span class="form__label">{t('login.password')}</span>
                         <input
                             type="password"
                             bind:value={password}
                             required
                             autofocus={!multiUserMode}
                             disabled={loading}
-                            class="mt-1 w-full px-3 py-2 rounded-md border border-border bg-surface-elevated text-text
-                                   placeholder-text-muted/50 focus:outline-none focus:ring-2 focus:ring-primary-500/50
-                                   disabled:opacity-50"
+                            class="form__input mt-1 disabled:opacity-50"
                             placeholder={t('login.enter_password_placeholder')}
                         />
                     </label>
@@ -455,8 +449,7 @@
                     <button
                         type="submit"
                         disabled={loading || !password}
-                        class="w-full px-4 py-2 rounded-md bg-primary-600 text-white font-medium text-sm
-                               hover:bg-primary-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        class="btn btn--primary btn--md w-full disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {#if loading}
                             <i class="fa-solid fa-spinner fa-spin mr-1"></i> {t('login.signing_in')}

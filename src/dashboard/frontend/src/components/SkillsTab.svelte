@@ -92,9 +92,9 @@
 </script>
 
 <!-- Skills List -->
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden">
-    <div class="flex justify-between items-center border-b border-border">
-        <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
+<section class="card">
+    <div class="card__header">
+        <h2 class="card__header-title">
             <i class="fa-solid fa-puzzle-piece mr-1.5"></i> {t('skills.title')}
         </h2>
         <div class="flex items-center gap-2 pr-3">
@@ -109,7 +109,7 @@
             </button>
             <button
                 onclick={load}
-                class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface hover:bg-surface-elevated transition-colors"
+                class="btn btn--secondary btn--sm"
             >
                 <i class="fa-solid fa-arrows-rotate mr-1"></i> {t('common.refresh')}
             </button>
@@ -151,14 +151,14 @@
                     type="text"
                     bind:value={importLocation}
                     placeholder={importSource === 'git' ? t('skills.git_placeholder') : importSource === 'url' ? t('skills.url_placeholder') : t('skills.path_placeholder')}
-                    class="w-full px-3 py-2 text-sm border border-border rounded-md bg-background text-text font-mono outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-900 placeholder:text-text-subtle"
+                    class="form__input font-mono"
                 />
                 <div class="flex items-center gap-2">
                     <input
                         type="text"
                         bind:value={importName}
                         placeholder={t('skills.name_placeholder')}
-                        class="flex-1 px-3 py-2 text-sm border border-border rounded-md bg-background text-text outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-900 placeholder:text-text-subtle"
+                        class="form__input flex-1"
                     />
                     <button
                         onclick={importSkill}
@@ -175,12 +175,12 @@
             </div>
 
             {#if importError}
-                <div class="mt-2 text-xs text-error-400 p-2 bg-error-500/10 border border-error-500/30 rounded">
+                <div class="alert alert--error mt-2">
                     <i class="fa-solid fa-triangle-exclamation mr-1"></i>{importError}
                 </div>
             {/if}
             {#if importSuccess}
-                <div class="mt-2 text-xs text-success-500 p-2 bg-success-500/10 border border-success-500/30 rounded">
+                <div class="alert alert--success mt-2">
                     <i class="fa-solid fa-check mr-1"></i>{importSuccess}
                 </div>
             {/if}

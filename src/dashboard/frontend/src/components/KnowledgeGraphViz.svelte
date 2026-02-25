@@ -302,13 +302,13 @@
     <div class="flex items-center justify-between mb-2">
         <p class="text-xs text-text-subtle">{t('knowledge.graph_hint')}</p>
         <div class="flex gap-1">
-            <button onclick={() => zoom = Math.min(5, zoom * 1.3)} class="px-2 py-1 text-xs border border-border rounded bg-surface hover:bg-surface-elevated" title={t('knowledge.zoom_in')}>
+            <button onclick={() => zoom = Math.min(5, zoom * 1.3)} class="btn btn--secondary btn--icon" title={t('knowledge.zoom_in')}>
                 <i class="fa-solid fa-plus"></i>
             </button>
-            <button onclick={() => zoom = Math.max(0.2, zoom * 0.7)} class="px-2 py-1 text-xs border border-border rounded bg-surface hover:bg-surface-elevated" title={t('knowledge.zoom_out')}>
+            <button onclick={() => zoom = Math.max(0.2, zoom * 0.7)} class="btn btn--secondary btn--icon" title={t('knowledge.zoom_out')}>
                 <i class="fa-solid fa-minus"></i>
             </button>
-            <button onclick={resetView} class="px-2 py-1 text-xs border border-border rounded bg-surface hover:bg-surface-elevated" title={t('knowledge.reset_view')}>
+            <button onclick={resetView} class="btn btn--secondary btn--icon" title={t('knowledge.reset_view')}>
                 <i class="fa-solid fa-arrows-to-dot"></i>
             </button>
         </div>
@@ -316,7 +316,7 @@
 
     <canvas
         bind:this={canvas}
-        class="kg-canvas bg-surface-muted border border-border"
+        class="kg-canvas bg-surface-muted border border-border w-full"
         onmousedown={handleMouseDown}
         onmousemove={handleMouseMove}
         onmouseup={handleMouseUp}
@@ -339,7 +339,7 @@
         <div class="mt-3 p-3 rounded-lg bg-surface-elevated border border-border">
             <div class="flex items-center justify-between mb-1">
                 <span class="text-sm font-semibold text-text">{selectedNode.label}</span>
-                <span class="text-[10px] px-1.5 py-0.5 rounded-full border border-border text-text-muted">{selectedNode.type}</span>
+                <span class="badge">{selectedNode.type}</span>
             </div>
             {#if selectedEdges.length > 0}
                 <div class="mt-2 space-y-1">

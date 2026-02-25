@@ -141,7 +141,7 @@
 
 <section class="space-y-4">
     <!-- Header with stats -->
-    <div class="bg-surface border border-border rounded-lg shadow-sm p-4">
+    <div class="card card__body">
         <div class="flex items-center justify-between">
             <div class="flex items-center gap-3">
                 <h2 class="text-xs font-semibold uppercase tracking-wider text-text-muted">
@@ -187,12 +187,12 @@
 
     <!-- Notifications -->
     {#if error}
-        <div class="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg px-4 py-2">
+        <div class="alert alert--error">
             <i class="fa-solid fa-circle-exclamation mr-1.5"></i> {error}
         </div>
     {/if}
     {#if successMsg}
-        <div class="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-sm rounded-lg px-4 py-2">
+        <div class="alert alert--success">
             <i class="fa-solid fa-check-circle mr-1.5"></i> {successMsg}
         </div>
     {/if}
@@ -211,7 +211,7 @@
     {/if}
 
     <!-- Items list -->
-    <div class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden">
+    <div class="card">
         {#if loading && items.length === 0}
             <div class="p-8 text-center text-text-subtle text-sm">
                 <i class="fa-solid fa-spinner fa-spin mr-1.5"></i> {t('common.loading')}
@@ -255,14 +255,14 @@
                             </div>
                             <div class="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button
-                                    class="text-xs px-2.5 py-1.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:text-emerald-300 transition-colors"
+                                    class="btn btn--success btn--sm"
                                     title={t('trash.restore_title')}
                                     onclick={() => restore(entry.id)}
                                 >
                                     <i class="fa-solid fa-rotate-left mr-1"></i> {t('trash.restore')}
                                 </button>
                                 <button
-                                    class="text-xs px-2.5 py-1.5 rounded bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 hover:text-red-300 transition-colors"
+                                    class="btn btn--danger btn--sm"
                                     title={t('trash.delete_permanent_title')}
                                     onclick={() => permanentDelete(entry.id, entry.name)}
                                 >
