@@ -76,9 +76,9 @@
     });
 </script>
 
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden">
-    <div class="flex justify-between items-center border-b border-border">
-        <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
+<section class="card">
+    <div class="card__header">
+        <h2 class="card__header-title">
             <i class="fa-solid fa-diagram-project mr-1.5"></i> {t('knowledge.title')}
         </h2>
         <div class="flex items-center gap-2 pr-3">
@@ -131,7 +131,7 @@
             {#if viewingNeighbors}
                 <button
                     onclick={backToNodes}
-                    class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface hover:bg-surface-elevated transition-colors mb-3"
+                    class="btn btn--secondary btn--sm mb-3"
                 >
                     <i class="fa-solid fa-arrow-left mr-1"></i> {t('knowledge.back')}
                 </button>

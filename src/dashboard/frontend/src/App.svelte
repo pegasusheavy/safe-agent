@@ -168,27 +168,27 @@
 <!-- Mobile menu overlay -->
 {#if dashboard.mobileMenuOpen}
     <div
-        class="mobile-menu-overlay open"
+        class="mobile-menu-overlay mobile-menu-overlay--open"
         onclick={() => dashboard.mobileMenuOpen = false}
         role="presentation"
     ></div>
-    <nav class="mobile-menu open">
-        <div class="flex items-center justify-between px-4 py-3 border-b border-border">
+    <nav class="mobile-menu mobile-menu--open">
+        <div class="mobile-menu__header">
             <span class="text-sm font-semibold text-primary-400">
                 <i class="fa-solid fa-robot mr-1"></i> {t('header.title')}
             </span>
             <button
                 onclick={() => dashboard.mobileMenuOpen = false}
-                class="p-1 text-text-muted hover:text-text"
+                class="btn btn--ghost btn--icon"
             >
                 <i class="fa-solid fa-xmark"></i>
             </button>
         </div>
-        <div class="py-2">
+        <div class="mobile-menu__nav">
             {#each tabs as tab}
                 <button
-                    class="mobile-nav-item"
-                    class:active={dashboard.currentTab === tab.id}
+                    class="mobile-menu__nav-item"
+                    class:mobile-menu__nav-item--active={dashboard.currentTab === tab.id}
                     onclick={() => switchTab(tab.id)}
                 >
                     <i class="fa-solid {tab.icon} w-5 text-center"></i>
@@ -210,21 +210,21 @@
 
     <!-- PWA install banner -->
     {#if showInstallBanner}
-        <div class="flex items-center justify-between gap-3 px-4 py-2.5 bg-primary-900/30 border-b border-primary-800/40">
-            <div class="flex items-center gap-2 text-sm text-primary-300">
+        <div class="pwa-banner">
+            <div class="pwa-banner__message">
                 <i class="fa-solid fa-download"></i>
                 <span>{t('pwa.install_hint')}</span>
             </div>
-            <div class="flex gap-2">
+            <div class="pwa-banner__actions">
                 <button
                     onclick={installPwa}
-                    class="px-3 py-1 text-xs font-medium rounded bg-primary-600 text-white hover:bg-primary-500 transition-colors"
+                    class="pwa-banner__install-btn"
                 >
                     {t('pwa.install')}
                 </button>
                 <button
                     onclick={dismissInstall}
-                    class="px-2 py-1 text-xs text-text-muted hover:text-text transition-colors"
+                    class="pwa-banner__dismiss-btn"
                 >
                     {t('pwa.dismiss')}
                 </button>
@@ -237,8 +237,8 @@
         <div class="hidden sm:flex border-b border-border mb-4 tab-scroll">
             {#each tabs as tab}
                 <button
-                    class="main-tab"
-                    class:active={dashboard.currentTab === tab.id}
+                    class="nav-tab nav-tab--main"
+                    class:nav-tab--active={dashboard.currentTab === tab.id}
                     onclick={() => switchTab(tab.id)}
                 >
                     <i class="fa-solid {tab.icon} mr-1.5"></i> {t('nav.' + tab.id)}

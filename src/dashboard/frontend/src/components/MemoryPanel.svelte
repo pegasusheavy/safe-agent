@@ -60,15 +60,15 @@
     });
 </script>
 
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden">
-    <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted border-b border-border">
+<section class="card">
+    <h2 class="card__header-title px-4 py-3 border-b border-border">
         <i class="fa-solid fa-brain mr-1.5"></i> Memory
     </h2>
     <div class="flex px-4 border-b border-border">
         {#each memTabs as tab}
             <button
-                class="mem-tab"
-                class:active={dashboard.currentMemoryTab === tab.id}
+                class="nav-tab nav-tab--sub"
+                class:nav-tab--active={dashboard.currentMemoryTab === tab.id}
                 onclick={() => switchMemTab(tab.id)}
             >
                 <i class="fa-solid {tab.icon} mr-1"></i> {t('memory.' + tab.id)}

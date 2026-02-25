@@ -252,19 +252,19 @@
 <ConversationHistory />
 
 <!-- Messaging Platforms -->
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden mb-4 mt-4">
-    <div class="flex justify-between items-center border-b border-border">
-        <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
+<section class="card mb-4 mt-4">
+    <div class="card__header">
+        <h2 class="card__header-title">
             <i class="fa-solid fa-tower-broadcast mr-1.5"></i> {t('settings.messaging')}
         </h2>
         <button
             onclick={loadConfig}
-            class="mr-3 px-2.5 py-1 text-xs border border-border rounded-md bg-surface hover:bg-surface-elevated transition-colors"
+            class="btn btn--secondary btn--sm"
         >
             <i class="fa-solid fa-arrows-rotate mr-1"></i> {t('common.refresh')}
         </button>
     </div>
-    <div class="p-4 space-y-4">
+    <div class="card__body space-y-4">
         {#if !msgConfig}
             <p class="text-text-subtle text-sm italic text-center py-2">{t('common.loading')}</p>
         {:else}
@@ -279,11 +279,11 @@
                         </div>
                     </div>
                     {#if msgConfig.telegram.enabled && msgConfig.telegram.connected}
-                        <span class="text-xs px-2 py-0.5 rounded-full border bg-green-900/40 text-green-400 border-green-800/50">{t('common.connected')}</span>
+                        <span class="badge badge--success">{t('common.connected')}</span>
                     {:else if msgConfig.telegram.enabled}
-                        <span class="text-xs px-2 py-0.5 rounded-full border bg-red-900/40 text-red-400 border-red-800/50">{t('common.disconnected')}</span>
+                        <span class="badge badge--error">{t('common.disconnected')}</span>
                     {:else}
-                        <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">{t('common.disabled')}</span>
+                        <span class="badge">{t('common.disabled')}</span>
                     {/if}
                 </div>
                 <div class="p-3 space-y-2 text-sm">
@@ -340,13 +340,13 @@
                         </div>
                     </div>
                     {#if !msgConfig.whatsapp.enabled}
-                        <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">{t('common.disabled')}</span>
+                        <span class="badge">{t('common.disabled')}</span>
                     {:else if msgConfig.whatsapp.bridge_status === 'connected'}
-                        <span class="text-xs px-2 py-0.5 rounded-full border bg-green-900/40 text-green-400 border-green-800/50">{t('common.connected')}</span>
+                        <span class="badge badge--success">{t('common.connected')}</span>
                     {:else if msgConfig.whatsapp.bridge_status === 'pairing'}
-                        <span class="text-xs px-2 py-0.5 rounded-full border bg-amber-900/40 text-amber-400 border-amber-800/50">{t('settings.pairing')}</span>
+                        <span class="badge badge--warning">{t('settings.pairing')}</span>
                     {:else}
-                        <span class="text-xs px-2 py-0.5 rounded-full border bg-red-900/40 text-red-400 border-red-800/50">{msgConfig.whatsapp.bridge_status}</span>
+                        <span class="badge badge--error">{msgConfig.whatsapp.bridge_status}</span>
                     {/if}
                 </div>
                 <div class="p-3 space-y-2 text-sm">
@@ -400,7 +400,7 @@
                                 {/if}
                                 <button
                                     onclick={loadConfig}
-                                    class="mt-3 px-4 py-1.5 text-xs border border-border rounded-md bg-surface hover:bg-surface-elevated transition-colors"
+                                    class="btn btn--secondary btn--sm mt-3"
                                 >
                                     <i class="fa-solid fa-arrows-rotate mr-1"></i> {t('settings.refresh_qr')}
                                 </button>
@@ -433,13 +433,13 @@
 </section>
 
 <!-- Authentication / SSO -->
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden mb-4">
-    <div class="border-b border-border">
-        <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
+<section class="card mb-4">
+    <div class="card__header">
+        <h2 class="card__header-title">
             <i class="fa-solid fa-shield-halved mr-1.5"></i> {t('settings.dashboard_auth')}
         </h2>
     </div>
-    <div class="p-4 space-y-4">
+    <div class="card__body space-y-4">
         {#if !authInfo}
             <p class="text-text-subtle text-sm italic text-center py-2">{t('common.loading')}</p>
         {:else}
@@ -452,9 +452,9 @@
                             <span class="text-sm font-medium text-text">{t('settings.password_login')}</span>
                         </div>
                         {#if authInfo.password_enabled}
-                            <span class="text-xs px-2 py-0.5 rounded-full border bg-green-900/40 text-green-400 border-green-800/50">{t('common.enabled')}</span>
+                            <span class="badge badge--success">{t('common.enabled')}</span>
                         {:else}
-                            <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">{t('common.disabled')}</span>
+                            <span class="badge">{t('common.disabled')}</span>
                         {/if}
                     </div>
                     <div class="p-3 text-sm text-text-subtle">
@@ -474,11 +474,11 @@
                             <span class="text-sm font-medium text-text">{t('settings.sso_providers')}</span>
                         </div>
                         {#if authInfo.sso_providers.length > 0}
-                            <span class="text-xs px-2 py-0.5 rounded-full border bg-green-900/40 text-green-400 border-green-800/50">
+                            <span class="badge badge--success">
                                 {t('settings.sso_configured', { count: authInfo.sso_providers.length })}
                             </span>
                         {:else}
-                            <span class="text-xs px-2 py-0.5 rounded-full border bg-zinc-800/60 text-text-subtle border-border">{t('common.none')}</span>
+                            <span class="badge">{t('common.none')}</span>
                         {/if}
                     </div>
                     <div class="p-3">
@@ -488,7 +488,7 @@
                                     <div class="flex items-center gap-2 p-2 rounded-md bg-surface border border-border/50">
                                         <i class="{provider.icon} text-sm w-5 text-center"></i>
                                         <span class="text-sm text-text">{provider.name}</span>
-                                        <span class="text-xs px-1.5 py-0.5 rounded bg-primary-900/30 text-primary-400 border border-primary-800/30 ml-auto">SSO</span>
+                                        <span class="badge badge--primary ml-auto">SSO</span>
                                     </div>
                                 {/each}
                             </div>
@@ -502,11 +502,9 @@
             </div>
 
             {#if !authInfo.password_enabled && authInfo.sso_providers.length === 0}
-                <div class="p-3 rounded-lg bg-red-900/20 border border-red-800/40">
-                    <p class="text-sm text-red-400">
-                        <i class="fa-solid fa-triangle-exclamation mr-1"></i>
-                        {t('settings.lockout_warning')}
-                    </p>
+                <div class="alert alert--error">
+                    <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+                    {t('settings.lockout_warning')}
                 </div>
             {/if}
 
@@ -528,25 +526,25 @@ sso_allowed_emails = ["you@example.com"]</code>
 </section>
 
 <!-- Two-Factor Authentication -->
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden mb-4">
-    <div class="border-b border-border">
-        <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
+<section class="card mb-4">
+    <div class="card__header">
+        <h2 class="card__header-title">
             <i class="fa-solid fa-lock mr-1.5"></i> {t('settings.twofa')}
         </h2>
     </div>
-    <div class="p-4">
+    <div class="card__body">
         <TwoFactorPanel />
     </div>
 </section>
 
 <!-- OAuth Connections -->
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden mb-4">
-    <div class="flex justify-between items-center border-b border-border">
-        <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
+<section class="card mb-4">
+    <div class="card__header">
+        <h2 class="card__header-title">
             <i class="fa-solid fa-link mr-1.5"></i> {t('settings.oauth')}
         </h2>
         {#if oauth}
-            <span class="text-xs text-text-muted pr-3">
+            <span class="text-xs text-text-muted">
                 {connectedProviders(oauth.providers).reduce((n, p) => n + p.accounts.length, 0)} account{connectedProviders(oauth.providers).reduce((n, p) => n + p.accounts.length, 0) !== 1 ? 's' : ''}
             </span>
         {/if}
@@ -568,7 +566,7 @@ sso_allowed_emails = ["you@example.com"]</code>
                         <div class="flex items-center gap-2">
                             <i class="{provider.icon} text-sm w-5 text-center"></i>
                             <span class="text-sm font-medium text-text">{provider.name}</span>
-                            <span class="text-xs px-1.5 py-0.5 rounded-full bg-green-900/40 text-green-400 border border-green-800/50">
+                            <span class="badge badge--success">
                                 {provider.accounts.length}
                             </span>
                         </div>
@@ -577,7 +575,7 @@ sso_allowed_emails = ["you@example.com"]</code>
                                 <button
                                     onclick={(e) => { e.stopPropagation(); refreshToken(provider.id); }}
                                     disabled={refreshing !== null}
-                                    class="px-2 py-0.5 text-xs border border-border rounded bg-surface hover:bg-surface-elevated transition-colors disabled:opacity-50"
+                                    class="btn btn--secondary btn--icon disabled:opacity-50"
                                     title={t('settings.refresh_all')}
                                 >
                                     <i class="fa-solid fa-arrows-rotate" class:fa-spin={refreshing === `${provider.id}:all`}></i>
@@ -586,7 +584,7 @@ sso_allowed_emails = ["you@example.com"]</code>
                             <a
                                 href={provider.authorize_url}
                                 onclick={(e) => e.stopPropagation()}
-                                class="px-2 py-0.5 text-xs border border-border rounded bg-surface hover:bg-surface-elevated transition-colors text-text-muted"
+                                class="btn btn--secondary btn--icon text-text-muted"
                                 title={t('settings.add_account')}
                             >
                                 <i class="fa-solid fa-plus"></i>
@@ -608,15 +606,15 @@ sso_allowed_emails = ["you@example.com"]</code>
                                             <span class="text-sm text-text truncate">{acct.email}</span>
                                             <!-- Token health indicator -->
                                             {#if isExpired}
-                                                <span class="token-health-expired text-[10px]" title={t('oauth.health_expired')}>
+                                                <span class="token-health--expired text-[10px]" title={t('oauth.health_expired')}>
                                                     <i class="fa-solid fa-circle-xmark"></i>
                                                 </span>
                                             {:else if isExpiringSoon}
-                                                <span class="token-health-warning text-[10px]" title={t('oauth.health_warning')}>
+                                                <span class="token-health--warning text-[10px]" title={t('oauth.health_warning')}>
                                                     <i class="fa-solid fa-circle-exclamation"></i>
                                                 </span>
                                             {:else}
-                                                <span class="token-health-good text-[10px]" title={t('oauth.health_good')}>
+                                                <span class="token-health--good text-[10px]" title={t('oauth.health_good')}>
                                                     <i class="fa-solid fa-circle-check"></i>
                                                 </span>
                                             {/if}
@@ -665,7 +663,7 @@ sso_allowed_emails = ["you@example.com"]</code>
                                         <button
                                             onclick={() => refreshToken(provider.id, acct.account)}
                                             disabled={refreshing !== null}
-                                            class="px-2 py-1 text-xs border border-border rounded bg-surface hover:bg-surface-elevated transition-colors disabled:opacity-50"
+                                            class="btn btn--secondary btn--icon disabled:opacity-50"
                                             title={t('common.refresh')}
                                         >
                                             <i class="fa-solid fa-arrows-rotate" class:fa-spin={refreshing === acct.account}></i>
@@ -694,7 +692,7 @@ sso_allowed_emails = ["you@example.com"]</code>
                             {#if provider.configured}
                                 <a
                                     href={provider.authorize_url}
-                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-border bg-surface hover:bg-surface-elevated hover:border-text-subtle/30 transition-colors text-text"
+                                    class="btn btn--secondary btn--sm text-text"
                                 >
                                     <i class="{provider.icon}"></i> {provider.name}
                                 </a>
@@ -719,13 +717,13 @@ sso_allowed_emails = ["you@example.com"]</code>
 </section>
 
 <!-- Language -->
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden mb-4">
-    <div class="border-b border-border">
-        <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
+<section class="card mb-4">
+    <div class="card__header">
+        <h2 class="card__header-title">
             <i class="fa-solid fa-language mr-1.5"></i> {t('settings.language')}
         </h2>
     </div>
-    <div class="p-4 space-y-3">
+    <div class="card__body space-y-3">
         <p class="text-xs text-text-subtle">{t('settings.language_hint')}</p>
         <div class="flex items-center gap-3">
             <select
@@ -744,8 +742,7 @@ sso_allowed_emails = ["you@example.com"]</code>
                         }).catch(() => {});
                     }
                 }}
-                class="px-3 py-2 rounded-md border border-border bg-surface-elevated text-text text-sm
-                       focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                class="form__select w-auto"
             >
                 {#each Object.entries(SUPPORTED_LOCALES) as [code, name]}
                     <option value={code}>{name}</option>
@@ -756,13 +753,13 @@ sso_allowed_emails = ["you@example.com"]</code>
 </section>
 
 <!-- Timezone & Locale -->
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden mb-4">
-    <div class="border-b border-border">
-        <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
+<section class="card mb-4">
+    <div class="card__header">
+        <h2 class="card__header-title">
             <i class="fa-solid fa-clock mr-1.5"></i> {t('settings.timezone_locale')}
         </h2>
     </div>
-    <div class="p-4 space-y-4">
+    <div class="card__body space-y-4">
         {#if tzInfo}
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div class="p-3 rounded-lg bg-surface-elevated border border-border">
@@ -783,7 +780,7 @@ sso_allowed_emails = ["you@example.com"]</code>
             <div class="space-y-3">
                 <div>
                     <div class="flex items-center gap-2 mb-1">
-                        <span class="text-xs font-medium text-text-muted uppercase tracking-wide">{t('settings.timezone')}</span>
+                        <span class="form__label mb-0">{t('settings.timezone')}</span>
                         <button
                             onclick={detectBrowserTimezone}
                             class="text-[10px] px-1.5 py-0.5 rounded border border-border bg-surface-elevated text-text-muted hover:text-text transition-colors"
@@ -797,8 +794,7 @@ sso_allowed_emails = ["you@example.com"]</code>
                             bind:value={selectedTimezone}
                             list="tz-list"
                             placeholder={tzInfo.system_timezone || 'UTC'}
-                            class="w-full px-3 py-2 rounded-md border border-border bg-surface-elevated text-text text-sm
-                                   placeholder-text-muted/50 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                            class="form__input"
                         />
                         <datalist id="tz-list">
                             {#each commonTimezones as tz}
@@ -814,7 +810,7 @@ sso_allowed_emails = ["you@example.com"]</code>
 
                 <div>
                     <div class="flex items-center gap-2 mb-1">
-                        <span class="text-xs font-medium text-text-muted uppercase tracking-wide">{t('settings.locale')}</span>
+                        <span class="form__label mb-0">{t('settings.locale')}</span>
                         <button
                             onclick={detectBrowserLocale}
                             class="text-[10px] px-1.5 py-0.5 rounded border border-border bg-surface-elevated text-text-muted hover:text-text transition-colors"
@@ -826,8 +822,7 @@ sso_allowed_emails = ["you@example.com"]</code>
                         type="text"
                         bind:value={selectedLocale}
                         placeholder={tzInfo.system_locale || 'en-US'}
-                        class="w-full px-3 py-2 rounded-md border border-border bg-surface-elevated text-text text-sm
-                               placeholder-text-muted/50 focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+                        class="form__input"
                     />
                     <p class="text-xs text-text-subtle mt-1">{t('settings.locale_hint', { default: tzInfo.system_locale })}</p>
                 </div>
@@ -836,8 +831,7 @@ sso_allowed_emails = ["you@example.com"]</code>
                     <button
                         onclick={saveTimezone}
                         disabled={tzSaving}
-                        class="px-4 py-2 rounded-md bg-primary-600 text-white font-medium text-sm
-                               hover:bg-primary-500 transition-colors disabled:opacity-50"
+                        class="btn btn--primary btn--md disabled:opacity-50"
                     >
                         {#if tzSaving}
                             <i class="fa-solid fa-spinner fa-spin mr-1"></i> {t('common.saving')}
@@ -857,13 +851,13 @@ sso_allowed_emails = ["you@example.com"]</code>
 </section>
 
 <!-- Configuration Hint -->
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden">
-    <div class="border-b border-border">
-        <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
+<section class="card">
+    <div class="card__header">
+        <h2 class="card__header-title">
             <i class="fa-solid fa-circle-info mr-1.5"></i> {t('settings.config_reference')}
         </h2>
     </div>
-    <div class="p-4 space-y-3 text-xs text-text-subtle">
+    <div class="card__body space-y-3 text-xs text-text-subtle">
         <p>{t('settings.config_hint')}</p>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div class="p-3 rounded bg-surface-elevated border border-border/50">

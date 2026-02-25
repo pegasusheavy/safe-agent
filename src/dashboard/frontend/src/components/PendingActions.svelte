@@ -45,19 +45,19 @@
     });
 </script>
 
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden">
-    <div class="flex justify-between items-center border-b border-border">
-        <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
+<section class="card">
+    <div class="card__header">
+        <h2 class="card__header-title">
             <i class="fa-solid fa-clock-rotate-left mr-1.5"></i> {t('pending.title')}
         </h2>
         <div class="flex gap-1.5 pr-3">
             <button
                 onclick={approveAll}
-                class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface text-success-500 hover:bg-success-500/10 hover:border-success-500 transition-colors"
+                class="btn btn--success btn--sm"
             >{t('pending.approve_all')}</button>
             <button
                 onclick={rejectAll}
-                class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface text-error-500 hover:bg-error-500/10 hover:border-error-500 transition-colors"
+                class="btn btn--danger btn--sm"
             >{t('pending.reject_all')}</button>
         </div>
     </div>
@@ -76,13 +76,13 @@
                     <div class="flex gap-1.5 mt-2">
                         <button
                             onclick={() => approve(a.id)}
-                            class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface text-success-500 hover:bg-success-500/10 hover:border-success-500 transition-colors"
+                            class="btn btn--success btn--sm"
                         >
                             <i class="fa-solid fa-check mr-1"></i>{t('pending.approve')}
                         </button>
                         <button
                             onclick={() => reject(a.id)}
-                            class="px-2.5 py-1 text-xs border border-border rounded-md bg-surface text-error-500 hover:bg-error-500/10 hover:border-error-500 transition-colors"
+                            class="btn btn--danger btn--sm"
                         >
                             <i class="fa-solid fa-xmark mr-1"></i>{t('pending.reject')}
                         </button>

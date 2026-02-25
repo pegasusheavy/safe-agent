@@ -74,12 +74,12 @@
     load();
 </script>
 
-<section class="bg-surface border border-border rounded-lg shadow-sm overflow-hidden">
-    <div class="flex justify-between items-center border-b border-border">
-        <h2 class="text-xs font-semibold px-4 py-3 uppercase tracking-wider text-text-muted">
+<section class="card">
+    <div class="card__header">
+        <h2 class="card__header-title">
             <i class="fa-solid fa-clock-rotate-left mr-1.5"></i> {t('history.title')}
         </h2>
-        <span class="text-xs text-text-muted pr-3">
+        <span class="text-xs text-text-muted">
             {t('history.total', { total })}
         </span>
     </div>
@@ -90,7 +90,7 @@
             bind:value={query}
             onkeyup={handleKey}
             placeholder={t('history.search')}
-            class="flex-1 px-2.5 py-1.5 border border-border rounded-md bg-background text-text text-sm outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-900"
+            class="form__input flex-1"
         />
         <div class="flex gap-1">
             {#each [['all', t('history.all_roles')], ['user', t('history.user_only')], ['assistant', t('history.assistant_only')], ['system', t('history.system_only')]] as [value, label]}
@@ -136,7 +136,7 @@
             <button
                 onclick={loadMore}
                 disabled={loading}
-                class="px-4 py-1.5 text-sm border border-border rounded-md bg-surface hover:bg-surface-elevated transition-colors disabled:opacity-50"
+                class="btn btn--secondary btn--md disabled:opacity-50"
             >
                 {#if loading}
                     <i class="fa-solid fa-spinner fa-spin mr-1"></i>

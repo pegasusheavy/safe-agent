@@ -315,7 +315,7 @@
                         </div>
                     {/if}
 
-                    <button class="btn-secondary text-sm mt-2" onclick={fetchHealth}>
+                    <button class="btn btn--secondary btn--sm mt-2" onclick={fetchHealth}>
                         <i class="fa-solid fa-rotate mr-1"></i> {t('common.refresh')}
                     </button>
                 </div>
@@ -334,7 +334,7 @@
                 {t('ops.prometheus_hint')}
             </p>
             <div class="mt-2">
-                <button class="btn-secondary text-sm" onclick={() => window.open('/metrics', '_blank')}>
+                <button class="btn btn--secondary btn--sm" onclick={() => window.open('/metrics', '_blank')}>
                     <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i> {t('ops.view_raw_metrics')}
                 </button>
             </div>
@@ -355,9 +355,9 @@
                         {#if updateInfo.update_available}
                             <span class="text-sm text-muted">&rarr;</span>
                             <span class="font-mono text-green-400">v{updateInfo.latest_version}</span>
-                            <span class="bg-green-500/20 text-green-400 text-xs px-2 py-0.5 rounded">{t('ops.update_available')}</span>
+                            <span class="badge badge--success">{t('ops.update_available')}</span>
                         {:else}
-                            <span class="bg-surface text-muted text-xs px-2 py-0.5 rounded">{t('ops.up_to_date')}</span>
+                            <span class="badge">{t('ops.up_to_date')}</span>
                         {/if}
                     </div>
 
@@ -370,7 +370,7 @@
 
                     {#if updateInfo.update_available}
                         <div class="flex gap-2">
-                            <button class="btn-primary text-sm" onclick={applyUpdate} disabled={updateApplying}>
+                            <button class="btn btn--primary btn--md" onclick={applyUpdate} disabled={updateApplying}>
                                 {#if updateApplying}
                                     <i class="fa-solid fa-spinner fa-spin mr-1"></i> {t('ops.applying')}
                                 {:else}
@@ -378,7 +378,7 @@
                                 {/if}
                             </button>
                             {#if updateInfo.release_url}
-                                <a href={updateInfo.release_url} target="_blank" class="btn-secondary text-sm">
+                                <a href={updateInfo.release_url} target="_blank" class="btn btn--secondary btn--md">
                                     <i class="fa-solid fa-arrow-up-right-from-square mr-1"></i> {t('ops.view_release')}
                                 </a>
                             {/if}
@@ -390,7 +390,7 @@
                     <div class="bg-surface rounded p-2 text-sm text-muted">{updateMessage}</div>
                 {/if}
 
-                <button class="btn-secondary text-sm" onclick={checkForUpdate} disabled={updateLoading}>
+                <button class="btn btn--secondary btn--sm" onclick={checkForUpdate} disabled={updateLoading}>
                     {#if updateLoading}
                         <i class="fa-solid fa-spinner fa-spin mr-1"></i> {t('ops.checking')}
                     {:else}
@@ -413,7 +413,7 @@
                     <p class="text-xs text-muted mb-2">
                         Download a JSON export of all agent data (memory, activity, goals, cron jobs, stats).
                     </p>
-                    <button class="btn-primary text-sm" onclick={downloadBackup} disabled={backupLoading}>
+                    <button class="btn btn--primary btn--md" onclick={downloadBackup} disabled={backupLoading}>
                         {#if backupLoading}
                             <i class="fa-solid fa-spinner fa-spin mr-1"></i> {t('ops.exporting')}
                         {:else}
@@ -429,7 +429,7 @@
                     <p class="text-xs text-muted mb-2">
                         Upload a previously exported backup file. Existing data will be merged (INSERT OR REPLACE).
                     </p>
-                    <label class="btn-secondary text-sm inline-flex items-center cursor-pointer {restoreLoading ? 'opacity-50' : ''}">
+                    <label class="btn btn--secondary btn--md inline-flex items-center cursor-pointer {restoreLoading ? 'opacity-50' : ''}">
                         {#if restoreLoading}
                             <i class="fa-solid fa-spinner fa-spin mr-1"></i> {t('ops.restoring')}
                         {:else}
@@ -475,15 +475,15 @@
                         <!-- Add Peer -->
                         <div class="flex gap-2 items-end">
                             <div class="flex-1">
-                                <label class="text-xs text-muted block mb-1">{t('ops.add_peer')}</label>
+                                <label class="form__label">{t('ops.add_peer')}</label>
                                 <input
                                     type="text"
                                     bind:value={addPeerAddress}
                                     placeholder={t('ops.peer_placeholder')}
-                                    class="w-full bg-surface border border-border rounded px-3 py-1.5 text-sm font-mono"
+                                    class="form__input font-mono"
                                 />
                             </div>
-                            <button class="btn-primary text-sm" onclick={addPeer} disabled={addPeerLoading}>
+                            <button class="btn btn--primary btn--md" onclick={addPeer} disabled={addPeerLoading}>
                                 {#if addPeerLoading}
                                     <i class="fa-solid fa-spinner fa-spin mr-1"></i>
                                 {:else}
@@ -521,7 +521,7 @@
                         {/if}
                     {/if}
 
-                    <button class="btn-secondary text-sm" onclick={fetchFederation}>
+                    <button class="btn btn--secondary btn--sm" onclick={fetchFederation}>
                         <i class="fa-solid fa-rotate mr-1"></i> {t('common.refresh')}
                     </button>
                 </div>
@@ -560,7 +560,7 @@
                         {t('ops.switch_backend_hint')}
                     </p>
 
-                    <button class="btn-secondary text-sm" onclick={fetchBackends}>
+                    <button class="btn btn--secondary btn--sm" onclick={fetchBackends}>
                         <i class="fa-solid fa-rotate mr-1"></i> {t('common.refresh')}
                     </button>
                 </div>
@@ -607,7 +607,7 @@
                     </div>
                 </div>
             {:else}
-                <button class="btn-primary text-sm" onclick={() => { fetchSystemSpecs(); fetchRecommendations(); fetchOllamaStatus(); }}>
+                <button class="btn btn--primary btn--md" onclick={() => { fetchSystemSpecs(); fetchRecommendations(); fetchOllamaStatus(); }}>
                     <i class="fa-solid fa-wand-magic-sparkles mr-1"></i> {t('ops.advisor_detect')}
                 </button>
             {/if}
@@ -644,7 +644,7 @@
         </div>
 
         {#if configureMsg}
-            <div class="bg-green-500/10 border border-green-500/30 rounded p-3 text-sm text-green-400">
+            <div class="alert alert--success">
                 {configureMsg}
             </div>
         {/if}
@@ -660,7 +660,7 @@
                         <select
                             bind:value={useCaseFilter}
                             onchange={() => fetchRecommendations()}
-                            class="bg-surface border border-border rounded px-2 py-1 text-sm"
+                            class="form__select w-auto"
                         >
                             <option value="">{t('ops.advisor_all_use_cases')}</option>
                             <option value="general">{t('ops.advisor_uc_general')}</option>
@@ -669,7 +669,7 @@
                             <option value="chat">{t('ops.advisor_uc_chat')}</option>
                             <option value="multimodal">{t('ops.advisor_uc_multimodal')}</option>
                         </select>
-                        <button class="btn-secondary text-sm" onclick={fetchRecommendations}>
+                        <button class="btn btn--secondary btn--sm" onclick={fetchRecommendations}>
                             <i class="fa-solid fa-rotate mr-1"></i> {t('common.refresh')}
                         </button>
                     </div>
